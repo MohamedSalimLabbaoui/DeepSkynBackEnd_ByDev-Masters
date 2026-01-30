@@ -1,0 +1,405 @@
+{
+  "timestamp": "2026-01-30T10:23:51.268Z",
+  "totalProducts": 3,
+  "products": [
+    {
+      "name": "Best sellers",
+      "link": "https://www.dermaceutic.com/products/activ-retinol-1-0",
+      "image": "https://www.dermaceutic.com/cdn/shop/files/Activ_Retinol_1.0.jpg?v=1761213686&width=64",
+      "attributes": {
+        "title": "ACTIV RETINOL 1.0",
+        "price": "€68,90",
+        "volume": "30 ml",
+        "usage": "Conçu pour un usage quotidien, ce produit peut également servir de base à un protocole de soins plus ciblé.",
+        "ingredients": "SÉRUM ANTI-ÂGE INTENSE",
+        "benefits": "pour la peau",
+        "metaDescription": "Activ Retinol 1.0 aide à prévenir l’apparition des signes du vieillissement cutané grâce à une concentration optimale en rétinol. Enrichi en antioxydants et en céramides, il protège et renforce tous les types de peau.",
+        "composition": "« Je recommande les dermo-cosmétiques de la marque française Dermaceutic car ils contiennent de fortes concentrations d'ingrédients actifs anti-âge à l'efficacité cliniquement prouvée. Chaque patient bénéficie d'un traitement dédié, adapté à sa peau et à ses besoins. »",
+        "advice": "Il est déconseillé d'utiliser Activ Retinol 1.0 pendant la grossesse et l'allaitement en raison de sa forte concentration en rétinol.",
+        "results": "Bon produit, à voir sur le long terme pour les résultats",
+        "structured_name": "ACTIV RETINOL 1.0",
+        "structured_description": "SÉRUM&nbsp;ANTI-ÂGE INTENSE\nActiv Retinol 1.0 aide à prévenir l’apparition des signes du vieillissement cutané grâce à sa concentration optimale en rétinol*. Associé à un puissant mélange d'antioxydants et de céramides, il contribue à protéger et à fortifier la peau.&nbsp;\nCette formule est recommandée pour lutter contre la perte d'élasticité et le teint terne. Adapté à tous les types de peau, elle assure un confort maximal et des résultats visibles.&nbsp;&nbsp;&nbsp;\n\nRéduit les signes de vieillissement&nbsp;\nAméliore l'élasticité et l'éclat de la peau&nbsp;\nProtège et renforce la peau&nbsp;\n\n*Contient de la Vitamine A. Tenez compte de votre apport quotidien avant utilisation",
+        "structured_price": 68.9,
+        "reviews": [
+          {
+            "text": "Témoignages",
+            "author": "Anonyme",
+            "rating": null
+          },
+          {
+            "text": "Témoignages\n« Je recommande les dermo-cosmétiques de la marque française Dermaceutic car ils contiennent de fortes concentrations d'ingrédients actifs anti-âge à l'efficacité cliniquement prouvée. Chaque patient bénéficie d'un traitement dédié, adapté à sa peau et à ses besoins. »Dr Veronique Buckenmeyer",
+            "author": "Dr Veronique Buckenmeyer",
+            "rating": null
+          },
+          {
+            "text": "Témoignages\n« Je recommande les dermo-cosmétiques de la marque française Dermaceutic car ils contiennent de fortes concentrations d'ingrédients actifs anti-âge à l'efficacité cliniquement prouvée. Chaque patient bénéficie d'un traitement dédié, adapté à sa peau et à ses besoins. »Dr Veronique Buckenmeyer",
+            "author": "Dr Veronique Buckenmeyer",
+            "rating": null
+          },
+          {
+            "text": "Témoignages\n« Je recommande les dermo-cosmétiques de la marque française Dermaceutic car ils contiennent de fortes concentrations d'ingrédients actifs anti-âge à l'efficacité cliniquement prouvée. Chaque patient bénéficie d'un traitement dédié, adapté à sa peau et à ses besoins. »Dr Veronique Buckenmeyer",
+            "author": "Dr Veronique Buckenmeyer",
+            "rating": null
+          },
+          {
+            "text": "Témoignages",
+            "author": "Anonyme",
+            "rating": null
+          },
+          {
+            "text": "« Je recommande les dermo-cosmétiques de la marque française Dermaceutic car ils contiennent de fortes concentrations d'ingrédients actifs anti-âge à l'efficacité cliniquement prouvée. Chaque patient bénéficie d'un traitement dédié, adapté à sa peau et à ses besoins. »",
+            "author": "Anonyme",
+            "rating": null
+          },
+          {
+            "text": "Dr Veronique Buckenmeyer",
+            "author": "Anonyme",
+            "rating": null
+          },
+          {
+            "text": "Témoignages\n« Bon rétinol avec une concentration intéressante et doux malgré ma peau sensible. »Julie",
+            "author": "Julie",
+            "rating": null
+          },
+          {
+            "text": "Témoignages\n« Bon rétinol avec une concentration intéressante et doux malgré ma peau sensible. »Julie",
+            "author": "Julie",
+            "rating": null
+          },
+          {
+            "text": "Témoignages\n« Bon rétinol avec une concentration intéressante et doux malgré ma peau sensible. »Julie",
+            "author": "Julie",
+            "rating": null
+          },
+          {
+            "text": "Témoignages",
+            "author": "Anonyme",
+            "rating": null
+          },
+          {
+            "text": "« Bon rétinol avec une concentration intéressante et doux malgré ma peau sensible. »",
+            "author": "Anonyme",
+            "rating": null
+          },
+          {
+            "text": "Témoignages\n« Très bon sérum, ma peau est plus ferme depuis que je l'utilise.Eugenia",
+            "author": "Eugenia",
+            "rating": null
+          },
+          {
+            "text": "Témoignages\n« Très bon sérum, ma peau est plus ferme depuis que je l'utilise.Eugenia",
+            "author": "Eugenia",
+            "rating": null
+          },
+          {
+            "text": "Témoignages\n« Très bon sérum, ma peau est plus ferme depuis que je l'utilise.Eugenia",
+            "author": "Eugenia",
+            "rating": null
+          },
+          {
+            "text": "Témoignages",
+            "author": "Anonyme",
+            "rating": null
+          },
+          {
+            "text": "« Très bon sérum, ma peau est plus ferme depuis que je l'utilise.",
+            "author": "Anonyme",
+            "rating": null
+          },
+          {
+            "text": "Témoignages\n« Idéal pour effacer les taches et lisser les ridules sur le visage. Utiliser le soir pour de meilleurs résultats. »Marie",
+            "author": "Marie",
+            "rating": null
+          },
+          {
+            "text": "Témoignages\n« Idéal pour effacer les taches et lisser les ridules sur le visage. Utiliser le soir pour de meilleurs résultats. »Marie",
+            "author": "Marie",
+            "rating": null
+          },
+          {
+            "text": "Témoignages\n« Idéal pour effacer les taches et lisser les ridules sur le visage. Utiliser le soir pour de meilleurs résultats. »Marie",
+            "author": "Marie",
+            "rating": null
+          },
+          {
+            "text": "Témoignages",
+            "author": "Anonyme",
+            "rating": null
+          },
+          {
+            "text": "« Idéal pour effacer les taches et lisser les ridules sur le visage. Utiliser le soir pour de meilleurs résultats. »",
+            "author": "Anonyme",
+            "rating": null
+          }
+        ],
+        "reviewCount": 22
+      }
+    },
+    {
+      "name": "ACTIV RETINOL 1.0",
+      "link": "https://www.dermaceutic.com/products/activ-retinol-1-0",
+      "image": "https://www.dermaceutic.com/cdn/shop/files/Activ_Retinol_1.0.jpg?v=1761213686&width=64",
+      "attributes": {
+        "title": "ACTIV RETINOL 1.0",
+        "price": "€68,90",
+        "volume": "30 ml",
+        "usage": "Conçu pour un usage quotidien, ce produit peut également servir de base à un protocole de soins plus ciblé.",
+        "ingredients": "SÉRUM ANTI-ÂGE INTENSE",
+        "benefits": "pour la peau",
+        "metaDescription": "Activ Retinol 1.0 aide à prévenir l’apparition des signes du vieillissement cutané grâce à une concentration optimale en rétinol. Enrichi en antioxydants et en céramides, il protège et renforce tous les types de peau.",
+        "composition": "« Je recommande les dermo-cosmétiques de la marque française Dermaceutic car ils contiennent de fortes concentrations d'ingrédients actifs anti-âge à l'efficacité cliniquement prouvée. Chaque patient bénéficie d'un traitement dédié, adapté à sa peau et à ses besoins. »",
+        "advice": "Il est déconseillé d'utiliser Activ Retinol 1.0 pendant la grossesse et l'allaitement en raison de sa forte concentration en rétinol.",
+        "results": "Bon produit, à voir sur le long terme pour les résultats",
+        "structured_name": "ACTIV RETINOL 1.0",
+        "structured_description": "SÉRUM&nbsp;ANTI-ÂGE INTENSE\nActiv Retinol 1.0 aide à prévenir l’apparition des signes du vieillissement cutané grâce à sa concentration optimale en rétinol*. Associé à un puissant mélange d'antioxydants et de céramides, il contribue à protéger et à fortifier la peau.&nbsp;\nCette formule est recommandée pour lutter contre la perte d'élasticité et le teint terne. Adapté à tous les types de peau, elle assure un confort maximal et des résultats visibles.&nbsp;&nbsp;&nbsp;\n\nRéduit les signes de vieillissement&nbsp;\nAméliore l'élasticité et l'éclat de la peau&nbsp;\nProtège et renforce la peau&nbsp;\n\n*Contient de la Vitamine A. Tenez compte de votre apport quotidien avant utilisation",
+        "structured_price": 68.9,
+        "reviews": [
+          {
+            "text": "Témoignages",
+            "author": "Anonyme",
+            "rating": null
+          },
+          {
+            "text": "Témoignages\n« Je recommande les dermo-cosmétiques de la marque française Dermaceutic car ils contiennent de fortes concentrations d'ingrédients actifs anti-âge à l'efficacité cliniquement prouvée. Chaque patient bénéficie d'un traitement dédié, adapté à sa peau et à ses besoins. »Dr Veronique Buckenmeyer",
+            "author": "Dr Veronique Buckenmeyer",
+            "rating": null
+          },
+          {
+            "text": "Témoignages\n« Je recommande les dermo-cosmétiques de la marque française Dermaceutic car ils contiennent de fortes concentrations d'ingrédients actifs anti-âge à l'efficacité cliniquement prouvée. Chaque patient bénéficie d'un traitement dédié, adapté à sa peau et à ses besoins. »Dr Veronique Buckenmeyer",
+            "author": "Dr Veronique Buckenmeyer",
+            "rating": null
+          },
+          {
+            "text": "Témoignages\n« Je recommande les dermo-cosmétiques de la marque française Dermaceutic car ils contiennent de fortes concentrations d'ingrédients actifs anti-âge à l'efficacité cliniquement prouvée. Chaque patient bénéficie d'un traitement dédié, adapté à sa peau et à ses besoins. »Dr Veronique Buckenmeyer",
+            "author": "Dr Veronique Buckenmeyer",
+            "rating": null
+          },
+          {
+            "text": "Témoignages",
+            "author": "Anonyme",
+            "rating": null
+          },
+          {
+            "text": "« Je recommande les dermo-cosmétiques de la marque française Dermaceutic car ils contiennent de fortes concentrations d'ingrédients actifs anti-âge à l'efficacité cliniquement prouvée. Chaque patient bénéficie d'un traitement dédié, adapté à sa peau et à ses besoins. »",
+            "author": "Anonyme",
+            "rating": null
+          },
+          {
+            "text": "Dr Veronique Buckenmeyer",
+            "author": "Anonyme",
+            "rating": null
+          },
+          {
+            "text": "Témoignages\n« Bon rétinol avec une concentration intéressante et doux malgré ma peau sensible. »Julie",
+            "author": "Julie",
+            "rating": null
+          },
+          {
+            "text": "Témoignages\n« Bon rétinol avec une concentration intéressante et doux malgré ma peau sensible. »Julie",
+            "author": "Julie",
+            "rating": null
+          },
+          {
+            "text": "Témoignages\n« Bon rétinol avec une concentration intéressante et doux malgré ma peau sensible. »Julie",
+            "author": "Julie",
+            "rating": null
+          },
+          {
+            "text": "Témoignages",
+            "author": "Anonyme",
+            "rating": null
+          },
+          {
+            "text": "« Bon rétinol avec une concentration intéressante et doux malgré ma peau sensible. »",
+            "author": "Anonyme",
+            "rating": null
+          },
+          {
+            "text": "Témoignages\n« Très bon sérum, ma peau est plus ferme depuis que je l'utilise.Eugenia",
+            "author": "Eugenia",
+            "rating": null
+          },
+          {
+            "text": "Témoignages\n« Très bon sérum, ma peau est plus ferme depuis que je l'utilise.Eugenia",
+            "author": "Eugenia",
+            "rating": null
+          },
+          {
+            "text": "Témoignages\n« Très bon sérum, ma peau est plus ferme depuis que je l'utilise.Eugenia",
+            "author": "Eugenia",
+            "rating": null
+          },
+          {
+            "text": "Témoignages",
+            "author": "Anonyme",
+            "rating": null
+          },
+          {
+            "text": "« Très bon sérum, ma peau est plus ferme depuis que je l'utilise.",
+            "author": "Anonyme",
+            "rating": null
+          },
+          {
+            "text": "Témoignages\n« Idéal pour effacer les taches et lisser les ridules sur le visage. Utiliser le soir pour de meilleurs résultats. »Marie",
+            "author": "Marie",
+            "rating": null
+          },
+          {
+            "text": "Témoignages\n« Idéal pour effacer les taches et lisser les ridules sur le visage. Utiliser le soir pour de meilleurs résultats. »Marie",
+            "author": "Marie",
+            "rating": null
+          },
+          {
+            "text": "Témoignages\n« Idéal pour effacer les taches et lisser les ridules sur le visage. Utiliser le soir pour de meilleurs résultats. »Marie",
+            "author": "Marie",
+            "rating": null
+          },
+          {
+            "text": "Témoignages",
+            "author": "Anonyme",
+            "rating": null
+          },
+          {
+            "text": "« Idéal pour effacer les taches et lisser les ridules sur le visage. Utiliser le soir pour de meilleurs résultats. »",
+            "author": "Anonyme",
+            "rating": null
+          }
+        ],
+        "reviewCount": 22
+      }
+    },
+    {
+      "name": "ACTIV RETINOL 1.0",
+      "link": "https://www.dermaceutic.com/products/activ-retinol-1-0",
+      "image": "https://www.dermaceutic.com/cdn/shop/files/Activ_Retinol_1.0.jpg?v=1761213686&width=64",
+      "attributes": {
+        "title": "ACTIV RETINOL 1.0",
+        "price": "€68,90",
+        "volume": "30 ml",
+        "usage": "Conçu pour un usage quotidien, ce produit peut également servir de base à un protocole de soins plus ciblé.",
+        "ingredients": "SÉRUM ANTI-ÂGE INTENSE",
+        "benefits": "pour la peau",
+        "metaDescription": "Activ Retinol 1.0 aide à prévenir l’apparition des signes du vieillissement cutané grâce à une concentration optimale en rétinol. Enrichi en antioxydants et en céramides, il protège et renforce tous les types de peau.",
+        "composition": "« Je recommande les dermo-cosmétiques de la marque française Dermaceutic car ils contiennent de fortes concentrations d'ingrédients actifs anti-âge à l'efficacité cliniquement prouvée. Chaque patient bénéficie d'un traitement dédié, adapté à sa peau et à ses besoins. »",
+        "advice": "Il est déconseillé d'utiliser Activ Retinol 1.0 pendant la grossesse et l'allaitement en raison de sa forte concentration en rétinol.",
+        "results": "Bon produit, à voir sur le long terme pour les résultats",
+        "structured_name": "ACTIV RETINOL 1.0",
+        "structured_description": "SÉRUM&nbsp;ANTI-ÂGE INTENSE\nActiv Retinol 1.0 aide à prévenir l’apparition des signes du vieillissement cutané grâce à sa concentration optimale en rétinol*. Associé à un puissant mélange d'antioxydants et de céramides, il contribue à protéger et à fortifier la peau.&nbsp;\nCette formule est recommandée pour lutter contre la perte d'élasticité et le teint terne. Adapté à tous les types de peau, elle assure un confort maximal et des résultats visibles.&nbsp;&nbsp;&nbsp;\n\nRéduit les signes de vieillissement&nbsp;\nAméliore l'élasticité et l'éclat de la peau&nbsp;\nProtège et renforce la peau&nbsp;\n\n*Contient de la Vitamine A. Tenez compte de votre apport quotidien avant utilisation",
+        "structured_price": 68.9,
+        "reviews": [
+          {
+            "text": "Témoignages",
+            "author": "Anonyme",
+            "rating": null
+          },
+          {
+            "text": "Témoignages\n« Je recommande les dermo-cosmétiques de la marque française Dermaceutic car ils contiennent de fortes concentrations d'ingrédients actifs anti-âge à l'efficacité cliniquement prouvée. Chaque patient bénéficie d'un traitement dédié, adapté à sa peau et à ses besoins. »Dr Veronique Buckenmeyer",
+            "author": "Dr Veronique Buckenmeyer",
+            "rating": null
+          },
+          {
+            "text": "Témoignages\n« Je recommande les dermo-cosmétiques de la marque française Dermaceutic car ils contiennent de fortes concentrations d'ingrédients actifs anti-âge à l'efficacité cliniquement prouvée. Chaque patient bénéficie d'un traitement dédié, adapté à sa peau et à ses besoins. »Dr Veronique Buckenmeyer",
+            "author": "Dr Veronique Buckenmeyer",
+            "rating": null
+          },
+          {
+            "text": "Témoignages\n« Je recommande les dermo-cosmétiques de la marque française Dermaceutic car ils contiennent de fortes concentrations d'ingrédients actifs anti-âge à l'efficacité cliniquement prouvée. Chaque patient bénéficie d'un traitement dédié, adapté à sa peau et à ses besoins. »Dr Veronique Buckenmeyer",
+            "author": "Dr Veronique Buckenmeyer",
+            "rating": null
+          },
+          {
+            "text": "Témoignages",
+            "author": "Anonyme",
+            "rating": null
+          },
+          {
+            "text": "« Je recommande les dermo-cosmétiques de la marque française Dermaceutic car ils contiennent de fortes concentrations d'ingrédients actifs anti-âge à l'efficacité cliniquement prouvée. Chaque patient bénéficie d'un traitement dédié, adapté à sa peau et à ses besoins. »",
+            "author": "Anonyme",
+            "rating": null
+          },
+          {
+            "text": "Dr Veronique Buckenmeyer",
+            "author": "Anonyme",
+            "rating": null
+          },
+          {
+            "text": "Témoignages\n« Bon rétinol avec une concentration intéressante et doux malgré ma peau sensible. »Julie",
+            "author": "Julie",
+            "rating": null
+          },
+          {
+            "text": "Témoignages\n« Bon rétinol avec une concentration intéressante et doux malgré ma peau sensible. »Julie",
+            "author": "Julie",
+            "rating": null
+          },
+          {
+            "text": "Témoignages\n« Bon rétinol avec une concentration intéressante et doux malgré ma peau sensible. »Julie",
+            "author": "Julie",
+            "rating": null
+          },
+          {
+            "text": "Témoignages",
+            "author": "Anonyme",
+            "rating": null
+          },
+          {
+            "text": "« Bon rétinol avec une concentration intéressante et doux malgré ma peau sensible. »",
+            "author": "Anonyme",
+            "rating": null
+          },
+          {
+            "text": "Témoignages\n« Très bon sérum, ma peau est plus ferme depuis que je l'utilise.Eugenia",
+            "author": "Eugenia",
+            "rating": null
+          },
+          {
+            "text": "Témoignages\n« Très bon sérum, ma peau est plus ferme depuis que je l'utilise.Eugenia",
+            "author": "Eugenia",
+            "rating": null
+          },
+          {
+            "text": "Témoignages\n« Très bon sérum, ma peau est plus ferme depuis que je l'utilise.Eugenia",
+            "author": "Eugenia",
+            "rating": null
+          },
+          {
+            "text": "Témoignages",
+            "author": "Anonyme",
+            "rating": null
+          },
+          {
+            "text": "« Très bon sérum, ma peau est plus ferme depuis que je l'utilise.",
+            "author": "Anonyme",
+            "rating": null
+          },
+          {
+            "text": "Témoignages\n« Idéal pour effacer les taches et lisser les ridules sur le visage. Utiliser le soir pour de meilleurs résultats. »Marie",
+            "author": "Marie",
+            "rating": null
+          },
+          {
+            "text": "Témoignages\n« Idéal pour effacer les taches et lisser les ridules sur le visage. Utiliser le soir pour de meilleurs résultats. »Marie",
+            "author": "Marie",
+            "rating": null
+          },
+          {
+            "text": "Témoignages\n« Idéal pour effacer les taches et lisser les ridules sur le visage. Utiliser le soir pour de meilleurs résultats. »Marie",
+            "author": "Marie",
+            "rating": null
+          },
+          {
+            "text": "Témoignages",
+            "author": "Anonyme",
+            "rating": null
+          },
+          {
+            "text": "« Idéal pour effacer les taches et lisser les ridules sur le visage. Utiliser le soir pour de meilleurs résultats. »",
+            "author": "Anonyme",
+            "rating": null
+          }
+        ],
+        "reviewCount": 22
+      }
+    }
+  ]
+}
