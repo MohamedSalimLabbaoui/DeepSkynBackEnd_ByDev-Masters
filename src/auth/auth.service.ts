@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import axios from 'axios';
 import * as qs from 'qs';
+import { UserService } from '../user/user.service';
 
 export interface TokenResponse {
     access_token: string;
@@ -17,7 +18,10 @@ export class AuthService {
     private clientId: string;
     private clientSecret: string;
 
-    constructor(private configService: ConfigService) {
+    constructor(
+        private configService: ConfigService,
+        private userService: UserService,
+    ) {
         this.keycloakUrl = this.configService.get<string>(
             'KEYCLOAK_AUTH_SERVER_URL',
             'http://localhost:8080',
@@ -110,7 +114,7 @@ export class AuthService {
     }
 
     /**
-     * Créer un nouvel utilisateur
+     * Créer un nouvel utilisateur dans Keycloak et PostgreSQL
      */
     async createUser(
         username: string,
@@ -119,10 +123,23 @@ export class AuthService {
         firstName?: string,
         lastName?: string,
     ): Promise<any> {
+        // Vérifier si l'utilisateur existe déjà dans PostgreSQL
+        const existingEmail = await this.userService.emailExists(email);
+        const existingUsername = await this.userService.usernameExists(username);
+
+        if (existingEmail) {
+            throw new Error('Un utilisateur avec cet email existe déjà');
+        }
+
+        if (existingUsername) {
+            throw new Error('Un utilisateur avec ce username existe déjà');
+        }
+
         const adminToken = await this.getAdminToken();
         const usersUrl = `${this.keycloakUrl}/admin/realms/${this.realm}/users`;
 
         try {
+            // Créer l'utilisateur dans Keycloak
             const response = await axios.post(
                 usersUrl,
                 {
@@ -147,6 +164,23 @@ export class AuthService {
                     },
                 },
             );
+
+            // Créer l'utilisateur dans PostgreSQL
+            try {
+                const pgUser = await this.userService.createUser(
+                    email,
+                    username,
+                    firstName,
+                    lastName,
+                );
+                console.log('Utilisateur créé dans PostgreSQL:', pgUser.id);
+            } catch (dbError: any) {
+                console.error('Erreur lors de la création dans PostgreSQL:', dbError.message);
+                // Optionnel: supprimer l'utilisateur de Keycloak si la création PostgreSQL échoue
+                throw new Error(
+                    `Utilisateur créé dans Keycloak mais erreur PostgreSQL: ${dbError.message}`,
+                );
+            }
 
             return response.data;
         } catch (error: any) {
