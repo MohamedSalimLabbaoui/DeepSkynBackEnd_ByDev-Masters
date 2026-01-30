@@ -54,6 +54,7 @@ export class ScraperService {
       // Scraper les produits
       const productsData = await page.evaluate(() => {
         const items: any[] = [];
+        const seenLinks = new Set<string>(); // Pour éviter les doublons
         
         // Chercher les éléments produits (adapter les sélecteurs selon la structure HTML)
         const productElements = document.querySelectorAll(
@@ -76,7 +77,9 @@ export class ScraperService {
             (element.querySelector('img') as HTMLImageElement)?.dataset.src ||
             '';
 
-          if (name && link) {
+          // Vérifier que le produit est valide et pas déjà ajouté
+          if (name && link && !seenLinks.has(link)) {
+            seenLinks.add(link);
             items.push({
               name,
               link: new URL(link, window.location.origin).href,
@@ -88,7 +91,7 @@ export class ScraperService {
         return items;
       });
 
-      this.logger.log(`${productsData.length} produits trouvés`);
+      this.logger.log(`${productsData.length} produits uniques trouvés`);
 
       // Limiter à 3 produits
       const limitedProducts = productsData.slice(0, 3);
