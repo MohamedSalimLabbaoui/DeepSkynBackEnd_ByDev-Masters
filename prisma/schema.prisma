@@ -1,0 +1,239 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// Table 1: users (Utilisateurs)
+// Table principale des utilisateurs de l'application skincare
+model User {
+  id                 String    @id @default(uuid())
+  email              String    @unique
+  password           String?
+  googleId           String?   @unique
+  twoFactorEnabled   Boolean   @default(false)
+  twoFactorSecret    String?   // Secret TOTP pour le 2FA
+  resetPasswordToken String?   // Token de réinitialisation du mot de passe
+  resetPasswordExpires DateTime? // Expiration du token de réinitialisation
+  name               String?
+  avatar             String?
+  preferredLanguage  String    @default("fr")
+  dateOfBirth        DateTime?
+  gender             String?
+  emailVerified      Boolean   @default(false)
+  onboardingComplete Boolean   @default(false)
+  refreshToken       String?
+  role               String    @default("user")
+  isActive           Boolean   @default(true)
+  settings           Json?
+  lastActivity       DateTime?
+  interactionCount   Int       @default(0)
+  sessionCount       Int       @default(0)
+  churnRiskScore     Float?    // Score de risque de churn (0.0 - 1.0)
+  churnRiskLevel     String?   // low, medium, high, critical
+  lastChurnAnalysis  DateTime? // Dernière analyse de churn
+  reEngagementSentAt DateTime? // Dernier email de re-engagement envoyé
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  // Relations
+  notifications  Notification[]
+  skinProfile    SkinProfile?
+  analyses       Analysis[]
+  routines       Routine[]
+  chatHistories  ChatHistory[]
+  subscription   Subscription?
+  posts          Post[]
+  likes          Like[]
+  comments       Comment[]
+
+  @@map("users")
+}
+
+// Table 2: notifications (Notifications)
+// Notifications système pour les utilisateurs
+model Notification {
+  id        String   @id @default(uuid())
+  userId    String
+  title     String
+  message   String
+  type      String   @default("info") // info, success, warning, error
+  isRead    Boolean  @default(false)
+  actionUrl String?
+  createdAt DateTime @default(now())
+
+  // Relations
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("notifications")
+}
+
+// Table 3: skin_profiles (Profils de peau)
+// Profil dermatologique et caractéristiques de la peau
+model SkinProfile {
+  id              String    @id @default(uuid())
+  userId          String    @unique
+  skinType        String?   // dry, oily, combination, normal, sensitive
+  fitzpatrickType Int?      // Type Fitzpatrick (1-6) pour la sensibilité solaire
+  concerns        String[]  // Problèmes de peau: acne, wrinkles, hyperpigmentation, etc.
+  sensitivities   String[]  // Sensibilités: fragrances, alcohol, etc.
+  skinAge         Int?
+  healthScore     Int?      // Score de santé de la peau (0-100)
+  lastAnalysisAt  DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  // Relations
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("skin_profiles")
+}
+
+// Table 4: analyses (Analyses de peau)
+// Résultats d'analyses AI des photos de peau
+model Analysis {
+  id              String   @id @default(uuid())
+  userId          String
+  images          String[] // URLs des images stockées dans le cloud
+  questionnaire   Json?    // Réponses au questionnaire Fitzpatrick
+  results         Json?    // Résultats détaillés de l'analyse AI
+  healthScore     Int?     // Score de santé (0-100)
+  skinAge         Int?     // Âge estimé de la peau
+  conditions      String[] // Conditions détectées
+  recommendations Json?    // Recommandations personnalisées
+  status          String   @default("pending") // pending, processing, completed, failed
+  processingTime  Int?     // Temps de traitement en millisecondes
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  // Relations
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("analyses")
+}
+
+// Table 5: routines (Routines skincare)
+// Routines de soins de la peau personnalisées
+model Routine {
+  id            String   @id @default(uuid())
+  userId        String
+  name          String
+  type          String   // AM (matin), PM (soir), weekly (hebdomadaire)
+  steps         Json     // Étapes de la routine avec produits
+  ingredients   String[] // Active ingredients
+  frequency     String?  // daily, weekly, custom
+  estimatedTime Int?     // Estimated duration (minutes)
+  isAIGenerated Boolean  @default(false)
+  isActive      Boolean  @default(true)
+  notes         String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  // Relations
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("routines")
+}
+
+// Table 6: chat_histories (Historique de chat)
+// Historique des conversations avec le chatbot AI
+model ChatHistory {
+  id                String   @id @default(uuid())
+  userId            String
+  message           String?  // User message
+  imageUrl          String?  // Optional image URL
+  modelUsed         String?  // Model name (e.g., "Gemini 2.5 Flash")
+  assistantResponse String?  // AI response
+  messages          Json?    // Tableau de messages {role, content, timestamp} (legacy support)
+  context           Json?    // Contexte utilisateur pour personnalisation
+  isPremium         Boolean  @default(false)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  // Relations
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("chat_histories")
+}
+
+// Table 7: subscriptions (Abonnements)
+// Informations d'abonnement des utilisateurs
+model Subscription {
+  id           String    @id @default(uuid())
+  userId       String    @unique
+  planId       String?   // Plan identifier
+  plan         String    @default("free") // free, premium, premium_yearly, premium+
+  status       String    @default("active") // active, cancelled, expired, pending, paused
+  amount       Float?
+  currency     String?   @default("TND")
+  paymentMethod String?  // Payment method used
+  autoRenew    Boolean   @default(true)
+  startDate    DateTime  @default(now())
+  endDate      DateTime?
+  cancelledAt  DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  // Relations
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("subscriptions")
+}
+
+// Table 8: posts (Posts)
+// Publications dans le feed social
+model Post {
+  id        String   @id @default(uuid())
+  userId    String
+  media     String?  // URL of uploaded media (image/video)
+  message   String   // Post content/caption
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  likes    Like[]
+  comments Comment[]
+
+  @@map("posts")
+}
+
+// Table 9: likes (Likes)
+// Likes sur les posts
+model Like {
+  id        String   @id @default(uuid())
+  userId    String
+  postId    String
+  createdAt DateTime @default(now())
+
+  // Relations
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  post Post @relation(fields: [postId], references: [id], onDelete: Cascade)
+
+  // Ensure a user can only like a post once
+  @@unique([userId, postId])
+  @@map("likes")
+}
+
+// Table 10: comments (Comments)
+// Commentaires sur les posts
+model Comment {
+  id        String   @id @default(uuid())
+  userId    String
+  postId    String
+  comment   String   // Comment text
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  post Post @relation(fields: [postId], references: [id], onDelete: Cascade)
+
+  @@map("comments")
+}

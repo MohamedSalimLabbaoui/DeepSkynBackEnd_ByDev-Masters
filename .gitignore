@@ -3,6 +3,9 @@
 /node_modules
 /build
 
+
+ml/data/
+ml/models/
 # Logs
 logs
 *.log
