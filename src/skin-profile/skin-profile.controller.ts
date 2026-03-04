@@ -13,7 +13,14 @@ import {
   ParseIntPipe,
   DefaultValuePipe,
 } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiParam, ApiQuery } from '@nestjs/swagger';
+import {
+  ApiTags,
+  ApiOperation,
+  ApiResponse,
+  ApiBearerAuth,
+  ApiParam,
+  ApiQuery,
+} from '@nestjs/swagger';
 import { SkinProfileService, SkinProfileStats } from './skin-profile.service';
 import { CreateSkinProfileDto } from './dto/create-skin-profile.dto';
 import { UpdateSkinProfileDto } from './dto/update-skin-profile.dto';
@@ -22,32 +29,55 @@ import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { SkinProfile } from '@prisma/client';
+import { PrismaService } from '../prisma/prisma.service';
+import { NotFoundException } from '@nestjs/common';
 
 @ApiTags('Skin Profiles')
 @ApiBearerAuth('JWT-auth')
 @Controller('skin-profiles')
 @UseGuards(KeycloakAuthGuard)
 export class SkinProfileController {
-  constructor(private readonly skinProfileService: SkinProfileService) {}
+  constructor(
+    private readonly skinProfileService: SkinProfileService,
+    private readonly prisma: PrismaService,
+  ) { }
+
+  private async getPrismaUserId(email: string): Promise<string> {
+    const user = await this.prisma.user.findUnique({
+      where: { email },
+    });
+    if (!user) {
+      throw new NotFoundException('User not found in database');
+    }
+    return user.id;
+  }
 
   @Post()
-  @ApiOperation({ summary: 'Créer un profil de peau', description: 'Crée un nouveau profil de peau pour l\'utilisateur connecté' })
+  @ApiOperation({
+    summary: 'Créer un profil de peau',
+    description: "Crée un nouveau profil de peau pour l'utilisateur connecté",
+  })
   @ApiResponse({ status: 201, description: 'Profil créé avec succès' })
   @ApiResponse({ status: 400, description: 'Profil déjà existant' })
   async create(
-    @CurrentUser('userId') userId: string,
+    @CurrentUser('email') email: string,
     @Body() createSkinProfileDto: CreateSkinProfileDto,
   ): Promise<SkinProfile> {
+    const userId = await this.getPrismaUserId(email);
     return this.skinProfileService.create(userId, createSkinProfileDto);
   }
 
   @Post('upsert')
-  @ApiOperation({ summary: 'Créer ou mettre à jour', description: 'Crée ou met à jour le profil de peau (upsert)' })
+  @ApiOperation({
+    summary: 'Créer ou mettre à jour',
+    description: 'Crée ou met à jour le profil de peau (upsert)',
+  })
   @ApiResponse({ status: 200, description: 'Profil créé ou mis à jour' })
   async upsert(
-    @CurrentUser('userId') userId: string,
+    @CurrentUser('email') email: string,
     @Body() createSkinProfileDto: CreateSkinProfileDto,
   ): Promise<SkinProfile> {
+    const userId = await this.getPrismaUserId(email);
     return this.skinProfileService.upsert(userId, createSkinProfileDto);
   }
 
@@ -81,7 +111,8 @@ export class SkinProfileController {
   @UseGuards(RolesGuard)
   @Roles('admin')
   async findBySkinType(
-    @Param('skinType') skinType: 'dry' | 'oily' | 'combination' | 'normal' | 'sensitive',
+    @Param('skinType')
+    skinType: 'dry' | 'oily' | 'combination' | 'normal' | 'sensitive',
   ): Promise<SkinProfile[]> {
     return this.skinProfileService.findBySkinType(skinType);
   }
@@ -92,7 +123,9 @@ export class SkinProfileController {
   @Get('by-concern/:concern')
   @UseGuards(RolesGuard)
   @Roles('admin')
-  async findByConcern(@Param('concern') concern: string): Promise<SkinProfile[]> {
+  async findByConcern(
+    @Param('concern') concern: string,
+  ): Promise<SkinProfile[]> {
     return this.skinProfileService.findByConcern(concern);
   }
 
@@ -112,17 +145,44 @@ export class SkinProfileController {
    * Get current user's skin profile
    */
   @Get('me')
-  async getMyProfile(@CurrentUser('userId') userId: string): Promise<SkinProfile> {
-    return this.skinProfileService.findByUserId(userId);
+  async getMyProfile(
+    @CurrentUser('email') email: string,
+  ): Promise<SkinProfile | null> {
+    const userId = await this.getPrismaUserId(email);
+    const profile = await this.skinProfileService.findByUserIdOrNull(userId);
+    return profile;
   }
 
   /**
    * Check if current user has a skin profile
    */
   @Get('me/exists')
-  async hasProfile(@CurrentUser('userId') userId: string): Promise<{ exists: boolean }> {
+  async hasProfile(
+    @CurrentUser('email') email: string,
+  ): Promise<{ exists: boolean }> {
+    const userId = await this.getPrismaUserId(email);
     const exists = await this.skinProfileService.hasProfile(userId);
     return { exists };
+  }
+
+  /**
+   * Check if current user has completed onboarding
+   */
+  @Get('me/onboarding-status')
+  @ApiOperation({
+    summary: 'Statut d\'onboarding',
+    description: 'Vérifie si l\'utilisateur a complété l\'onboarding',
+  })
+  @ApiResponse({ status: 200, description: 'Statut retourné' })
+  async getOnboardingStatus(
+    @CurrentUser('email') email: string,
+  ): Promise<{ onboardingComplete: boolean; hasProfile: boolean }> {
+    const userId = await this.getPrismaUserId(email);
+    const hasProfile = await this.skinProfileService.hasProfile(userId);
+    return {
+      onboardingComplete: hasProfile,
+      hasProfile,
+    };
   }
 
   /**
@@ -140,9 +200,10 @@ export class SkinProfileController {
    */
   @Patch('me')
   async updateMyProfile(
-    @CurrentUser('userId') userId: string,
+    @CurrentUser('email') email: string,
     @Body() updateSkinProfileDto: UpdateSkinProfileDto,
   ): Promise<SkinProfile> {
+    const userId = await this.getPrismaUserId(email);
     return this.skinProfileService.update(userId, updateSkinProfileDto);
   }
 
@@ -151,9 +212,10 @@ export class SkinProfileController {
    */
   @Patch('me/concerns')
   async updateConcerns(
-    @CurrentUser('userId') userId: string,
+    @CurrentUser('email') email: string,
     @Body('concerns') concerns: string[],
   ): Promise<SkinProfile> {
+    const userId = await this.getPrismaUserId(email);
     return this.skinProfileService.updateConcerns(userId, concerns);
   }
 
@@ -162,9 +224,10 @@ export class SkinProfileController {
    */
   @Post('me/concerns/:concern')
   async addConcern(
-    @CurrentUser('userId') userId: string,
+    @CurrentUser('email') email: string,
     @Param('concern') concern: string,
   ): Promise<SkinProfile> {
+    const userId = await this.getPrismaUserId(email);
     return this.skinProfileService.addConcern(userId, concern);
   }
 
@@ -173,9 +236,10 @@ export class SkinProfileController {
    */
   @Delete('me/concerns/:concern')
   async removeConcern(
-    @CurrentUser('userId') userId: string,
+    @CurrentUser('email') email: string,
     @Param('concern') concern: string,
   ): Promise<SkinProfile> {
+    const userId = await this.getPrismaUserId(email);
     return this.skinProfileService.removeConcern(userId, concern);
   }
 
@@ -184,9 +248,10 @@ export class SkinProfileController {
    */
   @Patch('me/sensitivities')
   async updateSensitivities(
-    @CurrentUser('userId') userId: string,
+    @CurrentUser('email') email: string,
     @Body('sensitivities') sensitivities: string[],
   ): Promise<SkinProfile> {
+    const userId = await this.getPrismaUserId(email);
     return this.skinProfileService.updateSensitivities(userId, sensitivities);
   }
 
@@ -195,9 +260,10 @@ export class SkinProfileController {
    */
   @Post('me/sensitivities/:sensitivity')
   async addSensitivity(
-    @CurrentUser('userId') userId: string,
+    @CurrentUser('email') email: string,
     @Param('sensitivity') sensitivity: string,
   ): Promise<SkinProfile> {
+    const userId = await this.getPrismaUserId(email);
     return this.skinProfileService.addSensitivity(userId, sensitivity);
   }
 
@@ -206,9 +272,10 @@ export class SkinProfileController {
    */
   @Delete('me/sensitivities/:sensitivity')
   async removeSensitivity(
-    @CurrentUser('userId') userId: string,
+    @CurrentUser('email') email: string,
     @Param('sensitivity') sensitivity: string,
   ): Promise<SkinProfile> {
+    const userId = await this.getPrismaUserId(email);
     return this.skinProfileService.removeSensitivity(userId, sensitivity);
   }
 
@@ -217,9 +284,10 @@ export class SkinProfileController {
    */
   @Patch('me/health-score')
   async updateHealthScore(
-    @CurrentUser('userId') userId: string,
+    @CurrentUser('email') email: string,
     @Body('healthScore', ParseIntPipe) healthScore: number,
   ): Promise<SkinProfile> {
+    const userId = await this.getPrismaUserId(email);
     return this.skinProfileService.updateHealthScore(userId, healthScore);
   }
 
@@ -228,9 +296,10 @@ export class SkinProfileController {
    */
   @Patch('me/skin-age')
   async updateSkinAge(
-    @CurrentUser('userId') userId: string,
+    @CurrentUser('email') email: string,
     @Body('skinAge', ParseIntPipe) skinAge: number,
   ): Promise<SkinProfile> {
+    const userId = await this.getPrismaUserId(email);
     return this.skinProfileService.updateSkinAge(userId, skinAge);
   }
 
@@ -238,7 +307,10 @@ export class SkinProfileController {
    * Update last analysis timestamp
    */
   @Patch('me/last-analysis')
-  async updateLastAnalysis(@CurrentUser('userId') userId: string): Promise<SkinProfile> {
+  async updateLastAnalysis(
+    @CurrentUser('email') email: string,
+  ): Promise<SkinProfile> {
+    const userId = await this.getPrismaUserId(email);
     return this.skinProfileService.updateLastAnalysis(userId);
   }
 
@@ -247,7 +319,8 @@ export class SkinProfileController {
    */
   @Delete('me')
   @HttpCode(HttpStatus.NO_CONTENT)
-  async deleteMyProfile(@CurrentUser('userId') userId: string): Promise<void> {
+  async deleteMyProfile(@CurrentUser('email') email: string): Promise<void> {
+    const userId = await this.getPrismaUserId(email);
     await this.skinProfileService.remove(userId);
   }
 }

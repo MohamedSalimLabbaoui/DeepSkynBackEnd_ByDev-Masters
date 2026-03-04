@@ -10,7 +10,7 @@ export class RealTimeScanDto {
   image: string; // Base64 encoded image
 
   @ApiPropertyOptional({
-    description: 'Type MIME de l\'image',
+    description: "Type MIME de l'image",
     enum: ['image/jpeg', 'image/png', 'image/webp'],
     default: 'image/jpeg',
   })
@@ -22,7 +22,7 @@ export class RealTimeScanDto {
   mimeType?: string;
 
   @ApiPropertyOptional({
-    description: 'Sauvegarder l\'image sur Supabase',
+    description: "Sauvegarder l'image sur Supabase",
     default: false,
   })
   @IsOptional()
@@ -30,7 +30,7 @@ export class RealTimeScanDto {
   saveImage?: boolean; // Save image to Supabase
 
   @ApiPropertyOptional({
-    description: 'Sauvegarder l\'analyse dans la base de données',
+    description: "Sauvegarder l'analyse dans la base de données",
     default: false,
   })
   @IsOptional()

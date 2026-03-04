@@ -1,4 +1,10 @@
-import { IsArray, IsOptional, IsUrl, ArrayMaxSize, IsObject } from 'class-validator';
+import {
+  IsArray,
+  IsOptional,
+  IsUrl,
+  ArrayMaxSize,
+  IsObject,
+} from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 export class CreateAnalysisDto {

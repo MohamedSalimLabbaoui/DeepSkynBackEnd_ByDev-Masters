@@ -38,7 +38,7 @@ export class UpdateNotificationDto {
   isRead?: boolean;
 
   @ApiPropertyOptional({
-    description: 'URL d\'action pour rediriger l\'utilisateur',
+    description: "URL d'action pour rediriger l'utilisateur",
     example: '/analyses/456',
   })
   @IsOptional()

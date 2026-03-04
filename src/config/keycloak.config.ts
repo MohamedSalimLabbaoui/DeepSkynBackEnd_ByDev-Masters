@@ -2,7 +2,8 @@ import { registerAs } from '@nestjs/config';
 
 export default registerAs('keycloak', () => ({
   realm: process.env.KEYCLOAK_REALM || 'master',
-  'auth-server-url': process.env.KEYCLOAK_AUTH_SERVER_URL || 'http://localhost:8180',
+  'auth-server-url':
+    process.env.KEYCLOAK_AUTH_SERVER_URL || 'http://localhost:8180',
   'ssl-required': process.env.KEYCLOAK_SSL_REQUIRED || 'external',
   resource: process.env.KEYCLOAK_RESOURCE || 'nestjs-app',
   'public-client': true,

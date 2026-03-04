@@ -48,14 +48,15 @@ export class GeminiService {
 
   constructor(private readonly configService: ConfigService) {
     this.apiKey = this.configService.get<string>('GEMINI_API_KEY');
-    this.apiUrl = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent';
+    this.apiUrl =
+      'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent';
   }
 
   /**
    * Sleep helper for retry delays
    */
   private sleep(ms: number): Promise<void> {
-    return new Promise(resolve => setTimeout(resolve, ms));
+    return new Promise((resolve) => setTimeout(resolve, ms));
   }
 
   /**
@@ -70,11 +71,13 @@ export class GeminiService {
         return await requestFn();
       } catch (error) {
         const axiosError = error as AxiosError;
-        
+
         if (axiosError.response?.status === 429) {
           if (attempt < retries) {
             const delay = this.retryDelay * attempt; // Exponential backoff
-            this.logger.warn(`Rate limited (429). Retrying in ${delay}ms... (attempt ${attempt}/${retries})`);
+            this.logger.warn(
+              `Rate limited (429). Retrying in ${delay}ms... (attempt ${attempt}/${retries})`,
+            );
             await this.sleep(delay);
             continue;
           }
@@ -84,10 +87,15 @@ export class GeminiService {
           );
         }
 
-        if (axiosError.response?.status === 503 || axiosError.response?.status === 500) {
+        if (
+          axiosError.response?.status === 503 ||
+          axiosError.response?.status === 500
+        ) {
           if (attempt < retries) {
             const delay = this.retryDelay * attempt;
-            this.logger.warn(`Server error (${axiosError.response?.status}). Retrying in ${delay}ms...`);
+            this.logger.warn(
+              `Server error (${axiosError.response?.status}). Retrying in ${delay}ms...`,
+            );
             await this.sleep(delay);
             continue;
           }
@@ -113,10 +121,7 @@ export class GeminiService {
       const requestBody = {
         contents: [
           {
-            parts: [
-              { text: prompt },
-              ...imageParts,
-            ],
+            parts: [{ text: prompt }, ...imageParts],
           },
         ],
         generationConfig: {
@@ -159,7 +164,7 @@ export class GeminiService {
       );
 
       const textResponse = response.data.candidates[0]?.content?.parts[0]?.text;
-      
+
       if (!textResponse) {
         throw new Error('No response from Gemini API');
       }
@@ -217,7 +222,7 @@ export class GeminiService {
       );
 
       const textResponse = response.data.candidates[0]?.content?.parts[0]?.text;
-      
+
       if (!textResponse) {
         throw new Error('No response from Gemini API');
       }
@@ -362,14 +367,38 @@ Provide your assessment in the following JSON format ONLY:
           warnings: parsed.recommendations?.warnings || [],
         },
         detailedAnalysis: {
-          hydration: parsed.detailedAnalysis?.hydration || { score: 70, description: 'Normal hydration' },
-          texture: parsed.detailedAnalysis?.texture || { score: 70, description: 'Normal texture' },
-          pores: parsed.detailedAnalysis?.pores || { score: 70, description: 'Normal pore size' },
-          pigmentation: parsed.detailedAnalysis?.pigmentation || { score: 70, description: 'Even tone' },
-          wrinkles: parsed.detailedAnalysis?.wrinkles || { score: 70, description: 'Minimal wrinkles' },
-          acne: parsed.detailedAnalysis?.acne || { score: 70, description: 'Clear skin' },
-          redness: parsed.detailedAnalysis?.redness || { score: 70, description: 'No redness' },
-          elasticity: parsed.detailedAnalysis?.elasticity || { score: 70, description: 'Good elasticity' },
+          hydration: parsed.detailedAnalysis?.hydration || {
+            score: 70,
+            description: 'Normal hydration',
+          },
+          texture: parsed.detailedAnalysis?.texture || {
+            score: 70,
+            description: 'Normal texture',
+          },
+          pores: parsed.detailedAnalysis?.pores || {
+            score: 70,
+            description: 'Normal pore size',
+          },
+          pigmentation: parsed.detailedAnalysis?.pigmentation || {
+            score: 70,
+            description: 'Even tone',
+          },
+          wrinkles: parsed.detailedAnalysis?.wrinkles || {
+            score: 70,
+            description: 'Minimal wrinkles',
+          },
+          acne: parsed.detailedAnalysis?.acne || {
+            score: 70,
+            description: 'Clear skin',
+          },
+          redness: parsed.detailedAnalysis?.redness || {
+            score: 70,
+            description: 'No redness',
+          },
+          elasticity: parsed.detailedAnalysis?.elasticity || {
+            score: 70,
+            description: 'Good elasticity',
+          },
         },
         fitzpatrickType: Math.min(6, Math.max(1, parsed.fitzpatrickType || 3)),
         summary: parsed.summary || 'Analysis completed successfully.',
@@ -383,10 +412,15 @@ Provide your assessment in the following JSON format ONLY:
   /**
    * Get skincare advice based on conditions
    */
-  async getSkincareAdvice(conditions: string[], concerns: string[]): Promise<string> {
+  async getSkincareAdvice(
+    conditions: string[],
+    concerns: string[],
+  ): Promise<string> {
     // Handle empty arrays
-    const conditionsList = conditions?.length > 0 ? conditions.join(', ') : 'general skin health';
-    const concernsList = concerns?.length > 0 ? concerns.join(', ') : 'overall skincare';
+    const conditionsList =
+      conditions?.length > 0 ? conditions.join(', ') : 'general skin health';
+    const concernsList =
+      concerns?.length > 0 ? concerns.join(', ') : 'overall skincare';
 
     const prompt = `As a dermatologist, provide brief skincare advice for someone with:
     Conditions: ${conditionsList}
@@ -409,7 +443,10 @@ Provide your assessment in the following JSON format ONLY:
         ),
       );
 
-      return response.data.candidates[0]?.content?.parts[0]?.text || 'Unable to generate advice.';
+      return (
+        response.data.candidates[0]?.content?.parts[0]?.text ||
+        'Unable to generate advice.'
+      );
     } catch (error) {
       this.logger.error('Failed to get skincare advice', error);
       return 'Unable to generate advice at this time. Please try again later.';
@@ -450,7 +487,10 @@ Réponds de manière utile, personnalisée et professionnelle en français:`;
         ),
       );
 
-      return response.data.candidates[0]?.content?.parts[0]?.text || 'Je suis désolé, je n\'ai pas pu générer une réponse.';
+      return (
+        response.data.candidates[0]?.content?.parts[0]?.text ||
+        "Je suis désolé, je n'ai pas pu générer une réponse."
+      );
     } catch (error) {
       this.logger.error('Failed to generate chat response', error);
       throw error;

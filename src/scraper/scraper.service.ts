@@ -30,17 +30,17 @@ export class ScraperService {
       await fs.mkdir(this.outputDir, { recursive: true });
 
       this.logger.log('Démarrage du scraping de Dermaceutic...');
-      
+
       browser = await puppeteer.launch({
         headless: true,
         args: ['--no-sandbox', '--disable-setuid-sandbox'],
       });
 
       const page = await browser.newPage();
-      
+
       // Set user agent pour éviter les blocages
       await page.setUserAgent(
-        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
       );
 
       // Naviguer vers le site
@@ -55,24 +55,26 @@ export class ScraperService {
       const productsData = await page.evaluate(() => {
         const items: any[] = [];
         const seenLinks = new Set<string>(); // Pour éviter les doublons
-        
+
         // Chercher les éléments produits (adapter les sélecteurs selon la structure HTML)
         const productElements = document.querySelectorAll(
-          '[data-test-id*="product"], .product-item, .product-card, [class*="product"]'
+          '[data-test-id*="product"], .product-item, .product-card, [class*="product"]',
         );
 
         productElements.forEach((element) => {
-          const name = 
-            element.querySelector('h2, h3, [class*="title"]')?.textContent?.trim() ||
+          const name =
+            element
+              .querySelector('h2, h3, [class*="title"]')
+              ?.textContent?.trim() ||
             element.querySelector('a')?.textContent?.trim() ||
             '';
-          
-          const link = 
+
+          const link =
             (element.querySelector('a') as HTMLAnchorElement)?.href ||
             (element.closest('a') as HTMLAnchorElement)?.href ||
             '';
-          
-          const image = 
+
+          const image =
             (element.querySelector('img') as HTMLImageElement)?.src ||
             (element.querySelector('img') as HTMLImageElement)?.dataset.src ||
             '';
@@ -95,16 +97,18 @@ export class ScraperService {
 
       // Limiter à 3 produits
       const limitedProducts = productsData.slice(0, 3);
-      this.logger.log(`Scraping limité à ${limitedProducts.length} produits...`);
+      this.logger.log(
+        `Scraping limité à ${limitedProducts.length} produits...`,
+      );
 
       // Pour chaque produit, scraper les attributs détaillés
       for (const productData of limitedProducts) {
         try {
           this.logger.log(`Scraping détails pour: ${productData.name}`);
-          
+
           const productPage = await browser.newPage();
           await productPage.setUserAgent(
-            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
           );
 
           await productPage.goto(productData.link, {
@@ -119,7 +123,8 @@ export class ScraperService {
             const bodyText = document.body.innerText;
 
             // Récupérer le titre principal du produit
-            const title = document.querySelector('h1, h2')?.textContent?.trim() || '';
+            const title =
+              document.querySelector('h1, h2')?.textContent?.trim() || '';
             if (title) {
               attrs['title'] = title;
             }
@@ -132,7 +137,7 @@ export class ScraperService {
 
             // Récupérer les attributs du produit (contenance, etc.)
             const productInfo: { [key: string]: string } = {};
-            
+
             // Chercher les patterns courants
             const contenanceMatch = bodyText.match(/(\d+)\s*(ml|cl|L)/i);
             if (contenanceMatch) {
@@ -152,36 +157,54 @@ export class ScraperService {
             }
 
             // Chercher "Ingrédients"
-            const ingredientsMatch = bodyText.match(/Ingrédients[:\s]+([^\n]+)/i);
+            const ingredientsMatch = bodyText.match(
+              /Ingrédients[:\s]+([^\n]+)/i,
+            );
             if (ingredientsMatch) {
               attrs['ingredients'] = ingredientsMatch[1].trim();
             }
 
             // Chercher "Bénéfices" ou "Avantages"
-            const benefitsMatch = bodyText.match(/(Bénéfices|Avantages|Propriétés)[:\s]+([^\n]+)/i);
+            const benefitsMatch = bodyText.match(
+              /(Bénéfices|Avantages|Propriétés)[:\s]+([^\n]+)/i,
+            );
             if (benefitsMatch) {
               attrs['benefits'] = benefitsMatch[2].trim();
             }
 
             // Récupérer tous les textes clés de la page
-            const metaContent = document.querySelector('meta[name="description"]')?.getAttribute('content') || '';
+            const metaContent =
+              document
+                .querySelector('meta[name="description"]')
+                ?.getAttribute('content') || '';
             if (metaContent) {
               attrs['metaDescription'] = metaContent;
             }
 
             // Chercher les sections de contenu avec des labels
             const sections: { [key: string]: string } = {};
-            const allText = document.querySelectorAll('p, div, section, article');
-            
+            const allText = document.querySelectorAll(
+              'p, div, section, article',
+            );
+
             allText.forEach((element) => {
               const text = element.textContent?.trim() || '';
               if (text.length > 20 && text.length < 1000) {
                 // Déterminer la catégorie basée sur le contenu
-                if (text.toLowerCase().includes('composition') || text.toLowerCase().includes('ingrédient')) {
+                if (
+                  text.toLowerCase().includes('composition') ||
+                  text.toLowerCase().includes('ingrédient')
+                ) {
                   sections['composition'] = text;
-                } else if (text.toLowerCase().includes('conseil') || text.toLowerCase().includes('utilisation')) {
+                } else if (
+                  text.toLowerCase().includes('conseil') ||
+                  text.toLowerCase().includes('utilisation')
+                ) {
                   sections['advice'] = text;
-                } else if (text.toLowerCase().includes('résultat') || text.toLowerCase().includes('efficacité')) {
+                } else if (
+                  text.toLowerCase().includes('résultat') ||
+                  text.toLowerCase().includes('efficacité')
+                ) {
                   sections['results'] = text;
                 }
               }
@@ -190,13 +213,17 @@ export class ScraperService {
             Object.assign(attrs, sections);
 
             // Récupérer les données structurées (JSON-LD) si présentes
-            const jsonLdScripts = document.querySelectorAll('script[type="application/ld+json"]');
+            const jsonLdScripts = document.querySelectorAll(
+              'script[type="application/ld+json"]',
+            );
             jsonLdScripts.forEach((script, index) => {
               try {
                 const jsonData = JSON.parse(script.textContent || '{}');
                 if (jsonData.name) attrs[`structured_name`] = jsonData.name;
-                if (jsonData.description) attrs[`structured_description`] = jsonData.description;
-                if (jsonData.offers?.[0]?.price) attrs[`structured_price`] = jsonData.offers[0].price;
+                if (jsonData.description)
+                  attrs[`structured_description`] = jsonData.description;
+                if (jsonData.offers?.[0]?.price)
+                  attrs[`structured_price`] = jsonData.offers[0].price;
               } catch (e) {
                 // Ignorer les erreurs de parsing
               }
@@ -207,33 +234,59 @@ export class ScraperService {
 
             // Chercher les avis dans les éléments courants
             const reviewElements = document.querySelectorAll(
-              '[class*="review"], [class*="comment"], [class*="feedback"], [class*="rating"], [class*="testimonial"]'
+              '[class*="review"], [class*="comment"], [class*="feedback"], [class*="rating"], [class*="testimonial"]',
             );
 
             reviewElements.forEach((element) => {
               const reviewText = element.textContent?.trim();
-              const author = element.querySelector('[class*="author"], [class*="reviewer"], [class*="name"]')?.textContent?.trim();
-              const rating = element.querySelector('[class*="rating"], [class*="stars"], [class*="score"]')?.textContent?.trim();
-              
-              if (reviewText && reviewText.length > 10 && reviewText.length < 500) {
+              const author = element
+                .querySelector(
+                  '[class*="author"], [class*="reviewer"], [class*="name"]',
+                )
+                ?.textContent?.trim();
+              const rating = element
+                .querySelector(
+                  '[class*="rating"], [class*="stars"], [class*="score"]',
+                )
+                ?.textContent?.trim();
+
+              if (
+                reviewText &&
+                reviewText.length > 10 &&
+                reviewText.length < 500
+              ) {
                 reviews.push({
                   text: reviewText,
                   author: author || 'Anonyme',
-                  rating: rating || null
+                  rating: rating || null,
                 });
               }
             });
 
             // Chercher aussi les étoiles/ratings
-            const starsElements = document.querySelectorAll('[class*="star"], [class*="rating"]');
+            const starsElements = document.querySelectorAll(
+              '[class*="star"], [class*="rating"]',
+            );
             starsElements.forEach((element) => {
               const starText = element.textContent?.trim();
-              if (starText && (starText.includes('★') || starText.includes('⭐') || /\d+\/5|\d+\/10/.test(starText))) {
-                const parent = element.closest('[class*="review"], [class*="comment"]');
-                if (parent && !reviews.some(r => r.text?.includes(parent.textContent || ''))) {
+              if (
+                starText &&
+                (starText.includes('★') ||
+                  starText.includes('⭐') ||
+                  /\d+\/5|\d+\/10/.test(starText))
+              ) {
+                const parent = element.closest(
+                  '[class*="review"], [class*="comment"]',
+                );
+                if (
+                  parent &&
+                  !reviews.some((r) =>
+                    r.text?.includes(parent.textContent || ''),
+                  )
+                ) {
                   reviews.push({
                     rating: starText,
-                    text: parent.textContent?.trim() || ''
+                    text: parent.textContent?.trim() || '',
                   });
                 }
               }
@@ -243,18 +296,24 @@ export class ScraperService {
             const paragraphs = document.querySelectorAll('p');
             paragraphs.forEach((p) => {
               const text = p.textContent?.trim();
-              if (text && (text.startsWith('"') || text.startsWith('«')) && text.length < 300) {
-                if (!reviews.some(r => r.text === text)) {
+              if (
+                text &&
+                (text.startsWith('"') || text.startsWith('«')) &&
+                text.length < 300
+              ) {
+                if (!reviews.some((r) => r.text === text)) {
                   reviews.push({
                     text: text,
-                    type: 'quote'
+                    type: 'quote',
                   });
                 }
               }
             });
 
             // Récupérer aussi les avis via Trustpilot ou autres services si présent
-            const trustpilotWidget = document.querySelector('[class*="trustpilot"]');
+            const trustpilotWidget = document.querySelector(
+              '[class*="trustpilot"]',
+            );
             if (trustpilotWidget) {
               const trustpilotText = trustpilotWidget.textContent?.trim();
               if (trustpilotText) {
@@ -272,15 +331,21 @@ export class ScraperService {
             }
 
             // Chercher le nombre total d'avis
-            const reviewCountMatch = bodyText.match(/(\d+)\s*(avis|commentaires|reviews?|feedback)/i);
+            const reviewCountMatch = bodyText.match(
+              /(\d+)\s*(avis|commentaires|reviews?|feedback)/i,
+            );
             if (reviewCountMatch) {
               attrs['totalReviews'] = reviewCountMatch[1];
             }
 
             // Chercher la note moyenne
-            const ratingMatch = bodyText.match(/(\d+[.,]\d+)\s*\/\s*5|Note\s*:\s*(\d+[.,]\d+)/i);
+            const ratingMatch = bodyText.match(
+              /(\d+[.,]\d+)\s*\/\s*5|Note\s*:\s*(\d+[.,]\d+)/i,
+            );
             if (ratingMatch) {
-              attrs['averageRating'] = (ratingMatch[1] || ratingMatch[2]).replace(',', '.');
+              attrs['averageRating'] = (
+                ratingMatch[1] || ratingMatch[2]
+              ).replace(',', '.');
             }
 
             return attrs;
@@ -296,7 +361,7 @@ export class ScraperService {
           await productPage.close();
         } catch (error) {
           this.logger.error(
-            `Erreur lors du scraping de ${productData.name}: ${error.message}`
+            `Erreur lors du scraping de ${productData.name}: ${error.message}`,
           );
           // Continuer avec le produit suivant
           products.push({
@@ -313,7 +378,9 @@ export class ScraperService {
       // Sauvegarder les données en JSON
       await this.saveToJson(products);
 
-      this.logger.log(`Scraping terminé avec succès. ${products.length} produits scrapés.`);
+      this.logger.log(
+        `Scraping terminé avec succès. ${products.length} produits scrapés.`,
+      );
       return products;
     } catch (error) {
       this.logger.error(`Erreur générale lors du scraping: ${error.message}`);
@@ -345,7 +412,9 @@ export class ScraperService {
       const files = await fs.readdir(this.outputDir);
       return files.filter((file) => file.endsWith('.json'));
     } catch (error) {
-      this.logger.error(`Erreur lors de la lecture du répertoire: ${error.message}`);
+      this.logger.error(
+        `Erreur lors de la lecture du répertoire: ${error.message}`,
+      );
       return [];
     }
   }
@@ -356,7 +425,9 @@ export class ScraperService {
       const data = await fs.readFile(filePath, 'utf-8');
       return JSON.parse(data);
     } catch (error) {
-      this.logger.error(`Erreur lors de la lecture du fichier: ${error.message}`);
+      this.logger.error(
+        `Erreur lors de la lecture du fichier: ${error.message}`,
+      );
       throw error;
     }
   }

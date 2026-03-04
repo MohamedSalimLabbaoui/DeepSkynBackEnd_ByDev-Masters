@@ -1,13 +1,19 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 export class ChurnPredictionDto {
-  @ApiProperty({ description: 'ID de l\'utilisateur' })
+  @ApiProperty({ description: "ID de l'utilisateur" })
   id: string;
 
-  @ApiProperty({ description: 'Probabilité de churn (0.0 - 1.0)', example: 0.85 })
+  @ApiProperty({
+    description: 'Probabilité de churn (0.0 - 1.0)',
+    example: 0.85,
+  })
   churnProbability: number;
 
-  @ApiProperty({ description: 'Niveau de risque', enum: ['low', 'medium', 'high', 'critical'] })
+  @ApiProperty({
+    description: 'Niveau de risque',
+    enum: ['low', 'medium', 'high', 'critical'],
+  })
   riskLevel: string;
 
   @ApiProperty({ description: 'Est considéré comme churné' })
@@ -15,7 +21,7 @@ export class ChurnPredictionDto {
 }
 
 export class ChurnReportDto {
-  @ApiProperty({ description: 'Total d\'utilisateurs analysés' })
+  @ApiProperty({ description: "Total d'utilisateurs analysés" })
   totalUsers: number;
 
   @ApiProperty({ description: 'Utilisateurs à risque (high + critical)' })

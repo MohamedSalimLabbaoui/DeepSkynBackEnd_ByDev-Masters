@@ -1,4 +1,8 @@
-import { Injectable, NotFoundException, ForbiddenException } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  ForbiddenException,
+} from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateCommentDto, UpdateCommentDto } from './dto';
 import { Comment } from '@prisma/client';
@@ -14,7 +18,10 @@ export class CommentsService {
   /**
    * Ajouter un commentaire à un post
    */
-  async create(userId: string, createCommentDto: CreateCommentDto): Promise<CommentWithUser> {
+  async create(
+    userId: string,
+    createCommentDto: CreateCommentDto,
+  ): Promise<CommentWithUser> {
     // Vérifier que le post existe
     const post = await this.prisma.post.findUnique({
       where: { id: createCommentDto.postId },
@@ -88,7 +95,11 @@ export class CommentsService {
   /**
    * Modifier un commentaire (propriétaire uniquement)
    */
-  async update(id: string, userId: string, updateCommentDto: UpdateCommentDto): Promise<CommentWithUser> {
+  async update(
+    id: string,
+    userId: string,
+    updateCommentDto: UpdateCommentDto,
+  ): Promise<CommentWithUser> {
     const comment = await this.prisma.comment.findUnique({ where: { id } });
 
     if (!comment) {
@@ -96,7 +107,9 @@ export class CommentsService {
     }
 
     if (comment.userId !== userId) {
-      throw new ForbiddenException('Vous ne pouvez modifier que vos propres commentaires');
+      throw new ForbiddenException(
+        'Vous ne pouvez modifier que vos propres commentaires',
+      );
     }
 
     return this.prisma.comment.update({
@@ -119,7 +132,9 @@ export class CommentsService {
     }
 
     if (comment.userId !== userId) {
-      throw new ForbiddenException('Vous ne pouvez supprimer que vos propres commentaires');
+      throw new ForbiddenException(
+        'Vous ne pouvez supprimer que vos propres commentaires',
+      );
     }
 
     await this.prisma.comment.delete({ where: { id } });

@@ -29,11 +29,13 @@ async function testChurn() {
     console.log(`  Total users analyzed: ${report.totalUsers}`);
     console.log(`  At-risk users: ${report.atRiskCount}`);
     console.log(`  Critical users: ${report.criticalCount}`);
-    
+
     if (report.predictions.length > 0) {
       console.log('\n  Top 5 Predictions:');
       report.predictions.slice(0, 5).forEach((pred, i) => {
-        console.log(`    ${i + 1}. User ${pred.id}: ${(pred.churnProbability * 100).toFixed(2)}% churn risk (${pred.riskLevel})`);
+        console.log(
+          `    ${i + 1}. User ${pred.id}: ${(pred.churnProbability * 100).toFixed(2)}% churn risk (${pred.riskLevel})`,
+        );
       });
     }
   } catch (error) {
@@ -48,9 +50,15 @@ async function testChurn() {
     console.log(`✓ Found ${atRiskUsers.length} at-risk users:`);
     atRiskUsers.forEach((user, i) => {
       console.log(`  ${i + 1}. ${user.email}`);
-      console.log(`     Risk: ${user.churnRiskLevel.toUpperCase()} (${(user.churnRiskScore * 100).toFixed(2)}%)`);
-      console.log(`     Interactions: ${user.interactionCount}, Sessions: ${user.sessionCount}`);
-      console.log(`     Last seen: ${user.lastActivity ? Math.floor((Date.now() - user.lastActivity.getTime()) / (1000 * 60 * 60 * 24)) + ' days ago' : 'Never'}`);
+      console.log(
+        `     Risk: ${user.churnRiskLevel.toUpperCase()} (${(user.churnRiskScore * 100).toFixed(2)}%)`,
+      );
+      console.log(
+        `     Interactions: ${user.interactionCount}, Sessions: ${user.sessionCount}`,
+      );
+      console.log(
+        `     Last seen: ${user.lastActivity ? Math.floor((Date.now() - user.lastActivity.getTime()) / (1000 * 60 * 60 * 24)) + ' days ago' : 'Never'}`,
+      );
     });
   } catch (error) {
     console.error('✗ Error:', error.message);
@@ -65,7 +73,9 @@ async function testChurn() {
       const prediction = await churnService.predictSingleUser('user-active');
       if (prediction) {
         console.log(`✓ Prediction for ${prediction.email}:`);
-        console.log(`  Risk probability: ${(prediction.churnProbability * 100).toFixed(2)}%`);
+        console.log(
+          `  Risk probability: ${(prediction.churnProbability * 100).toFixed(2)}%`,
+        );
         console.log(`  Risk level: ${prediction.riskLevel.toUpperCase()}`);
         console.log(`  Is churned: ${prediction.isChurned}`);
       } else {

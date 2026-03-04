@@ -7,15 +7,23 @@ import {
   Param,
   Query,
   Req,
+  UseGuards,
   HttpCode,
   HttpStatus,
 } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiParam, ApiQuery } from '@nestjs/swagger';
+import {
+  ApiTags,
+  ApiOperation,
+  ApiResponse,
+  ApiBearerAuth,
+  ApiParam,
+  ApiQuery,
+} from '@nestjs/swagger';
 import { ChatService } from './chat.service';
 import { SendMessageDto } from './dto';
-
-// TODO: Ajouter le guard d'authentification
-// import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { KeycloakAuthGuard } from '../auth/guards/keycloak-auth.guard';
+import { RolesGuard } from '../auth/guards/roles.guard';
+import { Roles } from '../auth/decorators/roles.decorator';
 
 @ApiTags('Chat')
 @Controller('chat')
@@ -24,7 +32,11 @@ export class ChatController {
 
   @Post('message')
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'Envoyer un message', description: 'Envoie un message au chatbot IA skincare et reçoit une réponse' })
+  @ApiOperation({
+    summary: 'Envoyer un message',
+    description:
+      'Envoie un message au chatbot IA skincare et reçoit une réponse',
+  })
   @ApiResponse({ status: 200, description: 'Réponse du chatbot' })
   @ApiResponse({ status: 400, description: 'Message invalide' })
   // @UseGuards(JwtAuthGuard)
@@ -34,9 +46,22 @@ export class ChatController {
   }
 
   @Get('history')
-  @ApiOperation({ summary: 'Historique des chats', description: 'Récupère l\'historique des conversations' })
-  @ApiQuery({ name: 'limit', required: false, type: 'number', description: 'Nombre max de résultats' })
-  @ApiQuery({ name: 'offset', required: false, type: 'number', description: 'Offset pour pagination' })
+  @ApiOperation({
+    summary: 'Historique des chats',
+    description: "Récupère l'historique des conversations",
+  })
+  @ApiQuery({
+    name: 'limit',
+    required: false,
+    type: 'number',
+    description: 'Nombre max de résultats',
+  })
+  @ApiQuery({
+    name: 'offset',
+    required: false,
+    type: 'number',
+    description: 'Offset pour pagination',
+  })
   @ApiResponse({ status: 200, description: 'Liste des conversations' })
   // @UseGuards(JwtAuthGuard)
   async getMyChats(
@@ -90,8 +115,8 @@ export class ChatController {
    * [ADMIN] Statistiques des chats
    */
   @Get('admin/statistics')
-  // @UseGuards(JwtAuthGuard, RolesGuard)
-  // @Roles('admin')
+  @UseGuards(KeycloakAuthGuard, RolesGuard)
+  @Roles('admin')
   async getStatistics() {
     return this.chatService.getStatistics();
   }

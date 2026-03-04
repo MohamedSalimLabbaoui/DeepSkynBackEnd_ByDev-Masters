@@ -11,9 +11,21 @@ import {
   HttpCode,
   HttpStatus,
 } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiParam, ApiQuery } from '@nestjs/swagger';
+import {
+  ApiTags,
+  ApiOperation,
+  ApiResponse,
+  ApiBearerAuth,
+  ApiParam,
+  ApiQuery,
+} from '@nestjs/swagger';
 import { RoutineService, RoutineStep } from './routine.service';
-import { CreateRoutineDto, UpdateRoutineDto, GenerateRoutineDto, RoutineType } from './dto';
+import {
+  CreateRoutineDto,
+  UpdateRoutineDto,
+  GenerateRoutineDto,
+  RoutineType,
+} from './dto';
 import { KeycloakAuthGuard } from '../auth/guards/keycloak-auth.guard';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { Routine } from '@prisma/client';
@@ -26,7 +38,10 @@ export class RoutineController {
   constructor(private readonly routineService: RoutineService) {}
 
   @Post()
-  @ApiOperation({ summary: 'Créer une routine manuelle', description: 'Crée une nouvelle routine de soins personnalisée' })
+  @ApiOperation({
+    summary: 'Créer une routine manuelle',
+    description: 'Crée une nouvelle routine de soins personnalisée',
+  })
   @ApiResponse({ status: 201, description: 'Routine créée avec succès' })
   @ApiResponse({ status: 400, description: 'Données invalides' })
   async create(
@@ -37,7 +52,10 @@ export class RoutineController {
   }
 
   @Post('generate')
-  @ApiOperation({ summary: 'Générer routine avec IA', description: 'Génère une routine personnalisée avec l\'IA Gemini' })
+  @ApiOperation({
+    summary: 'Générer routine avec IA',
+    description: "Génère une routine personnalisée avec l'IA Gemini",
+  })
   @ApiResponse({ status: 201, description: 'Routine générée avec succès' })
   @ApiResponse({ status: 400, description: 'Paramètres invalides' })
   async generateWithAI(
@@ -48,7 +66,10 @@ export class RoutineController {
   }
 
   @Get()
-  @ApiOperation({ summary: 'Mes routines', description: 'Récupère toutes les routines de l\'utilisateur' })
+  @ApiOperation({
+    summary: 'Mes routines',
+    description: "Récupère toutes les routines de l'utilisateur",
+  })
   @ApiQuery({ name: 'type', enum: ['AM', 'PM', 'weekly'], required: false })
   @ApiQuery({ name: 'isActive', type: 'boolean', required: false })
   @ApiQuery({ name: 'isAIGenerated', type: 'boolean', required: false })
@@ -62,19 +83,26 @@ export class RoutineController {
     return this.routineService.findAllByUser(userId, {
       type,
       isActive: isActive !== undefined ? isActive === 'true' : undefined,
-      isAIGenerated: isAIGenerated !== undefined ? isAIGenerated === 'true' : undefined,
+      isAIGenerated:
+        isAIGenerated !== undefined ? isAIGenerated === 'true' : undefined,
     });
   }
 
   @Get('statistics')
-  @ApiOperation({ summary: 'Statistiques routines', description: 'Récupère les statistiques des routines' })
+  @ApiOperation({
+    summary: 'Statistiques routines',
+    description: 'Récupère les statistiques des routines',
+  })
   @ApiResponse({ status: 200, description: 'Statistiques retournées' })
   async getStatistics(@CurrentUser('sub') userId: string) {
     return this.routineService.getStatistics(userId);
   }
 
   @Get('active/:type')
-  @ApiOperation({ summary: 'Routines actives par type', description: 'Récupère les routines actives d\'un type spécifique' })
+  @ApiOperation({
+    summary: 'Routines actives par type',
+    description: "Récupère les routines actives d'un type spécifique",
+  })
   @ApiParam({ name: 'type', enum: ['AM', 'PM', 'weekly'] })
   @ApiResponse({ status: 200, description: 'Routines actives retournées' })
   async getActiveByType(
@@ -88,7 +116,10 @@ export class RoutineController {
   }
 
   @Get(':id')
-  @ApiOperation({ summary: 'Détail routine', description: 'Récupère une routine spécifique' })
+  @ApiOperation({
+    summary: 'Détail routine',
+    description: 'Récupère une routine spécifique',
+  })
   @ApiParam({ name: 'id', description: 'ID de la routine' })
   @ApiResponse({ status: 200, description: 'Routine trouvée' })
   @ApiResponse({ status: 404, description: 'Routine non trouvée' })

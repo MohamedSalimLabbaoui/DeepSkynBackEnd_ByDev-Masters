@@ -2,6 +2,7 @@ import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { PassportStrategy } from '@nestjs/passport';
 import { Strategy, ExtractJwt } from 'passport-jwt';
 import { ConfigService } from '@nestjs/config';
+import { PrismaService } from '../../prisma/prisma.service';
 import axios from 'axios';
 
 @Injectable()
@@ -9,7 +10,10 @@ export class KeycloakStrategy extends PassportStrategy(Strategy, 'keycloak') {
   private readonly keycloakUrl: string;
   private readonly realm: string;
 
-  constructor(private readonly configService: ConfigService) {
+  constructor(
+    private readonly configService: ConfigService,
+    private readonly prisma: PrismaService,
+  ) {
     const keycloakUrl = configService.get<string>('keycloak.auth-server-url');
     const realm = configService.get<string>('keycloak.realm');
 
@@ -36,20 +40,35 @@ export class KeycloakStrategy extends PassportStrategy(Strategy, 'keycloak') {
    */
   private async getPublicKey(): Promise<string> {
     try {
+      // First try JWKS endpoint
       const certsUrl = `${this.keycloakUrl}/realms/${this.realm}/protocol/openid-connect/certs`;
       const response = await axios.get(certsUrl);
-      
-      // Find the RSA key used for signing
-      const key = response.data.keys.find(
-        (k: any) => k.use === 'sig' && k.kty === 'RSA',
-      );
 
-      if (!key) {
-        throw new Error('No signing key found');
+      // Find the RSA key used for signing (prefer 'sig', fallback to any RSA key)
+      const key =
+        response.data.keys.find(
+          (k: any) => k.use === 'sig' && k.kty === 'RSA',
+        ) ||
+        response.data.keys.find((k: any) => k.kty === 'RSA');
+
+      if (key) {
+        return this.jwkToPem(key);
+      }
+    } catch {
+      // Fall through to realm public key
+    }
+
+    try {
+      // Fallback: use the realm's public key directly
+      const realmUrl = `${this.keycloakUrl}/realms/${this.realm}`;
+      const realmResponse = await axios.get(realmUrl);
+      const publicKey = realmResponse.data.public_key;
+
+      if (publicKey) {
+        return `-----BEGIN PUBLIC KEY-----\n${publicKey}\n-----END PUBLIC KEY-----`;
       }
 
-      // Convert JWK to PEM format
-      return this.jwkToPem(key);
+      throw new Error('No public key found');
     } catch (error) {
       throw new UnauthorizedException('Failed to get public key from Keycloak');
     }
@@ -60,7 +79,7 @@ export class KeycloakStrategy extends PassportStrategy(Strategy, 'keycloak') {
    */
   private jwkToPem(jwk: any): string {
     const { n, e } = jwk;
-    
+
     // Base64url decode
     const modulus = Buffer.from(n, 'base64url');
     const exponent = Buffer.from(e, 'base64url');
@@ -85,17 +104,25 @@ export class KeycloakStrategy extends PassportStrategy(Strategy, 'keycloak') {
       return Buffer.concat([header, data]);
     };
 
-    const rsaPublicKey = sequence([
-      integer(modulus),
-      integer(exponent),
-    ]);
+    const rsaPublicKey = sequence([integer(modulus), integer(exponent)]);
 
     // Wrap in SEQUENCE with algorithm identifier
     const algorithmIdentifier = Buffer.from([
-      0x30, 0x0d, // SEQUENCE
-      0x06, 0x09, // OBJECT IDENTIFIER
-      0x2a, 0x86, 0x48, 0x86, 0xf7, 0x0d, 0x01, 0x01, 0x01, // rsaEncryption
-      0x05, 0x00, // NULL
+      0x30,
+      0x0d, // SEQUENCE
+      0x06,
+      0x09, // OBJECT IDENTIFIER
+      0x2a,
+      0x86,
+      0x48,
+      0x86,
+      0xf7,
+      0x0d,
+      0x01,
+      0x01,
+      0x01, // rsaEncryption
+      0x05,
+      0x00, // NULL
     ]);
 
     const bitString = Buffer.concat([
@@ -103,10 +130,7 @@ export class KeycloakStrategy extends PassportStrategy(Strategy, 'keycloak') {
       rsaPublicKey,
     ]);
 
-    const publicKeyInfo = sequence([
-      algorithmIdentifier,
-      bitString,
-    ]);
+    const publicKeyInfo = sequence([algorithmIdentifier, bitString]);
 
     // Convert to PEM
     const base64 = publicKeyInfo.toString('base64');
@@ -138,10 +162,26 @@ export class KeycloakStrategy extends PassportStrategy(Strategy, 'keycloak') {
       throw new UnauthorizedException('Invalid token payload');
     }
 
+    // Attempt to find user in Prisma
+    let user = await this.prisma.user.findUnique({
+      where: { id: payload.sub },
+    });
+
+    if (!user && payload.email) {
+      user = await this.prisma.user.findUnique({
+        where: { email: payload.email },
+      });
+    }
+
+    // Return an object that matches what KeycloakStrategy.validate returns
+    // We map the Prisma ID to 'sub' and 'userId' to maintain backward compatibility
     return {
-      userId: payload.sub,
-      email: payload.email,
-      name: payload.name,
+      ...(user || {}),
+      userId: user?.id || payload.sub,
+      sub: user?.id || payload.sub,
+      keycloakSub: payload.sub,
+      email: user?.email || payload.email,
+      name: user?.name || payload.name,
       preferredUsername: payload.preferred_username,
       givenName: payload.given_name,
       familyName: payload.family_name,

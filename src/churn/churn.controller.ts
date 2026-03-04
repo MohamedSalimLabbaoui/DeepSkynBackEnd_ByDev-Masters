@@ -42,8 +42,9 @@ export class ChurnController {
   @Post('analyze')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
-    summary: 'Lancer l\'analyse de churn',
-    description: 'Analyse tous les utilisateurs actifs et met à jour les scores de risque (admin uniquement)',
+    summary: "Lancer l'analyse de churn",
+    description:
+      'Analyse tous les utilisateurs actifs et met à jour les scores de risque (admin uniquement)',
   })
   @ApiResponse({ status: 200, description: 'Analyse terminée' })
   async analyzeAll() {
@@ -59,9 +60,15 @@ export class ChurnController {
   @Get('at-risk')
   @ApiOperation({
     summary: 'Utilisateurs à risque',
-    description: 'Liste des utilisateurs avec un risque de churn élevé ou critique',
+    description:
+      'Liste des utilisateurs avec un risque de churn élevé ou critique',
   })
-  @ApiQuery({ name: 'limit', required: false, type: Number, description: 'Nombre max de résultats (défaut: 20)' })
+  @ApiQuery({
+    name: 'limit',
+    required: false,
+    type: Number,
+    description: 'Nombre max de résultats (défaut: 20)',
+  })
   @ApiResponse({ status: 200, description: 'Liste des utilisateurs à risque' })
   async getAtRiskUsers(@Query('limit') limit?: string) {
     const numLimit = limit ? parseInt(limit, 10) : 20;
@@ -70,10 +77,10 @@ export class ChurnController {
 
   @Get('user/:userId')
   @ApiOperation({
-    summary: 'Risque de churn d\'un utilisateur',
+    summary: "Risque de churn d'un utilisateur",
     description: 'Analyse le risque de churn pour un utilisateur spécifique',
   })
-  @ApiParam({ name: 'userId', description: 'ID de l\'utilisateur' })
+  @ApiParam({ name: 'userId', description: "ID de l'utilisateur" })
   @ApiResponse({ status: 200, description: 'Prédiction retournée' })
   @ApiResponse({ status: 404, description: 'Utilisateur non trouvé' })
   async predictUser(@Param('userId') userId: string) {
@@ -88,9 +95,10 @@ export class ChurnController {
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
     summary: 'Envoyer les emails de re-engagement',
-    description: 'Envoie manuellement les emails de re-engagement aux utilisateurs à risque (admin uniquement)',
+    description:
+      'Envoie manuellement les emails de re-engagement aux utilisateurs à risque (admin uniquement)',
   })
-  @ApiResponse({ status: 200, description: 'Résultat de l\'envoi' })
+  @ApiResponse({ status: 200, description: "Résultat de l'envoi" })
   async sendEmails() {
     const result = await this.churnService.sendReEngagementEmails();
     return {

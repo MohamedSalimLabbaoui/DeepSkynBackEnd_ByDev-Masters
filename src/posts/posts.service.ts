@@ -1,4 +1,8 @@
-import { Injectable, NotFoundException, ForbiddenException } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  ForbiddenException,
+} from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreatePostDto, UpdatePostDto } from './dto';
 import { Post } from '@prisma/client';
@@ -130,7 +134,11 @@ export class PostsService {
   /**
    * Mettre à jour un post (seulement par le propriétaire)
    */
-  async update(id: string, userId: string, updatePostDto: UpdatePostDto): Promise<Post> {
+  async update(
+    id: string,
+    userId: string,
+    updatePostDto: UpdatePostDto,
+  ): Promise<Post> {
     const post = await this.prisma.post.findUnique({ where: { id } });
 
     if (!post) {
@@ -138,7 +146,9 @@ export class PostsService {
     }
 
     if (post.userId !== userId) {
-      throw new ForbiddenException('Vous ne pouvez modifier que vos propres posts');
+      throw new ForbiddenException(
+        'Vous ne pouvez modifier que vos propres posts',
+      );
     }
 
     return this.prisma.post.update({
@@ -161,9 +171,88 @@ export class PostsService {
     }
 
     if (post.userId !== userId) {
-      throw new ForbiddenException('Vous ne pouvez supprimer que vos propres posts');
+      throw new ForbiddenException(
+        'Vous ne pouvez supprimer que vos propres posts',
+      );
     }
 
     return this.prisma.post.delete({ where: { id } });
+  }
+
+  async findAllForAdmin(
+    page: number = 1,
+    limit: number = 20,
+    options?: { reported?: boolean; userId?: string },
+  ) {
+    const skip = (page - 1) * limit;
+    const where: any = {
+      ...(options?.userId ? { userId: options.userId } : {}),
+      ...(options?.reported ? { message: { startsWith: '[FLAGGED]' } } : {}),
+    };
+
+    const [posts, total] = await Promise.all([
+      this.prisma.post.findMany({
+        where,
+        orderBy: { createdAt: 'desc' },
+        skip,
+        take: limit,
+        include: {
+          user: { select: { id: true, name: true, email: true, avatar: true } },
+          _count: { select: { likes: true, comments: true } },
+        },
+      }),
+      this.prisma.post.count({ where }),
+    ]);
+
+    const mapped = posts.map((post) => ({
+      ...post,
+      isFlagged: post.message.startsWith('[FLAGGED]'),
+      reportsCount: post.message.startsWith('[FLAGGED]') ? 1 : 0,
+    }));
+
+    return { posts: mapped, total, page, limit };
+  }
+
+  async moderatePost(
+    id: string,
+    payload: { flagged: boolean; remove?: boolean; reason?: string },
+  ) {
+    const post = await this.prisma.post.findUnique({ where: { id } });
+    if (!post) {
+      throw new NotFoundException(`Post ${id} non trouvé`);
+    }
+
+    if (payload.remove) {
+      await this.prisma.post.delete({ where: { id } });
+      return { removed: true, id };
+    }
+
+    const flaggedPrefix = '[FLAGGED]';
+    const alreadyFlagged = post.message.startsWith(flaggedPrefix);
+    let nextMessage = post.message;
+
+    if (payload.flagged && !alreadyFlagged) {
+      nextMessage = `${flaggedPrefix} ${post.message}`;
+    }
+
+    if (!payload.flagged && alreadyFlagged) {
+      nextMessage = post.message.replace(/^\[FLAGGED\]\s*/, '');
+    }
+
+    const updated = await this.prisma.post.update({
+      where: { id },
+      data: { message: nextMessage },
+      include: {
+        user: { select: { id: true, name: true, avatar: true } },
+        _count: { select: { likes: true, comments: true } },
+      },
+    });
+
+    return {
+      ...updated,
+      isFlagged: payload.flagged,
+      reportsCount: payload.flagged ? 1 : 0,
+      moderationReason: payload.reason || null,
+    };
   }
 }

@@ -1,9 +1,15 @@
-import { IsString, IsNotEmpty, MinLength, IsOptional, Length } from 'class-validator';
+import {
+  IsString,
+  IsNotEmpty,
+  MinLength,
+  IsOptional,
+  Length,
+} from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 export class Login2faDto {
   @ApiProperty({
-    description: 'Nom d\'utilisateur Keycloak',
+    description: "Nom d'utilisateur Keycloak",
     example: 'john.doe',
   })
   @IsString()
@@ -28,4 +34,11 @@ export class Login2faDto {
   @IsString()
   @Length(6, 6, { message: 'Le code 2FA doit contenir exactement 6 chiffres' })
   twoFactorCode?: string;
+
+  @ApiPropertyOptional({
+    description: 'Token de vérification reCAPTCHA',
+  })
+  @IsOptional()
+  @IsString()
+  captchaToken?: string;
 }

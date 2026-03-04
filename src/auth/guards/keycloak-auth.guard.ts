@@ -7,7 +7,7 @@ import { AuthGuard } from '@nestjs/passport';
 import { Observable } from 'rxjs';
 
 @Injectable()
-export class KeycloakAuthGuard extends AuthGuard('keycloak') {
+export class KeycloakAuthGuard extends AuthGuard(['keycloak', 'social-jwt']) {
   canActivate(
     context: ExecutionContext,
   ): boolean | Promise<boolean> | Observable<boolean> {

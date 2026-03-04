@@ -31,7 +31,7 @@ export class BroadcastNotificationDto {
   type?: 'info' | 'success' | 'warning' | 'error';
 
   @ApiPropertyOptional({
-    description: 'URL d\'action optionnelle',
+    description: "URL d'action optionnelle",
     example: '/status',
   })
   @IsOptional()

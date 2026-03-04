@@ -19,14 +19,14 @@ export enum RoutineType {
 
 export class RoutineStepDto {
   @ApiProperty({
-    description: 'Ordre de l\'étape dans la routine',
+    description: "Ordre de l'étape dans la routine",
     example: 1,
   })
   @IsNumber()
   order: number;
 
   @ApiProperty({
-    description: 'Nom de l\'étape',
+    description: "Nom de l'étape",
     example: 'Nettoyage',
   })
   @IsString()
@@ -50,7 +50,7 @@ export class RoutineStepDto {
   productBrand?: string;
 
   @ApiPropertyOptional({
-    description: 'URL de l\'image du produit',
+    description: "URL de l'image du produit",
     example: 'https://example.com/product.jpg',
   })
   @IsString()
@@ -58,7 +58,7 @@ export class RoutineStepDto {
   productImage?: string;
 
   @ApiPropertyOptional({
-    description: 'Description de l\'étape',
+    description: "Description de l'étape",
     example: 'Appliquer sur peau humide et masser doucement',
   })
   @IsString()
@@ -66,7 +66,7 @@ export class RoutineStepDto {
   description?: string;
 
   @ApiPropertyOptional({
-    description: 'Durée de l\'étape en secondes',
+    description: "Durée de l'étape en secondes",
     example: 60,
   })
   @IsNumber()
@@ -76,7 +76,15 @@ export class RoutineStepDto {
   @ApiPropertyOptional({
     description: 'Catégorie du produit',
     example: 'cleanser',
-    enum: ['cleanser', 'toner', 'serum', 'moisturizer', 'sunscreen', 'treatment', 'mask'],
+    enum: [
+      'cleanser',
+      'toner',
+      'serum',
+      'moisturizer',
+      'sunscreen',
+      'treatment',
+      'mask',
+    ],
   })
   @IsString()
   @IsOptional()

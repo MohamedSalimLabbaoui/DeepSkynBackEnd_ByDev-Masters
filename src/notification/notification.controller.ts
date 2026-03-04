@@ -15,8 +15,18 @@ import {
   DefaultValuePipe,
   ParseBoolPipe,
 } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiParam, ApiQuery } from '@nestjs/swagger';
-import { NotificationService, NotificationWithCount } from './notification.service';
+import {
+  ApiTags,
+  ApiOperation,
+  ApiResponse,
+  ApiBearerAuth,
+  ApiParam,
+  ApiQuery,
+} from '@nestjs/swagger';
+import {
+  NotificationService,
+  NotificationWithCount,
+} from './notification.service';
 import { CreateNotificationDto } from './dto/create-notification.dto';
 import { UpdateNotificationDto } from './dto/update-notification.dto';
 import { BroadcastNotificationDto } from './dto/broadcast-notification.dto';
@@ -36,18 +46,27 @@ export class NotificationController {
   @Post()
   @UseGuards(RolesGuard)
   @Roles('admin')
-  @ApiOperation({ summary: 'Créer une notification', description: 'Créer une notification pour un utilisateur (Admin only)' })
+  @ApiOperation({
+    summary: 'Créer une notification',
+    description: 'Créer une notification pour un utilisateur (Admin only)',
+  })
   @ApiResponse({ status: 201, description: 'Notification créée' })
   @ApiResponse({ status: 401, description: 'Non authentifié' })
   @ApiResponse({ status: 403, description: 'Accès refusé' })
-  async create(@Body() createNotificationDto: CreateNotificationDto): Promise<Notification> {
+  async create(
+    @Body() createNotificationDto: CreateNotificationDto,
+  ): Promise<Notification> {
     return this.notificationService.create(createNotificationDto);
   }
 
   @Post('broadcast')
   @UseGuards(RolesGuard)
   @Roles('admin')
-  @ApiOperation({ summary: 'Broadcast notification', description: 'Envoyer une notification à tous les utilisateurs (Admin only)' })
+  @ApiOperation({
+    summary: 'Broadcast notification',
+    description:
+      'Envoyer une notification à tous les utilisateurs (Admin only)',
+  })
   @ApiResponse({ status: 201, description: 'Notifications envoyées' })
   @ApiResponse({ status: 403, description: 'Accès refusé' })
   async broadcast(
@@ -69,9 +88,15 @@ export class NotificationController {
     @CurrentUser('userId') userId: string,
     @Query('page', new DefaultValuePipe(1), ParseIntPipe) page: number,
     @Query('limit', new DefaultValuePipe(20), ParseIntPipe) limit: number,
-    @Query('unreadOnly', new DefaultValuePipe(false), ParseBoolPipe) unreadOnly: boolean,
+    @Query('unreadOnly', new DefaultValuePipe(false), ParseBoolPipe)
+    unreadOnly: boolean,
   ): Promise<NotificationWithCount> {
-    return this.notificationService.findAllByUser(userId, page, limit, unreadOnly);
+    return this.notificationService.findAllByUser(
+      userId,
+      page,
+      limit,
+      unreadOnly,
+    );
   }
 
   /**

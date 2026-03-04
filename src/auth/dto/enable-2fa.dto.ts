@@ -3,7 +3,7 @@ import { ApiProperty } from '@nestjs/swagger';
 
 export class Enable2faDto {
   @ApiProperty({
-    description: 'Code TOTP à 6 chiffres pour confirmer l\'activation du 2FA',
+    description: "Code TOTP à 6 chiffres pour confirmer l'activation du 2FA",
     example: '123456',
   })
   @IsString()

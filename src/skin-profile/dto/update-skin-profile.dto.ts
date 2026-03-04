@@ -19,7 +19,8 @@ export class UpdateSkinProfileDto {
   @IsOptional()
   @IsString()
   @IsIn(['dry', 'oily', 'combination', 'normal', 'sensitive'], {
-    message: 'Skin type must be one of: dry, oily, combination, normal, sensitive',
+    message:
+      'Skin type must be one of: dry, oily, combination, normal, sensitive',
   })
   skinType?: string;
 

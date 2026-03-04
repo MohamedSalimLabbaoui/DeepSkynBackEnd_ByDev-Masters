@@ -16,9 +16,11 @@ import { CommentsModule } from './comments/comments.module';
 import { MailModule } from './mail/mail.module';
 import { ChurnModule } from './churn/churn.module';
 import { CrawlingModule } from './crawling/crawling.module';
+import { UsersModule } from './users/users.module';
 
 @Module({
   imports: [
+    UsersModule,
     ConfigModule.forRoot({
       isGlobal: true,
       envFilePath: '.env',
@@ -43,4 +45,4 @@ import { CrawlingModule } from './crawling/crawling.module';
   controllers: [],
   providers: [],
 })
-export class AppModule {}
+export class AppModule { }

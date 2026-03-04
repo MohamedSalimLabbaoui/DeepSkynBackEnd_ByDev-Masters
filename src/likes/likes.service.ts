@@ -1,4 +1,8 @@
-import { Injectable, NotFoundException, ConflictException } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  ConflictException,
+} from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { Like } from '@prisma/client';
 
@@ -53,7 +57,10 @@ export class LikesService {
   /**
    * Toggle like/unlike un post
    */
-  async toggle(userId: string, postId: string): Promise<{ liked: boolean; likesCount: number }> {
+  async toggle(
+    userId: string,
+    postId: string,
+  ): Promise<{ liked: boolean; likesCount: number }> {
     const post = await this.prisma.post.findUnique({ where: { id: postId } });
     if (!post) {
       throw new NotFoundException(`Post ${postId} non trouvé`);

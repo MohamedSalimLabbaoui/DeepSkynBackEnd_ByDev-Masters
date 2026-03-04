@@ -5,10 +5,7 @@ import { ChurnController } from './churn.controller';
 import { PrismaModule } from '../prisma/prisma.module';
 
 @Module({
-  imports: [
-    ScheduleModule.forRoot(),
-    PrismaModule,
-  ],
+  imports: [ScheduleModule.forRoot(), PrismaModule],
   controllers: [ChurnController],
   providers: [ChurnService],
   exports: [ChurnService],

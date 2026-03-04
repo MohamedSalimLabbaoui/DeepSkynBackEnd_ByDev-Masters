@@ -7,10 +7,17 @@ import {
   Query,
   UseGuards,
   Req,
+  Param,
   HttpCode,
   HttpStatus,
 } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
+import {
+  ApiTags,
+  ApiOperation,
+  ApiResponse,
+  ApiBearerAuth,
+  ApiQuery,
+} from '@nestjs/swagger';
 import { SubscriptionService } from './subscription.service';
 import {
   CreateSubscriptionDto,
@@ -19,11 +26,9 @@ import {
   SubscriptionPlan,
   SubscriptionStatus,
 } from './dto';
-
-// TODO: Ajouter le guard d'authentification quand prêt
-// import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
-// import { RolesGuard } from '../auth/guards/roles.guard';
-// import { Roles } from '../auth/decorators/roles.decorator';
+import { KeycloakAuthGuard } from '../auth/guards/keycloak-auth.guard';
+import { RolesGuard } from '../auth/guards/roles.guard';
+import { Roles } from '../auth/decorators/roles.decorator';
 
 @ApiTags('Subscriptions')
 @Controller('subscriptions')
@@ -31,8 +36,11 @@ export class SubscriptionController {
   constructor(private readonly subscriptionService: SubscriptionService) {}
 
   @Get('me')
-  @ApiOperation({ summary: 'Mon abonnement', description: 'Récupère les détails de l\'abonnement actuel' })
-  @ApiResponse({ status: 200, description: 'Détails de l\'abonnement' })
+  @ApiOperation({
+    summary: 'Mon abonnement',
+    description: "Récupère les détails de l'abonnement actuel",
+  })
+  @ApiResponse({ status: 200, description: "Détails de l'abonnement" })
   @ApiResponse({ status: 404, description: 'Aucun abonnement trouvé' })
   // @UseGuards(JwtAuthGuard)
   async getMySubscription(@Req() req: any) {
@@ -42,7 +50,10 @@ export class SubscriptionController {
   }
 
   @Get('me/premium')
-  @ApiOperation({ summary: 'Vérifier premium', description: 'Vérifie si l\'utilisateur a un abonnement premium actif' })
+  @ApiOperation({
+    summary: 'Vérifier premium',
+    description: "Vérifie si l'utilisateur a un abonnement premium actif",
+  })
   @ApiResponse({ status: 200, description: 'Statut premium retourné' })
   // @UseGuards(JwtAuthGuard)
   async checkPremium(@Req() req: any) {
@@ -122,8 +133,8 @@ export class SubscriptionController {
    * [ADMIN] Obtenir les statistiques des abonnements
    */
   @Get('admin/statistics')
-  // @UseGuards(JwtAuthGuard, RolesGuard)
-  // @Roles('admin')
+  @UseGuards(KeycloakAuthGuard, RolesGuard)
+  @Roles('admin')
   async getStatistics() {
     return this.subscriptionService.getStatistics();
   }
@@ -132,8 +143,8 @@ export class SubscriptionController {
    * [ADMIN] Liste tous les abonnements
    */
   @Get('admin/all')
-  // @UseGuards(JwtAuthGuard, RolesGuard)
-  // @Roles('admin')
+  @UseGuards(KeycloakAuthGuard, RolesGuard)
+  @Roles('admin')
   async getAllSubscriptions(
     @Query('plan') plan?: SubscriptionPlan,
     @Query('status') status?: SubscriptionStatus,
@@ -153,8 +164,8 @@ export class SubscriptionController {
    */
   @Post('admin/check-expired')
   @HttpCode(HttpStatus.OK)
-  // @UseGuards(JwtAuthGuard, RolesGuard)
-  // @Roles('admin')
+  @UseGuards(KeycloakAuthGuard, RolesGuard)
+  @Roles('admin')
   async checkExpired() {
     const count = await this.subscriptionService.checkAndExpireSubscriptions();
     return { expiredCount: count };
@@ -164,10 +175,10 @@ export class SubscriptionController {
    * [ADMIN] Créer un abonnement pour un utilisateur
    */
   @Post('admin/create/:userId')
-  // @UseGuards(JwtAuthGuard, RolesGuard)
-  // @Roles('admin')
+  @UseGuards(KeycloakAuthGuard, RolesGuard)
+  @Roles('admin')
   async createForUser(
-    @Query('userId') userId: string,
+    @Param('userId') userId: string,
     @Body() createDto: CreateSubscriptionDto,
   ) {
     return this.subscriptionService.create(userId, createDto);

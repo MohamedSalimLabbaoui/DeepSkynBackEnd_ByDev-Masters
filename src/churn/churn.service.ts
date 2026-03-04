@@ -1,8 +1,4 @@
-import {
-  Injectable,
-  Logger,
-  OnModuleInit,
-} from '@nestjs/common';
+import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { PrismaService } from '../prisma/prisma.service';
 import { MailService } from '../mail/mail.service';
@@ -71,7 +67,7 @@ export class ChurnService implements OnModuleInit {
     } else {
       this.logger.warn(
         'ML churn model not found. Using fallback rule-based prediction. ' +
-        'Run "python ml/train_model.py" to train the model.',
+          'Run "python ml/train_model.py" to train the model.',
       );
     }
   }
@@ -87,7 +83,7 @@ export class ChurnService implements OnModuleInit {
       const report = await this.analyzeAllUsers();
       this.logger.log(
         `Churn analysis complete: ${report.totalUsers} users analyzed, ` +
-        `${report.atRiskCount} at risk, ${report.criticalCount} critical`,
+          `${report.atRiskCount} at risk, ${report.criticalCount} critical`,
       );
 
       // Send re-engagement emails to at-risk users
@@ -115,7 +111,12 @@ export class ChurnService implements OnModuleInit {
     });
 
     if (users.length === 0) {
-      return { predictions: [], totalUsers: 0, atRiskCount: 0, criticalCount: 0 };
+      return {
+        predictions: [],
+        totalUsers: 0,
+        atRiskCount: 0,
+        criticalCount: 0,
+      };
     }
 
     const now = new Date();
@@ -125,7 +126,10 @@ export class ChurnService implements OnModuleInit {
       name: user.name,
       interactionCount: user.interactionCount,
       daysSinceLastActivity: user.lastActivity
-        ? Math.floor((now.getTime() - user.lastActivity.getTime()) / (1000 * 60 * 60 * 24))
+        ? Math.floor(
+            (now.getTime() - user.lastActivity.getTime()) /
+              (1000 * 60 * 60 * 24),
+          )
         : 999,
       sessionCount: user.sessionCount,
       accountAgeDays: Math.floor(
@@ -227,7 +231,7 @@ export class ChurnService implements OnModuleInit {
       let score = 0;
 
       // Days since last activity (weight: 40%)
-      if (user.daysSinceLastActivity >= 90) score += 0.40;
+      if (user.daysSinceLastActivity >= 90) score += 0.4;
       else if (user.daysSinceLastActivity >= 60) score += 0.32;
       else if (user.daysSinceLastActivity >= 30) score += 0.24;
       else if (user.daysSinceLastActivity >= 14) score += 0.16;
@@ -235,14 +239,14 @@ export class ChurnService implements OnModuleInit {
       else score += 0.02;
 
       // Interaction count (weight: 30%)
-      if (user.interactionCount <= 1) score += 0.30;
+      if (user.interactionCount <= 1) score += 0.3;
       else if (user.interactionCount <= 5) score += 0.22;
       else if (user.interactionCount <= 15) score += 0.15;
       else if (user.interactionCount <= 30) score += 0.08;
       else score += 0.02;
 
       // Session count (weight: 30%)
-      if (user.sessionCount <= 1) score += 0.30;
+      if (user.sessionCount <= 1) score += 0.3;
       else if (user.sessionCount <= 3) score += 0.22;
       else if (user.sessionCount <= 8) score += 0.15;
       else if (user.sessionCount <= 15) score += 0.08;
@@ -296,7 +300,7 @@ export class ChurnService implements OnModuleInit {
     });
 
     let sent = 0;
-    let skipped = 0;
+    const skipped = 0;
     let failed = 0;
 
     for (const user of atRiskUsers) {
@@ -336,22 +340,29 @@ export class ChurnService implements OnModuleInit {
    * Obtenir le rapport de churn pour le dashboard admin
    */
   async getChurnStats() {
-    const [totalUsers, analyzed, lowRisk, mediumRisk, highRisk, criticalRisk, emailsToday] =
-      await Promise.all([
-        this.prisma.user.count({ where: { isActive: true } }),
-        this.prisma.user.count({ where: { lastChurnAnalysis: { not: null } } }),
-        this.prisma.user.count({ where: { churnRiskLevel: 'low' } }),
-        this.prisma.user.count({ where: { churnRiskLevel: 'medium' } }),
-        this.prisma.user.count({ where: { churnRiskLevel: 'high' } }),
-        this.prisma.user.count({ where: { churnRiskLevel: 'critical' } }),
-        this.prisma.user.count({
-          where: {
-            reEngagementSentAt: {
-              gte: new Date(new Date().setHours(0, 0, 0, 0)),
-            },
+    const [
+      totalUsers,
+      analyzed,
+      lowRisk,
+      mediumRisk,
+      highRisk,
+      criticalRisk,
+      emailsToday,
+    ] = await Promise.all([
+      this.prisma.user.count({ where: { isActive: true } }),
+      this.prisma.user.count({ where: { lastChurnAnalysis: { not: null } } }),
+      this.prisma.user.count({ where: { churnRiskLevel: 'low' } }),
+      this.prisma.user.count({ where: { churnRiskLevel: 'medium' } }),
+      this.prisma.user.count({ where: { churnRiskLevel: 'high' } }),
+      this.prisma.user.count({ where: { churnRiskLevel: 'critical' } }),
+      this.prisma.user.count({
+        where: {
+          reEngagementSentAt: {
+            gte: new Date(new Date().setHours(0, 0, 0, 0)),
           },
-        }),
-      ]);
+        },
+      }),
+    ]);
 
     const lastAnalyzed = await this.prisma.user.findFirst({
       where: { lastChurnAnalysis: { not: null } },
@@ -403,7 +414,10 @@ export class ChurnService implements OnModuleInit {
       name: user.name,
       interactionCount: user.interactionCount,
       daysSinceLastActivity: user.lastActivity
-        ? Math.floor((now.getTime() - user.lastActivity.getTime()) / (1000 * 60 * 60 * 24))
+        ? Math.floor(
+            (now.getTime() - user.lastActivity.getTime()) /
+              (1000 * 60 * 60 * 24),
+          )
         : 999,
       sessionCount: user.sessionCount,
       accountAgeDays: Math.floor(

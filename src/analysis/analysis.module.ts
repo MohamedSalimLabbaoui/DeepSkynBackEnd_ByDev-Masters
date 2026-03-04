@@ -10,12 +10,7 @@ import { SkinProfileModule } from '../skin-profile/skin-profile.module';
 import { NotificationModule } from '../notification/notification.module';
 
 @Module({
-  imports: [
-    ConfigModule,
-    PrismaModule,
-    SkinProfileModule,
-    NotificationModule,
-  ],
+  imports: [ConfigModule, PrismaModule, SkinProfileModule, NotificationModule],
   controllers: [AnalysisController, AnalysisTestController],
   providers: [AnalysisService, GeminiService, SupabaseService],
   exports: [AnalysisService, GeminiService, SupabaseService],

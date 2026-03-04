@@ -24,10 +24,12 @@ export class SupabaseService {
 
   constructor(private readonly configService: ConfigService) {
     this.supabaseUrl = this.configService.get<string>('SUPABASE_URL');
-    const supabaseKey = this.configService.get<string>('SUPABASE_SERVICE_KEY') 
-      || this.configService.get<string>('SUPABASE_ANON_KEY');
-    this.bucket = this.configService.get<string>('SUPABASE_BUCKET') || 'skin-images';
-    
+    const supabaseKey =
+      this.configService.get<string>('SUPABASE_SERVICE_KEY') ||
+      this.configService.get<string>('SUPABASE_ANON_KEY');
+    this.bucket =
+      this.configService.get<string>('SUPABASE_BUCKET') || 'skin-images';
+
     // Create Supabase client
     this.supabase = createClient(this.supabaseUrl, supabaseKey, {
       auth: {
@@ -35,8 +37,10 @@ export class SupabaseService {
         autoRefreshToken: false,
       },
     });
-    
-    this.logger.log(`Supabase initialized - URL: ${this.supabaseUrl}, Bucket: ${this.bucket}`);
+
+    this.logger.log(
+      `Supabase initialized - URL: ${this.supabaseUrl}, Bucket: ${this.bucket}`,
+    );
   }
 
   /**
@@ -104,7 +108,9 @@ export class SupabaseService {
       throw new BadRequestException('Maximum 5 images allowed');
     }
 
-    const uploadPromises = files.map((file) => this.uploadImage(file, userId, folder));
+    const uploadPromises = files.map((file) =>
+      this.uploadImage(file, userId, folder),
+    );
     return Promise.all(uploadPromises);
   }
 
@@ -204,7 +210,9 @@ export class SupabaseService {
         .createSignedUrl(path, expiresIn);
 
       if (error) {
-        throw new BadRequestException(`Failed to create signed URL: ${error.message}`);
+        throw new BadRequestException(
+          `Failed to create signed URL: ${error.message}`,
+        );
       }
 
       return data.signedUrl;
@@ -239,9 +247,7 @@ export class SupabaseService {
    * Get public URL for a file
    */
   getPublicUrl(path: string): string {
-    const { data } = this.supabase.storage
-      .from(this.bucket)
-      .getPublicUrl(path);
+    const { data } = this.supabase.storage.from(this.bucket).getPublicUrl(path);
     return data.publicUrl;
   }
 
@@ -258,7 +264,12 @@ export class SupabaseService {
    * Validate file before upload
    */
   private validateFile(file: Express.Multer.File): void {
-    const allowedMimeTypes = ['image/jpeg', 'image/png', 'image/webp', 'image/heic'];
+    const allowedMimeTypes = [
+      'image/jpeg',
+      'image/png',
+      'image/webp',
+      'image/heic',
+    ];
     const maxSize = 10 * 1024 * 1024; // 10MB
 
     if (!allowedMimeTypes.includes(file.mimetype)) {
@@ -278,7 +289,10 @@ export class SupabaseService {
   private getFileExtension(filename: string, mimetype: string): string {
     // Try to get from filename first
     const filenameExt = filename?.split('.').pop()?.toLowerCase();
-    if (filenameExt && ['jpg', 'jpeg', 'png', 'webp', 'heic'].includes(filenameExt)) {
+    if (
+      filenameExt &&
+      ['jpg', 'jpeg', 'png', 'webp', 'heic'].includes(filenameExt)
+    ) {
       return filenameExt === 'jpg' ? 'jpeg' : filenameExt;
     }
 
@@ -299,13 +313,13 @@ export class SupabaseService {
   async checkBucketAccess(): Promise<boolean> {
     try {
       const { data, error } = await this.supabase.storage.listBuckets();
-      
+
       if (error) {
         this.logger.error(`Bucket access check failed: ${error.message}`);
         return false;
       }
 
-      const bucketExists = data?.some(b => b.name === this.bucket);
+      const bucketExists = data?.some((b) => b.name === this.bucket);
       this.logger.log(`Bucket ${this.bucket} exists: ${bucketExists}`);
       return bucketExists;
     } catch (error) {

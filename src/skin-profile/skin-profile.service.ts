@@ -1,4 +1,8 @@
-import { Injectable, NotFoundException, ConflictException } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  ConflictException,
+} from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateSkinProfileDto } from './dto/create-skin-profile.dto';
 import { UpdateSkinProfileDto } from './dto/update-skin-profile.dto';
@@ -17,19 +21,24 @@ export interface SkinProfileStats {
 
 @Injectable()
 export class SkinProfileService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(private readonly prisma: PrismaService) { }
 
   /**
    * Create a new skin profile for a user
    */
-  async create(userId: string, createSkinProfileDto: CreateSkinProfileDto): Promise<SkinProfile> {
+  async create(
+    userId: string,
+    createSkinProfileDto: CreateSkinProfileDto,
+  ): Promise<SkinProfile> {
     // Check if user already has a profile
     const existingProfile = await this.prisma.skinProfile.findUnique({
       where: { userId },
     });
 
     if (existingProfile) {
-      throw new ConflictException('User already has a skin profile. Use update instead.');
+      throw new ConflictException(
+        'User already has a skin profile. Use update instead.',
+      );
     }
 
     return this.prisma.skinProfile.create({
@@ -49,8 +58,11 @@ export class SkinProfileService {
   /**
    * Create or update a skin profile (upsert)
    */
-  async upsert(userId: string, data: CreateSkinProfileDto): Promise<SkinProfile> {
-    return this.prisma.skinProfile.upsert({
+  async upsert(
+    userId: string,
+    data: CreateSkinProfileDto,
+  ): Promise<SkinProfile> {
+    const profile = await this.prisma.skinProfile.upsert({
       where: { userId },
       create: {
         userId,
@@ -72,6 +84,14 @@ export class SkinProfileService {
         lastAnalysisAt: data.lastAnalysisAt,
       },
     });
+
+    // Mark onboarding as complete for this user
+    await this.prisma.user.update({
+      where: { id: userId },
+      data: { onboardingComplete: true },
+    });
+
+    return profile;
   }
 
   /**
@@ -120,6 +140,15 @@ export class SkinProfileService {
   }
 
   /**
+   * Get skin profile by user ID — returns null if not found
+   */
+  async findByUserIdOrNull(userId: string): Promise<SkinProfile | null> {
+    return this.prisma.skinProfile.findUnique({
+      where: { userId },
+    });
+  }
+
+  /**
    * Get skin profile by ID
    */
   async findById(id: string): Promise<SkinProfile> {
@@ -146,7 +175,10 @@ export class SkinProfileService {
   /**
    * Update skin profile
    */
-  async update(userId: string, updateSkinProfileDto: UpdateSkinProfileDto): Promise<SkinProfile> {
+  async update(
+    userId: string,
+    updateSkinProfileDto: UpdateSkinProfileDto,
+  ): Promise<SkinProfile> {
     await this.findByUserId(userId);
 
     return this.prisma.skinProfile.update({
@@ -161,7 +193,10 @@ export class SkinProfileService {
   /**
    * Update specific concerns
    */
-  async updateConcerns(userId: string, concerns: string[]): Promise<SkinProfile> {
+  async updateConcerns(
+    userId: string,
+    concerns: string[],
+  ): Promise<SkinProfile> {
     await this.findByUserId(userId);
 
     return this.prisma.skinProfile.update({
@@ -175,7 +210,7 @@ export class SkinProfileService {
    */
   async addConcern(userId: string, concern: string): Promise<SkinProfile> {
     const profile = await this.findByUserId(userId);
-    
+
     if (profile.concerns.includes(concern)) {
       return profile;
     }
@@ -205,7 +240,10 @@ export class SkinProfileService {
   /**
    * Update sensitivities
    */
-  async updateSensitivities(userId: string, sensitivities: string[]): Promise<SkinProfile> {
+  async updateSensitivities(
+    userId: string,
+    sensitivities: string[],
+  ): Promise<SkinProfile> {
     await this.findByUserId(userId);
 
     return this.prisma.skinProfile.update({
@@ -217,9 +255,12 @@ export class SkinProfileService {
   /**
    * Add a sensitivity
    */
-  async addSensitivity(userId: string, sensitivity: string): Promise<SkinProfile> {
+  async addSensitivity(
+    userId: string,
+    sensitivity: string,
+  ): Promise<SkinProfile> {
     const profile = await this.findByUserId(userId);
-    
+
     if (profile.sensitivities.includes(sensitivity)) {
       return profile;
     }
@@ -235,7 +276,10 @@ export class SkinProfileService {
   /**
    * Remove a sensitivity
    */
-  async removeSensitivity(userId: string, sensitivity: string): Promise<SkinProfile> {
+  async removeSensitivity(
+    userId: string,
+    sensitivity: string,
+  ): Promise<SkinProfile> {
     const profile = await this.findByUserId(userId);
 
     return this.prisma.skinProfile.update({
@@ -249,7 +293,10 @@ export class SkinProfileService {
   /**
    * Update health score
    */
-  async updateHealthScore(userId: string, healthScore: number): Promise<SkinProfile> {
+  async updateHealthScore(
+    userId: string,
+    healthScore: number,
+  ): Promise<SkinProfile> {
     await this.findByUserId(userId);
 
     if (healthScore < 0 || healthScore > 100) {
@@ -320,19 +367,26 @@ export class SkinProfileService {
     const skinTypeDistribution: Record<string, number> = {};
     profiles.forEach((p) => {
       if (p.skinType) {
-        skinTypeDistribution[p.skinType] = (skinTypeDistribution[p.skinType] || 0) + 1;
+        skinTypeDistribution[p.skinType] =
+          (skinTypeDistribution[p.skinType] || 0) + 1;
       }
     });
 
     // Average health score
-    const healthScores = profiles.filter((p) => p.healthScore !== null).map((p) => p.healthScore);
+    const healthScores = profiles
+      .filter((p) => p.healthScore !== null)
+      .map((p) => p.healthScore);
     const averageHealthScore =
       healthScores.length > 0
-        ? Math.round(healthScores.reduce((a, b) => a + b, 0) / healthScores.length)
+        ? Math.round(
+          healthScores.reduce((a, b) => a + b, 0) / healthScores.length,
+        )
         : 0;
 
     // Average skin age
-    const skinAges = profiles.filter((p) => p.skinAge !== null).map((p) => p.skinAge);
+    const skinAges = profiles
+      .filter((p) => p.skinAge !== null)
+      .map((p) => p.skinAge);
     const averageSkinAge =
       skinAges.length > 0
         ? Math.round(skinAges.reduce((a, b) => a + b, 0) / skinAges.length)
@@ -354,7 +408,8 @@ export class SkinProfileService {
     const sensitivityCount: Record<string, number> = {};
     profiles.forEach((p) => {
       p.sensitivities.forEach((sensitivity) => {
-        sensitivityCount[sensitivity] = (sensitivityCount[sensitivity] || 0) + 1;
+        sensitivityCount[sensitivity] =
+          (sensitivityCount[sensitivity] || 0) + 1;
       });
     });
     const topSensitivities = Object.entries(sensitivityCount)

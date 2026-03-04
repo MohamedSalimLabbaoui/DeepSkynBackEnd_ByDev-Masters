@@ -2,10 +2,20 @@ import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { AppModule } from './app.module';
+import { json, urlencoded } from 'express';
+
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
-  
+
+  // Increase payload limit
+  app.use(json({ limit: '50mb' }));
+  app.use(urlencoded({ extended: true, limit: '50mb' }));
+
+  app.enableCors({
+    origin: process.env.FRONTEND_URL || 'http://localhost:5173',
+    credentials: true,
+  });
   // Ajouter les pipes de validation globalement
   app.useGlobalPipes(
     new ValidationPipe({
@@ -18,7 +28,9 @@ async function bootstrap() {
   // Configuration Swagger
   const config = new DocumentBuilder()
     .setTitle('DeepSkyn API')
-    .setDescription('API Backend pour l\'application DeepSkyn - Intelligence Artificielle pour l\'analyse de la peau')
+    .setDescription(
+      "API Backend pour l'application DeepSkyn - Intelligence Artificielle pour l'analyse de la peau",
+    )
     .setVersion('1.0')
     .addBearerAuth(
       {
@@ -44,7 +56,11 @@ async function bootstrap() {
   SwaggerModule.setup('api', app, document);
 
   await app.listen(process.env.PORT ?? 3000);
-  console.log(`🚀 Application running on: http://localhost:${process.env.PORT ?? 3000}`);
-  console.log(`📚 Swagger documentation: http://localhost:${process.env.PORT ?? 3000}/api`);
+  console.log(
+    `🚀 Application running on: http://localhost:${process.env.PORT ?? 3000}`,
+  );
+  console.log(
+    `📚 Swagger documentation: http://localhost:${process.env.PORT ?? 3000}/api`,
+  );
 }
 bootstrap();

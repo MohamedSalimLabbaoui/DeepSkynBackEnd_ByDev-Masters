@@ -1,9 +1,19 @@
-import { Injectable, Logger, NotFoundException, BadRequestException } from '@nestjs/common';
+import {
+  Injectable,
+  Logger,
+  NotFoundException,
+  BadRequestException,
+} from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { GeminiService } from '../analysis/services/gemini.service';
 import { SkinProfileService } from '../skin-profile/skin-profile.service';
 import { NotificationService } from '../notification/notification.service';
-import { CreateRoutineDto, UpdateRoutineDto, GenerateRoutineDto, RoutineType } from './dto';
+import {
+  CreateRoutineDto,
+  UpdateRoutineDto,
+  GenerateRoutineDto,
+  RoutineType,
+} from './dto';
 import { Routine } from '@prisma/client';
 
 export interface RoutineStep {
@@ -40,7 +50,10 @@ export class RoutineService {
   /**
    * Create a manual routine
    */
-  async create(userId: string, createRoutineDto: CreateRoutineDto): Promise<Routine> {
+  async create(
+    userId: string,
+    createRoutineDto: CreateRoutineDto,
+  ): Promise<Routine> {
     const routine = await this.prisma.routine.create({
       data: {
         userId,
@@ -78,7 +91,8 @@ export class RoutineService {
       routineType: generateDto.type,
       skinType: generateDto.skinType || skinProfile?.skinType || 'normal',
       concerns: generateDto.concerns || skinProfile?.concerns || [],
-      sensitivities: generateDto.sensitivities || skinProfile?.sensitivities || [],
+      sensitivities:
+        generateDto.sensitivities || skinProfile?.sensitivities || [],
       budget: generateDto.budget || 'medium',
       preferredBrands: generateDto.preferredBrands,
       additionalNotes: generateDto.additionalNotes,
@@ -118,7 +132,9 @@ export class RoutineService {
   /**
    * Generate routine using Gemini AI
    */
-  private async generateRoutineWithGemini(context: any): Promise<AIGeneratedRoutine> {
+  private async generateRoutineWithGemini(
+    context: any,
+  ): Promise<AIGeneratedRoutine> {
     const prompt = this.buildRoutinePrompt(context);
 
     try {
@@ -140,11 +156,12 @@ export class RoutineService {
    * Build prompt for routine generation
    */
   private buildRoutinePrompt(context: any): string {
-    const typeDesc = context.routineType === 'AM' 
-      ? 'morning (AM)' 
-      : context.routineType === 'PM' 
-        ? 'evening (PM)' 
-        : 'weekly treatment';
+    const typeDesc =
+      context.routineType === 'AM'
+        ? 'morning (AM)'
+        : context.routineType === 'PM'
+          ? 'evening (PM)'
+          : 'weekly treatment';
 
     return `
 Create a personalized ${typeDesc} skincare routine with the following parameters:
@@ -166,15 +183,16 @@ Format each step with: order, name, category, description, duration (in seconds)
    */
   private parseAIResponse(aiResponse: any, context: any): AIGeneratedRoutine {
     const routineType = context.routineType;
-    const routineName = routineType === 'AM' 
-      ? 'Routine Matin' 
-      : routineType === 'PM' 
-        ? 'Routine Soir' 
-        : 'Soin Hebdomadaire';
+    const routineName =
+      routineType === 'AM'
+        ? 'Routine Matin'
+        : routineType === 'PM'
+          ? 'Routine Soir'
+          : 'Soin Hebdomadaire';
 
     // Try to extract steps from AI response
     const advice = aiResponse?.advice || aiResponse?.toString() || '';
-    
+
     // Default steps based on routine type
     const steps = this.extractStepsFromAdvice(advice, routineType);
 
@@ -190,33 +208,138 @@ Format each step with: order, name, category, description, duration (in seconds)
   /**
    * Extract steps from AI advice
    */
-  private extractStepsFromAdvice(advice: string, routineType: string): RoutineStep[] {
+  private extractStepsFromAdvice(
+    advice: string,
+    routineType: string,
+  ): RoutineStep[] {
     // Default routine structure based on type
     if (routineType === 'AM') {
       return [
-        { order: 1, name: 'Nettoyage', category: 'cleanser', description: 'Nettoyant doux pour commencer la journée', duration: 60 },
-        { order: 2, name: 'Tonique', category: 'toner', description: 'Équilibrer le pH de la peau', duration: 30 },
-        { order: 3, name: 'Sérum', category: 'serum', description: 'Sérum antioxydant (Vitamine C)', duration: 30 },
-        { order: 4, name: 'Contour des yeux', category: 'eye_cream', description: 'Hydrater la zone délicate des yeux', duration: 20 },
-        { order: 5, name: 'Hydratant', category: 'moisturizer', description: 'Crème hydratante légère', duration: 30 },
-        { order: 6, name: 'Protection solaire', category: 'sunscreen', description: 'SPF 30+ indispensable', duration: 30 },
+        {
+          order: 1,
+          name: 'Nettoyage',
+          category: 'cleanser',
+          description: 'Nettoyant doux pour commencer la journée',
+          duration: 60,
+        },
+        {
+          order: 2,
+          name: 'Tonique',
+          category: 'toner',
+          description: 'Équilibrer le pH de la peau',
+          duration: 30,
+        },
+        {
+          order: 3,
+          name: 'Sérum',
+          category: 'serum',
+          description: 'Sérum antioxydant (Vitamine C)',
+          duration: 30,
+        },
+        {
+          order: 4,
+          name: 'Contour des yeux',
+          category: 'eye_cream',
+          description: 'Hydrater la zone délicate des yeux',
+          duration: 20,
+        },
+        {
+          order: 5,
+          name: 'Hydratant',
+          category: 'moisturizer',
+          description: 'Crème hydratante légère',
+          duration: 30,
+        },
+        {
+          order: 6,
+          name: 'Protection solaire',
+          category: 'sunscreen',
+          description: 'SPF 30+ indispensable',
+          duration: 30,
+        },
       ];
     } else if (routineType === 'PM') {
       return [
-        { order: 1, name: 'Démaquillage', category: 'makeup_remover', description: 'Huile ou baume démaquillant', duration: 60 },
-        { order: 2, name: 'Nettoyage', category: 'cleanser', description: 'Second nettoyage en profondeur', duration: 60 },
-        { order: 3, name: 'Exfoliation', category: 'exfoliant', description: 'Exfoliant chimique doux (2-3x/semaine)', duration: 30 },
-        { order: 4, name: 'Tonique', category: 'toner', description: 'Tonique hydratant', duration: 30 },
-        { order: 5, name: 'Sérum', category: 'serum', description: 'Sérum réparateur (Rétinol ou Niacinamide)', duration: 30 },
-        { order: 6, name: 'Contour des yeux', category: 'eye_cream', description: 'Soin contour des yeux nourrissant', duration: 20 },
-        { order: 7, name: 'Hydratant nuit', category: 'night_cream', description: 'Crème de nuit réparatrice', duration: 30 },
+        {
+          order: 1,
+          name: 'Démaquillage',
+          category: 'makeup_remover',
+          description: 'Huile ou baume démaquillant',
+          duration: 60,
+        },
+        {
+          order: 2,
+          name: 'Nettoyage',
+          category: 'cleanser',
+          description: 'Second nettoyage en profondeur',
+          duration: 60,
+        },
+        {
+          order: 3,
+          name: 'Exfoliation',
+          category: 'exfoliant',
+          description: 'Exfoliant chimique doux (2-3x/semaine)',
+          duration: 30,
+        },
+        {
+          order: 4,
+          name: 'Tonique',
+          category: 'toner',
+          description: 'Tonique hydratant',
+          duration: 30,
+        },
+        {
+          order: 5,
+          name: 'Sérum',
+          category: 'serum',
+          description: 'Sérum réparateur (Rétinol ou Niacinamide)',
+          duration: 30,
+        },
+        {
+          order: 6,
+          name: 'Contour des yeux',
+          category: 'eye_cream',
+          description: 'Soin contour des yeux nourrissant',
+          duration: 20,
+        },
+        {
+          order: 7,
+          name: 'Hydratant nuit',
+          category: 'night_cream',
+          description: 'Crème de nuit réparatrice',
+          duration: 30,
+        },
       ];
     } else {
       return [
-        { order: 1, name: 'Nettoyage profond', category: 'deep_cleanser', description: 'Préparer la peau au soin', duration: 120 },
-        { order: 2, name: 'Masque', category: 'mask', description: 'Masque adapté aux besoins de la peau', duration: 900 },
-        { order: 3, name: 'Sérum intensif', category: 'serum', description: 'Traitement concentré', duration: 60 },
-        { order: 4, name: 'Hydratation', category: 'moisturizer', description: 'Sceller les actifs', duration: 60 },
+        {
+          order: 1,
+          name: 'Nettoyage profond',
+          category: 'deep_cleanser',
+          description: 'Préparer la peau au soin',
+          duration: 120,
+        },
+        {
+          order: 2,
+          name: 'Masque',
+          category: 'mask',
+          description: 'Masque adapté aux besoins de la peau',
+          duration: 900,
+        },
+        {
+          order: 3,
+          name: 'Sérum intensif',
+          category: 'serum',
+          description: 'Traitement concentré',
+          duration: 60,
+        },
+        {
+          order: 4,
+          name: 'Hydratation',
+          category: 'moisturizer',
+          description: 'Sceller les actifs',
+          duration: 60,
+        },
       ];
     }
   }
@@ -226,11 +349,12 @@ Format each step with: order, name, category, description, duration (in seconds)
    */
   private getDefaultRoutine(context: any): AIGeneratedRoutine {
     const steps = this.extractStepsFromAdvice('', context.routineType);
-    const routineName = context.routineType === 'AM' 
-      ? 'Routine Matin Basique' 
-      : context.routineType === 'PM' 
-        ? 'Routine Soir Basique' 
-        : 'Soin Hebdomadaire Basique';
+    const routineName =
+      context.routineType === 'AM'
+        ? 'Routine Matin Basique'
+        : context.routineType === 'PM'
+          ? 'Routine Soir Basique'
+          : 'Soin Hebdomadaire Basique';
 
     return {
       name: routineName,
@@ -330,7 +454,7 @@ Format each step with: order, name, category, description, duration (in seconds)
     const routine = await this.findOne(id, userId);
     const steps = routine.steps as unknown as RoutineStep[];
 
-    const stepIndex = steps.findIndex(s => s.order === stepOrder);
+    const stepIndex = steps.findIndex((s) => s.order === stepOrder);
     if (stepIndex === -1) {
       throw new BadRequestException(`Step ${stepOrder} not found in routine`);
     }
@@ -351,7 +475,7 @@ Format each step with: order, name, category, description, duration (in seconds)
    */
   async resetStepsCompletion(id: string, userId: string): Promise<Routine> {
     const routine = await this.findOne(id, userId);
-    const steps = (routine.steps as unknown as RoutineStep[]).map(step => ({
+    const steps = (routine.steps as unknown as RoutineStep[]).map((step) => ({
       ...step,
       isCompleted: false,
     }));
@@ -365,7 +489,11 @@ Format each step with: order, name, category, description, duration (in seconds)
   /**
    * Duplicate a routine
    */
-  async duplicate(id: string, userId: string, newName?: string): Promise<Routine> {
+  async duplicate(
+    id: string,
+    userId: string,
+    newName?: string,
+  ): Promise<Routine> {
     const original = await this.findOne(id, userId);
 
     return this.prisma.routine.create({
@@ -409,12 +537,12 @@ Format each step with: order, name, category, description, duration (in seconds)
 
     return {
       total: routines.length,
-      active: routines.filter(r => r.isActive).length,
-      aiGenerated: routines.filter(r => r.isAIGenerated).length,
+      active: routines.filter((r) => r.isActive).length,
+      aiGenerated: routines.filter((r) => r.isAIGenerated).length,
       byType: {
-        AM: routines.filter(r => r.type === 'AM').length,
-        PM: routines.filter(r => r.type === 'PM').length,
-        weekly: routines.filter(r => r.type === 'weekly').length,
+        AM: routines.filter((r) => r.type === 'AM').length,
+        PM: routines.filter((r) => r.type === 'PM').length,
+        weekly: routines.filter((r) => r.type === 'weekly').length,
       },
     };
   }
@@ -438,7 +566,11 @@ Format each step with: order, name, category, description, duration (in seconds)
   /**
    * Add a step to existing routine
    */
-  async addStep(id: string, userId: string, step: RoutineStep): Promise<Routine> {
+  async addStep(
+    id: string,
+    userId: string,
+    step: RoutineStep,
+  ): Promise<Routine> {
     const routine = await this.findOne(id, userId);
     const steps = routine.steps as unknown as RoutineStep[];
 
@@ -461,11 +593,15 @@ Format each step with: order, name, category, description, duration (in seconds)
   /**
    * Remove a step from routine
    */
-  async removeStep(id: string, userId: string, stepOrder: number): Promise<Routine> {
+  async removeStep(
+    id: string,
+    userId: string,
+    stepOrder: number,
+  ): Promise<Routine> {
     const routine = await this.findOne(id, userId);
     let steps = routine.steps as unknown as RoutineStep[];
 
-    steps = steps.filter(s => s.order !== stepOrder);
+    steps = steps.filter((s) => s.order !== stepOrder);
 
     // Reorder remaining steps
     steps = steps.map((step, index) => ({
@@ -495,7 +631,7 @@ Format each step with: order, name, category, description, duration (in seconds)
     }
 
     const reorderedSteps = newOrder.map((oldOrder, newIndex) => {
-      const step = steps.find(s => s.order === oldOrder);
+      const step = steps.find((s) => s.order === oldOrder);
       if (!step) {
         throw new BadRequestException(`Step ${oldOrder} not found`);
       }

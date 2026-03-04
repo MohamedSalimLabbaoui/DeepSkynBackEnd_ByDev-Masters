@@ -11,7 +11,14 @@ import {
   HttpCode,
   HttpStatus,
 } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiParam, ApiQuery } from '@nestjs/swagger';
+import {
+  ApiTags,
+  ApiOperation,
+  ApiResponse,
+  ApiBearerAuth,
+  ApiParam,
+  ApiQuery,
+} from '@nestjs/swagger';
 import { CommentsService } from './comments.service';
 import { CreateCommentDto, UpdateCommentDto } from './dto';
 import { KeycloakAuthGuard } from '../auth/guards/keycloak-auth.guard';
@@ -25,7 +32,10 @@ export class CommentsController {
   constructor(private readonly commentsService: CommentsService) {}
 
   @Post()
-  @ApiOperation({ summary: 'Ajouter un commentaire', description: 'Ajoute un commentaire à un post' })
+  @ApiOperation({
+    summary: 'Ajouter un commentaire',
+    description: 'Ajoute un commentaire à un post',
+  })
   @ApiResponse({ status: 201, description: 'Commentaire créé' })
   @ApiResponse({ status: 404, description: 'Post non trouvé' })
   async create(
@@ -36,7 +46,10 @@ export class CommentsController {
   }
 
   @Get('post/:postId')
-  @ApiOperation({ summary: 'Commentaires d\'un post', description: 'Récupère les commentaires d\'un post' })
+  @ApiOperation({
+    summary: "Commentaires d'un post",
+    description: "Récupère les commentaires d'un post",
+  })
   @ApiParam({ name: 'postId', description: 'ID du post' })
   @ApiQuery({ name: 'page', required: false, type: Number })
   @ApiQuery({ name: 'limit', required: false, type: Number })
@@ -49,7 +62,10 @@ export class CommentsController {
   }
 
   @Get(':id')
-  @ApiOperation({ summary: 'Détail d\'un commentaire', description: 'Récupère un commentaire par ID' })
+  @ApiOperation({
+    summary: "Détail d'un commentaire",
+    description: 'Récupère un commentaire par ID',
+  })
   @ApiParam({ name: 'id', description: 'ID du commentaire' })
   @ApiResponse({ status: 200, description: 'Détail du commentaire' })
   @ApiResponse({ status: 404, description: 'Commentaire non trouvé' })
@@ -58,7 +74,10 @@ export class CommentsController {
   }
 
   @Patch(':id')
-  @ApiOperation({ summary: 'Modifier un commentaire', description: 'Modifie un commentaire (propriétaire uniquement)' })
+  @ApiOperation({
+    summary: 'Modifier un commentaire',
+    description: 'Modifie un commentaire (propriétaire uniquement)',
+  })
   @ApiParam({ name: 'id', description: 'ID du commentaire' })
   @ApiResponse({ status: 200, description: 'Commentaire modifié' })
   @ApiResponse({ status: 403, description: 'Non autorisé' })
@@ -72,14 +91,14 @@ export class CommentsController {
 
   @Delete(':id')
   @HttpCode(HttpStatus.NO_CONTENT)
-  @ApiOperation({ summary: 'Supprimer un commentaire', description: 'Supprime un commentaire (propriétaire uniquement)' })
+  @ApiOperation({
+    summary: 'Supprimer un commentaire',
+    description: 'Supprime un commentaire (propriétaire uniquement)',
+  })
   @ApiParam({ name: 'id', description: 'ID du commentaire' })
   @ApiResponse({ status: 204, description: 'Commentaire supprimé' })
   @ApiResponse({ status: 403, description: 'Non autorisé' })
-  async remove(
-    @CurrentUser('sub') userId: string,
-    @Param('id') id: string,
-  ) {
+  async remove(@CurrentUser('sub') userId: string, @Param('id') id: string) {
     return this.commentsService.remove(id, userId);
   }
 }

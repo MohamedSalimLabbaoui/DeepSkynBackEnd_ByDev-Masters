@@ -2,7 +2,7 @@ import { createParamDecorator, ExecutionContext } from '@nestjs/common';
 
 /**
  * Decorator to extract the current authenticated user from the request
- * 
+ *
  * @example
  * ```typescript
  * @Get('profile')
@@ -10,7 +10,7 @@ import { createParamDecorator, ExecutionContext } from '@nestjs/common';
  * async getProfile(@CurrentUser() user: any) {
  *   return user;
  * }
- * 
+ *
  * // Get specific property
  * @Get('email')
  * @UseGuards(KeycloakAuthGuard)

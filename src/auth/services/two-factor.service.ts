@@ -1,4 +1,8 @@
-import { Injectable, BadRequestException, UnauthorizedException } from '@nestjs/common';
+import {
+  Injectable,
+  BadRequestException,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { generateSecret, generateURI, verifySync, generateSync } from 'otplib';
 import * as QRCode from 'qrcode';
 import { PrismaService } from '../../prisma/prisma.service';
@@ -6,14 +10,14 @@ import { PrismaService } from '../../prisma/prisma.service';
 export interface TwoFactorSetup {
   secret: string;
   otpauthUrl: string;
-  qrCodeDataUrl: string;
+  qrCode: string;
 }
 
 @Injectable()
 export class TwoFactorService {
   private readonly APP_NAME = 'DeepSkyn';
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(private readonly prisma: PrismaService) { }
 
   /**
    * Verify a TOTP code against a secret
@@ -65,7 +69,7 @@ export class TwoFactorService {
     return {
       secret,
       otpauthUrl,
-      qrCodeDataUrl,
+      qrCode: qrCodeDataUrl,
     };
   }
 
@@ -87,7 +91,7 @@ export class TwoFactorService {
     }
 
     if (!user.twoFactorSecret) {
-      throw new BadRequestException('Veuillez d\'abord générer un secret 2FA');
+      throw new BadRequestException("Veuillez d'abord générer un secret 2FA");
     }
 
     // Vérifier le code TOTP
@@ -120,7 +124,7 @@ export class TwoFactorService {
     }
 
     if (!user.twoFactorEnabled) {
-      throw new BadRequestException('Le 2FA n\'est pas activé');
+      throw new BadRequestException("Le 2FA n'est pas activé");
     }
 
     // Vérifier le code TOTP

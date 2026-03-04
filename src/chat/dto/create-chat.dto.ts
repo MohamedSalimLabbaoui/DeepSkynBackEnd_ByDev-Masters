@@ -17,7 +17,7 @@ export enum MessageRole {
 
 export class ChatMessageDto {
   @ApiProperty({
-    description: 'Rôle de l\'auteur du message',
+    description: "Rôle de l'auteur du message",
     enum: MessageRole,
     example: 'user',
   })
@@ -26,7 +26,7 @@ export class ChatMessageDto {
 
   @ApiProperty({
     description: 'Contenu du message',
-    example: 'Quels sont les meilleurs ingrédients pour l\'acné ?',
+    example: "Quels sont les meilleurs ingrédients pour l'acné ?",
   })
   @IsString()
   content: string;

@@ -3,7 +3,7 @@ import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 export class CreateNotificationDto {
   @ApiProperty({
-    description: 'ID de l\'utilisateur destinataire',
+    description: "ID de l'utilisateur destinataire",
     example: '89324390-127f-48c4-b382-2aef40f76add',
   })
   @IsString()
@@ -39,7 +39,7 @@ export class CreateNotificationDto {
   type?: 'info' | 'success' | 'warning' | 'error';
 
   @ApiPropertyOptional({
-    description: 'URL d\'action pour rediriger l\'utilisateur',
+    description: "URL d'action pour rediriger l'utilisateur",
     example: '/analyses/123',
   })
   @IsOptional()

@@ -15,7 +15,16 @@ import {
   DefaultValuePipe,
 } from '@nestjs/common';
 import { FilesInterceptor } from '@nestjs/platform-express';
-import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiConsumes, ApiBody, ApiParam, ApiQuery } from '@nestjs/swagger';
+import {
+  ApiTags,
+  ApiOperation,
+  ApiResponse,
+  ApiBearerAuth,
+  ApiConsumes,
+  ApiBody,
+  ApiParam,
+  ApiQuery,
+} from '@nestjs/swagger';
 import { AnalysisService, AnalysisStats } from './analysis.service';
 import { GeminiAnalysisResult } from './services/gemini.service';
 import { CreateAnalysisDto } from './dto/create-analysis.dto';
@@ -35,7 +44,10 @@ export class AnalysisController {
 
   @Post('upload')
   @UseInterceptors(FilesInterceptor('images', 5))
-  @ApiOperation({ summary: 'Upload et analyse', description: 'Upload d\'images et création d\'une analyse IA (max 5 images)' })
+  @ApiOperation({
+    summary: 'Upload et analyse',
+    description: "Upload d'images et création d'une analyse IA (max 5 images)",
+  })
   @ApiConsumes('multipart/form-data')
   @ApiBody({
     schema: {
@@ -53,12 +65,21 @@ export class AnalysisController {
     @UploadedFiles() files: Express.Multer.File[],
     @Body('questionnaire') questionnaire?: string,
   ): Promise<Analysis> {
-    const parsedQuestionnaire = questionnaire ? JSON.parse(questionnaire) : undefined;
-    return this.analysisService.createWithImages(userId, files, parsedQuestionnaire);
+    const parsedQuestionnaire = questionnaire
+      ? JSON.parse(questionnaire)
+      : undefined;
+    return this.analysisService.createWithImages(
+      userId,
+      files,
+      parsedQuestionnaire,
+    );
   }
 
   @Post()
-  @ApiOperation({ summary: 'Créer analyse depuis URLs', description: 'Crée une analyse à partir d\'URLs d\'images existantes' })
+  @ApiOperation({
+    summary: 'Créer analyse depuis URLs',
+    description: "Crée une analyse à partir d'URLs d'images existantes",
+  })
   @ApiResponse({ status: 201, description: 'Analyse créée' })
   @ApiResponse({ status: 400, description: 'URLs invalides' })
   async create(
@@ -108,7 +129,9 @@ export class AnalysisController {
    * Get personalized skincare advice
    */
   @Get('advice')
-  async getAdvice(@CurrentUser('userId') userId: string): Promise<{ advice: string }> {
+  async getAdvice(
+    @CurrentUser('userId') userId: string,
+  ): Promise<{ advice: string }> {
     const advice = await this.analysisService.getAdvice(userId);
     return { advice };
   }
@@ -117,7 +140,9 @@ export class AnalysisController {
    * Get latest analysis
    */
   @Get('latest')
-  async getLatest(@CurrentUser('userId') userId: string): Promise<Analysis | null> {
+  async getLatest(
+    @CurrentUser('userId') userId: string,
+  ): Promise<Analysis | null> {
     return this.analysisService.findLatest(userId);
   }
 
@@ -129,6 +154,31 @@ export class AnalysisController {
   @Roles('admin')
   async getStatistics(): Promise<AnalysisStats> {
     return this.analysisService.getStatistics();
+  }
+
+  @Get('admin/all')
+  @UseGuards(RolesGuard)
+  @Roles('admin')
+  async getAllForAdmin(
+    @Query('page', new DefaultValuePipe(1), ParseIntPipe) page: number,
+    @Query('limit', new DefaultValuePipe(20), ParseIntPipe) limit: number,
+    @Query('fromDate') fromDate?: string,
+    @Query('toDate') toDate?: string,
+    @Query('skinType') skinType?: string,
+    @Query('minScore') minScore?: string,
+    @Query('maxScore') maxScore?: string,
+    @Query('status') status?: string,
+  ) {
+    return this.analysisService.findAllForAdmin({
+      page,
+      limit,
+      fromDate,
+      toDate,
+      skinType,
+      minScore: minScore ? parseInt(minScore, 10) : undefined,
+      maxScore: maxScore ? parseInt(maxScore, 10) : undefined,
+      status,
+    });
   }
 
   /**
@@ -149,7 +199,11 @@ export class AnalysisController {
       resolvedConditions: string[];
     };
   }> {
-    return this.analysisService.compareAnalyses(userId, analysisId1, analysisId2);
+    return this.analysisService.compareAnalyses(
+      userId,
+      analysisId1,
+      analysisId2,
+    );
   }
 
   /**
@@ -172,6 +226,13 @@ export class AnalysisController {
     @CurrentUser('userId') userId: string,
   ): Promise<Analysis> {
     return this.analysisService.retryAnalysis(id, userId);
+  }
+
+  @Post('admin/:id/retry')
+  @UseGuards(RolesGuard)
+  @Roles('admin')
+  async retryAnalysisForAdmin(@Param('id') id: string): Promise<Analysis> {
+    return this.analysisService.retryAnalysisForAdmin(id);
   }
 
   /**

@@ -9,7 +9,14 @@ import {
   HttpCode,
   HttpStatus,
 } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiParam, ApiQuery } from '@nestjs/swagger';
+import {
+  ApiTags,
+  ApiOperation,
+  ApiResponse,
+  ApiBearerAuth,
+  ApiParam,
+  ApiQuery,
+} from '@nestjs/swagger';
 import { LikesService } from './likes.service';
 import { KeycloakAuthGuard } from '../auth/guards/keycloak-auth.guard';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
@@ -22,7 +29,10 @@ export class LikesController {
   constructor(private readonly likesService: LikesService) {}
 
   @Post(':postId/toggle')
-  @ApiOperation({ summary: 'Toggle like', description: 'Like ou unlike un post' })
+  @ApiOperation({
+    summary: 'Toggle like',
+    description: 'Like ou unlike un post',
+  })
   @ApiParam({ name: 'postId', description: 'ID du post' })
   @ApiResponse({ status: 200, description: 'Like togglé' })
   @ApiResponse({ status: 404, description: 'Post non trouvé' })
@@ -34,7 +44,10 @@ export class LikesController {
   }
 
   @Post(':postId')
-  @ApiOperation({ summary: 'Liker un post', description: 'Ajoute un like à un post' })
+  @ApiOperation({
+    summary: 'Liker un post',
+    description: 'Ajoute un like à un post',
+  })
   @ApiParam({ name: 'postId', description: 'ID du post' })
   @ApiResponse({ status: 201, description: 'Post liké' })
   @ApiResponse({ status: 409, description: 'Déjà liké' })
@@ -47,7 +60,10 @@ export class LikesController {
 
   @Delete(':postId')
   @HttpCode(HttpStatus.NO_CONTENT)
-  @ApiOperation({ summary: 'Unliker un post', description: 'Retire le like d\'un post' })
+  @ApiOperation({
+    summary: 'Unliker un post',
+    description: "Retire le like d'un post",
+  })
   @ApiParam({ name: 'postId', description: 'ID du post' })
   @ApiResponse({ status: 204, description: 'Like retiré' })
   @ApiResponse({ status: 404, description: 'Like non trouvé' })
@@ -59,7 +75,10 @@ export class LikesController {
   }
 
   @Get('post/:postId')
-  @ApiOperation({ summary: 'Likes d\'un post', description: 'Récupère la liste des likes d\'un post' })
+  @ApiOperation({
+    summary: "Likes d'un post",
+    description: "Récupère la liste des likes d'un post",
+  })
   @ApiParam({ name: 'postId', description: 'ID du post' })
   @ApiQuery({ name: 'page', required: false, type: Number })
   @ApiQuery({ name: 'limit', required: false, type: Number })
@@ -72,7 +91,10 @@ export class LikesController {
   }
 
   @Get('check/:postId')
-  @ApiOperation({ summary: 'Vérifier le like', description: 'Vérifie si l\'utilisateur a liké un post' })
+  @ApiOperation({
+    summary: 'Vérifier le like',
+    description: "Vérifie si l'utilisateur a liké un post",
+  })
   @ApiParam({ name: 'postId', description: 'ID du post' })
   @ApiResponse({ status: 200, description: 'Statut du like' })
   async hasLiked(

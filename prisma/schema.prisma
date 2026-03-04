@@ -17,6 +17,7 @@ model User {
   email              String    @unique
   password           String?
   googleId           String?   @unique
+  facebookId         String?   @unique
   twoFactorEnabled   Boolean   @default(false)
   twoFactorSecret    String?   // Secret TOTP pour le 2FA
   resetPasswordToken String?   // Token de réinitialisation du mot de passe

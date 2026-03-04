@@ -32,15 +32,19 @@ export class PasswordResetService {
     if (!user) {
       this.logger.warn(`Tentative de reset pour un email inexistant: ${email}`);
       return {
-        message: 'Si un compte existe avec cet email, un lien de réinitialisation a été envoyé.',
+        message:
+          'Si un compte existe avec cet email, un lien de réinitialisation a été envoyé.',
       };
     }
 
     // Vérifier si l'utilisateur a un mot de passe (pas un compte Google-only)
     if (!user.password && user.googleId) {
-      this.logger.warn(`Tentative de reset pour un compte Google-only: ${email}`);
+      this.logger.warn(
+        `Tentative de reset pour un compte Google-only: ${email}`,
+      );
       return {
-        message: 'Si un compte existe avec cet email, un lien de réinitialisation a été envoyé.',
+        message:
+          'Si un compte existe avec cet email, un lien de réinitialisation a été envoyé.',
       };
     }
 
@@ -72,12 +76,16 @@ export class PasswordResetService {
         resetToken,
       );
     } catch (error) {
-      this.logger.error('Erreur lors de l\'envoi de l\'email de reset', error.stack);
+      this.logger.error(
+        "Erreur lors de l'envoi de l'email de reset",
+        error.stack,
+      );
       // On ne révèle pas l'erreur à l'utilisateur
     }
 
     return {
-      message: 'Si un compte existe avec cet email, un lien de réinitialisation a été envoyé.',
+      message:
+        'Si un compte existe avec cet email, un lien de réinitialisation a été envoyé.',
     };
   }
 
@@ -89,10 +97,7 @@ export class PasswordResetService {
     newPassword: string,
   ): Promise<{ message: string }> {
     // Hasher le token reçu pour le comparer avec celui en base
-    const hashedToken = crypto
-      .createHash('sha256')
-      .update(token)
-      .digest('hex');
+    const hashedToken = crypto.createHash('sha256').update(token).digest('hex');
 
     // Chercher l'utilisateur avec ce token et vérifier l'expiration
     const user = await this.prisma.user.findFirst({
@@ -131,24 +136,27 @@ export class PasswordResetService {
         user.name || user.email,
       );
     } catch (error) {
-      this.logger.error('Erreur lors de l\'envoi de l\'email de confirmation', error.stack);
+      this.logger.error(
+        "Erreur lors de l'envoi de l'email de confirmation",
+        error.stack,
+      );
     }
 
     this.logger.log(`Mot de passe réinitialisé pour l'utilisateur ${user.id}`);
 
     return {
-      message: 'Votre mot de passe a été réinitialisé avec succès. Vous pouvez maintenant vous connecter.',
+      message:
+        'Votre mot de passe a été réinitialisé avec succès. Vous pouvez maintenant vous connecter.',
     };
   }
 
   /**
    * Vérifier si un token de réinitialisation est valide (sans le consommer)
    */
-  async validateResetToken(token: string): Promise<{ valid: boolean; email?: string }> {
-    const hashedToken = crypto
-      .createHash('sha256')
-      .update(token)
-      .digest('hex');
+  async validateResetToken(
+    token: string,
+  ): Promise<{ valid: boolean; email?: string }> {
+    const hashedToken = crypto.createHash('sha256').update(token).digest('hex');
 
     const user = await this.prisma.user.findFirst({
       where: {

@@ -6,11 +6,14 @@ import {
   IsDateString,
 } from 'class-validator';
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { SubscriptionPlan, SubscriptionStatus } from './create-subscription.dto';
+import {
+  SubscriptionPlan,
+  SubscriptionStatus,
+} from './create-subscription.dto';
 
 export class UpdateSubscriptionDto {
   @ApiPropertyOptional({
-    description: 'Nouveau plan d\'abonnement',
+    description: "Nouveau plan d'abonnement",
     enum: SubscriptionPlan,
   })
   @IsEnum(SubscriptionPlan)
@@ -18,7 +21,7 @@ export class UpdateSubscriptionDto {
   plan?: SubscriptionPlan;
 
   @ApiPropertyOptional({
-    description: 'Nouveau statut de l\'abonnement',
+    description: "Nouveau statut de l'abonnement",
     enum: SubscriptionStatus,
   })
   @IsEnum(SubscriptionStatus)

@@ -76,7 +76,11 @@ export class AnalysisTestController implements OnModuleInit {
   async testUploadImages(
     @UploadedFiles() files: Express.Multer.File[],
   ): Promise<UploadResult[]> {
-    return this.supabaseService.uploadMultipleImages(files, this.testUserId, 'test');
+    return this.supabaseService.uploadMultipleImages(
+      files,
+      this.testUserId,
+      'test',
+    );
   }
 
   /**
@@ -91,8 +95,14 @@ export class AnalysisTestController implements OnModuleInit {
     @UploadedFiles() files: Express.Multer.File[],
     @Body('questionnaire') questionnaire?: string,
   ): Promise<Analysis> {
-    const parsedQuestionnaire = questionnaire ? JSON.parse(questionnaire) : undefined;
-    return this.analysisService.createWithImages(this.testUserId, files, parsedQuestionnaire);
+    const parsedQuestionnaire = questionnaire
+      ? JSON.parse(questionnaire)
+      : undefined;
+    return this.analysisService.createWithImages(
+      this.testUserId,
+      files,
+      parsedQuestionnaire,
+    );
   }
 
   /**

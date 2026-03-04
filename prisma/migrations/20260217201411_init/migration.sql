@@ -4,6 +4,10 @@ CREATE TABLE "users" (
     "email" TEXT NOT NULL,
     "password" TEXT,
     "googleId" TEXT,
+    "twoFactorEnabled" BOOLEAN NOT NULL DEFAULT false,
+    "twoFactorSecret" TEXT,
+    "resetPasswordToken" TEXT,
+    "resetPasswordExpires" TIMESTAMP(3),
     "name" TEXT,
     "avatar" TEXT,
     "preferredLanguage" TEXT NOT NULL DEFAULT 'fr',
@@ -15,6 +19,13 @@ CREATE TABLE "users" (
     "role" TEXT NOT NULL DEFAULT 'user',
     "isActive" BOOLEAN NOT NULL DEFAULT true,
     "settings" JSONB,
+    "lastActivity" TIMESTAMP(3),
+    "interactionCount" INTEGER NOT NULL DEFAULT 0,
+    "sessionCount" INTEGER NOT NULL DEFAULT 0,
+    "churnRiskScore" DOUBLE PRECISION,
+    "churnRiskLevel" TEXT,
+    "lastChurnAnalysis" TIMESTAMP(3),
+    "reEngagementSentAt" TIMESTAMP(3),
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
 
@@ -78,6 +89,9 @@ CREATE TABLE "routines" (
     "name" TEXT NOT NULL,
     "type" TEXT NOT NULL,
     "steps" JSONB NOT NULL,
+    "ingredients" TEXT[],
+    "frequency" TEXT,
+    "estimatedTime" INTEGER,
     "isAIGenerated" BOOLEAN NOT NULL DEFAULT false,
     "isActive" BOOLEAN NOT NULL DEFAULT true,
     "notes" TEXT,
@@ -91,7 +105,11 @@ CREATE TABLE "routines" (
 CREATE TABLE "chat_histories" (
     "id" TEXT NOT NULL,
     "userId" TEXT NOT NULL,
-    "messages" JSONB NOT NULL,
+    "message" TEXT,
+    "imageUrl" TEXT,
+    "modelUsed" TEXT,
+    "assistantResponse" TEXT,
+    "messages" JSONB,
     "context" JSONB,
     "isPremium" BOOLEAN NOT NULL DEFAULT false,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -104,10 +122,13 @@ CREATE TABLE "chat_histories" (
 CREATE TABLE "subscriptions" (
     "id" TEXT NOT NULL,
     "userId" TEXT NOT NULL,
+    "planId" TEXT,
     "plan" TEXT NOT NULL DEFAULT 'free',
     "status" TEXT NOT NULL DEFAULT 'active',
     "amount" DOUBLE PRECISION,
     "currency" TEXT DEFAULT 'TND',
+    "paymentMethod" TEXT,
+    "autoRenew" BOOLEAN NOT NULL DEFAULT true,
     "startDate" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "endDate" TIMESTAMP(3),
     "cancelledAt" TIMESTAMP(3),
@@ -115,6 +136,40 @@ CREATE TABLE "subscriptions" (
     "updatedAt" TIMESTAMP(3) NOT NULL,
 
     CONSTRAINT "subscriptions_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "posts" (
+    "id" TEXT NOT NULL,
+    "userId" TEXT NOT NULL,
+    "media" TEXT,
+    "message" TEXT NOT NULL,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "posts_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "likes" (
+    "id" TEXT NOT NULL,
+    "userId" TEXT NOT NULL,
+    "postId" TEXT NOT NULL,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "likes_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "comments" (
+    "id" TEXT NOT NULL,
+    "userId" TEXT NOT NULL,
+    "postId" TEXT NOT NULL,
+    "comment" TEXT NOT NULL,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "comments_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateIndex
@@ -128,6 +183,9 @@ CREATE UNIQUE INDEX "skin_profiles_userId_key" ON "skin_profiles"("userId");
 
 -- CreateIndex
 CREATE UNIQUE INDEX "subscriptions_userId_key" ON "subscriptions"("userId");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "likes_userId_postId_key" ON "likes"("userId", "postId");
 
 -- AddForeignKey
 ALTER TABLE "notifications" ADD CONSTRAINT "notifications_userId_fkey" FOREIGN KEY ("userId") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE CASCADE;
@@ -146,3 +204,18 @@ ALTER TABLE "chat_histories" ADD CONSTRAINT "chat_histories_userId_fkey" FOREIGN
 
 -- AddForeignKey
 ALTER TABLE "subscriptions" ADD CONSTRAINT "subscriptions_userId_fkey" FOREIGN KEY ("userId") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "posts" ADD CONSTRAINT "posts_userId_fkey" FOREIGN KEY ("userId") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "likes" ADD CONSTRAINT "likes_userId_fkey" FOREIGN KEY ("userId") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "likes" ADD CONSTRAINT "likes_postId_fkey" FOREIGN KEY ("postId") REFERENCES "posts"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "comments" ADD CONSTRAINT "comments_userId_fkey" FOREIGN KEY ("userId") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "comments" ADD CONSTRAINT "comments_postId_fkey" FOREIGN KEY ("postId") REFERENCES "posts"("id") ON DELETE CASCADE ON UPDATE CASCADE;

@@ -12,10 +12,10 @@ export class RolesGuard implements CanActivate {
   constructor(private reflector: Reflector) {}
 
   canActivate(context: ExecutionContext): boolean {
-    const requiredRoles = this.reflector.getAllAndOverride<string[]>(ROLES_KEY, [
-      context.getHandler(),
-      context.getClass(),
-    ]);
+    const requiredRoles = this.reflector.getAllAndOverride<string[]>(
+      ROLES_KEY,
+      [context.getHandler(), context.getClass()],
+    );
 
     if (!requiredRoles || requiredRoles.length === 0) {
       return true;
@@ -45,11 +45,15 @@ export class RolesGuard implements CanActivate {
     return true;
   }
 
-  private flattenResourceRoles(resourceRoles: Record<string, { roles: string[] }>): string[] {
+  private flattenResourceRoles(
+    resourceRoles: Record<string, { roles: string[] }>,
+  ): string[] {
     if (!resourceRoles) {
       return [];
     }
 
-    return Object.values(resourceRoles).flatMap((resource) => resource.roles || []);
+    return Object.values(resourceRoles).flatMap(
+      (resource) => resource.roles || [],
+    );
   }
 }

@@ -3,7 +3,8 @@ import { ApiProperty } from '@nestjs/swagger';
 
 export class Verify2faDto {
   @ApiProperty({
-    description: 'Code TOTP à 6 chiffres généré par l\'application d\'authentification',
+    description:
+      "Code TOTP à 6 chiffres généré par l'application d'authentification",
     example: '123456',
   })
   @IsString()

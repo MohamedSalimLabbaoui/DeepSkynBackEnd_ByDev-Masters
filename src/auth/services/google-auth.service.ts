@@ -3,11 +3,13 @@ import { ConfigService } from '@nestjs/config';
 import { OAuth2Client } from 'google-auth-library';
 import { PrismaService } from '../../prisma/prisma.service';
 import { User } from '@prisma/client';
+import { JwtService } from '@nestjs/jwt';
 
 export interface GoogleAuthResult {
   user: Partial<User>;
   isNewUser: boolean;
   accessToken?: string;
+  requiresTwoFactor?: boolean;
 }
 
 @Injectable()
@@ -19,6 +21,7 @@ export class GoogleAuthService {
   constructor(
     private readonly configService: ConfigService,
     private readonly prisma: PrismaService,
+    private readonly jwtService: JwtService,
   ) {
     this.googleClientId = this.configService.get<string>('GOOGLE_CLIENT_ID');
     this.oauthClient = new OAuth2Client(this.googleClientId);
@@ -44,7 +47,9 @@ export class GoogleAuthService {
       const { sub: googleId, email, name, picture, email_verified } = payload;
 
       if (!email) {
-        throw new UnauthorizedException('Email non disponible dans le token Google');
+        throw new UnauthorizedException(
+          'Email non disponible dans le token Google',
+        );
       }
 
       // Chercher ou créer l'utilisateur
@@ -60,7 +65,7 @@ export class GoogleAuthService {
         throw error;
       }
       this.logger.error('Google authentication failed', error);
-      throw new UnauthorizedException('Échec de l\'authentification Google');
+      throw new UnauthorizedException("Échec de l'authentification Google");
     }
   }
 
@@ -105,6 +110,8 @@ export class GoogleAuthService {
       return {
         user: this.sanitizeUser(user),
         isNewUser: false,
+        requiresTwoFactor: user.twoFactorEnabled,
+        accessToken: user.twoFactorEnabled ? undefined : this.generateToken(user),
       };
     }
 
@@ -128,6 +135,8 @@ export class GoogleAuthService {
       return {
         user: this.sanitizeUser(user),
         isNewUser: false,
+        requiresTwoFactor: user.twoFactorEnabled,
+        accessToken: user.twoFactorEnabled ? undefined : this.generateToken(user),
       };
     }
 
@@ -149,7 +158,19 @@ export class GoogleAuthService {
     return {
       user: this.sanitizeUser(user),
       isNewUser: true,
+      requiresTwoFactor: user.twoFactorEnabled,
+      accessToken: user.twoFactorEnabled ? undefined : this.generateToken(user),
     };
+  }
+
+  public generateToken(user: User): string {
+    const payload = {
+      sub: user.id,
+      email: user.email,
+      name: user.name,
+      roles: [user.role || 'user'],
+    };
+    return this.jwtService.sign(payload);
   }
 
   /**

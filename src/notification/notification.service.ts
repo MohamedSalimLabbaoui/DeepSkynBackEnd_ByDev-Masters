@@ -23,7 +23,9 @@ export class NotificationService {
   /**
    * Create a new notification and send it in real-time
    */
-  async create(createNotificationDto: CreateNotificationDto): Promise<Notification> {
+  async create(
+    createNotificationDto: CreateNotificationDto,
+  ): Promise<Notification> {
     const notification = await this.prisma.notification.create({
       data: {
         userId: createNotificationDto.userId,
@@ -46,7 +48,9 @@ export class NotificationService {
   /**
    * Create multiple notifications at once
    */
-  async createMany(notifications: CreateNotificationDto[]): Promise<{ count: number }> {
+  async createMany(
+    notifications: CreateNotificationDto[],
+  ): Promise<{ count: number }> {
     const result = await this.prisma.notification.createMany({
       data: notifications.map((n) => ({
         userId: n.userId,
@@ -253,7 +257,9 @@ export class NotificationService {
   /**
    * Delete old notifications (cleanup job)
    */
-  async deleteOldNotifications(daysOld: number = 30): Promise<{ count: number }> {
+  async deleteOldNotifications(
+    daysOld: number = 30,
+  ): Promise<{ count: number }> {
     const cutoffDate = new Date();
     cutoffDate.setDate(cutoffDate.getDate() - daysOld);
 

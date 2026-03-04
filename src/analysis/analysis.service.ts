@@ -12,6 +12,7 @@ import { NotificationService } from '../notification/notification.service';
 import { CreateAnalysisDto } from './dto/create-analysis.dto';
 import { RealTimeScanDto } from './dto/real-time-scan.dto';
 import { Analysis } from '@prisma/client';
+import { Prisma } from '@prisma/client';
 
 export interface AnalysisWithResults extends Analysis {
   geminiResults?: GeminiAnalysisResult;
@@ -75,7 +76,13 @@ export class AnalysisService {
     });
 
     // Process analysis asynchronously
-    this.processAnalysis(analysis.id, userId, imageUrls, questionnaire, startTime);
+    this.processAnalysis(
+      analysis.id,
+      userId,
+      imageUrls,
+      questionnaire,
+      startTime,
+    );
 
     return analysis;
   }
@@ -83,7 +90,10 @@ export class AnalysisService {
   /**
    * Create analysis from existing image URLs
    */
-  async create(userId: string, createAnalysisDto: CreateAnalysisDto): Promise<Analysis> {
+  async create(
+    userId: string,
+    createAnalysisDto: CreateAnalysisDto,
+  ): Promise<Analysis> {
     const startTime = Date.now();
 
     const analysis = await this.prisma.analysis.create({
@@ -210,7 +220,9 @@ export class AnalysisService {
         actionUrl: `/analyses/${analysisId}`,
       });
 
-      this.logger.log(`Analysis ${analysisId} completed in ${processingTime}ms`);
+      this.logger.log(
+        `Analysis ${analysisId} completed in ${processingTime}ms`,
+      );
     } catch (error) {
       this.logger.error(`Analysis ${analysisId} failed`, error);
 
@@ -227,7 +239,8 @@ export class AnalysisService {
       await this.notificationService.create({
         userId,
         title: 'Analyse échouée',
-        message: "Une erreur s'est produite lors de l'analyse. Veuillez réessayer.",
+        message:
+          "Une erreur s'est produite lors de l'analyse. Veuillez réessayer.",
         type: 'error',
         actionUrl: `/analyses/${analysisId}`,
       });
@@ -286,6 +299,71 @@ export class AnalysisService {
     return { analyses, total };
   }
 
+  async findAllForAdmin(options: {
+    page?: number;
+    limit?: number;
+    fromDate?: string;
+    toDate?: string;
+    skinType?: string;
+    minScore?: number;
+    maxScore?: number;
+    status?: string;
+  }) {
+    const page = options.page || 1;
+    const limit = options.limit || 20;
+    const skip = (page - 1) * limit;
+
+    const where: Prisma.AnalysisWhereInput = {
+      ...(options.status ? { status: options.status } : {}),
+      ...(options.minScore !== undefined || options.maxScore !== undefined
+        ? {
+            healthScore: {
+              ...(options.minScore !== undefined ? { gte: options.minScore } : {}),
+              ...(options.maxScore !== undefined ? { lte: options.maxScore } : {}),
+            },
+          }
+        : {}),
+      ...(options.fromDate || options.toDate
+        ? {
+            createdAt: {
+              ...(options.fromDate ? { gte: new Date(options.fromDate) } : {}),
+              ...(options.toDate ? { lte: new Date(options.toDate) } : {}),
+            },
+          }
+        : {}),
+      ...(options.skinType
+        ? { user: { skinProfile: { is: { skinType: options.skinType } } } }
+        : {}),
+    };
+
+    const [analyses, total] = await Promise.all([
+      this.prisma.analysis.findMany({
+        where,
+        skip,
+        take: limit,
+        orderBy: { createdAt: 'desc' },
+        include: {
+          user: {
+            select: {
+              id: true,
+              email: true,
+              name: true,
+              skinProfile: {
+                select: {
+                  skinType: true,
+                  healthScore: true,
+                },
+              },
+            },
+          },
+        },
+      }),
+      this.prisma.analysis.count({ where }),
+    ]);
+
+    return { analyses, total, page, limit };
+  }
+
   /**
    * Get analysis by ID
    */
@@ -340,6 +418,34 @@ export class AnalysisService {
     return this.findById(id, userId);
   }
 
+  async retryAnalysisForAdmin(id: string): Promise<Analysis> {
+    const analysis = await this.prisma.analysis.findUnique({ where: { id } });
+
+    if (!analysis) {
+      throw new NotFoundException(`Analysis with ID ${id} not found`);
+    }
+
+    if (analysis.status !== 'failed') {
+      throw new BadRequestException('Only failed analyses can be retried');
+    }
+
+    await this.prisma.analysis.update({
+      where: { id },
+      data: { status: 'processing' },
+    });
+
+    const startTime = Date.now();
+    this.processAnalysis(
+      id,
+      analysis.userId,
+      analysis.images,
+      analysis.questionnaire as Record<string, any>,
+      startTime,
+    );
+
+    return this.prisma.analysis.findUnique({ where: { id } }) as Promise<Analysis>;
+  }
+
   /**
    * Delete analysis and associated images
    */
@@ -384,7 +490,9 @@ export class AnalysisService {
 
     const averageHealthScore =
       healthScores.length > 0
-        ? Math.round(healthScores.reduce((a, b) => a + b, 0) / healthScores.length)
+        ? Math.round(
+            healthScores.reduce((a, b) => a + b, 0) / healthScores.length,
+          )
         : 0;
 
     const conditionCount: Record<string, number> = {};
@@ -449,11 +557,16 @@ export class AnalysisService {
       failedAnalyses: failed.length,
       averageHealthScore:
         healthScores.length > 0
-          ? Math.round(healthScores.reduce((a, b) => a + b, 0) / healthScores.length)
+          ? Math.round(
+              healthScores.reduce((a, b) => a + b, 0) / healthScores.length,
+            )
           : 0,
       averageProcessingTime:
         processingTimes.length > 0
-          ? Math.round(processingTimes.reduce((a, b) => a + b, 0) / processingTimes.length)
+          ? Math.round(
+              processingTimes.reduce((a, b) => a + b, 0) /
+                processingTimes.length,
+            )
           : 0,
       topConditions,
     };
@@ -469,7 +582,8 @@ export class AnalysisService {
       return 'Effectuez une analyse de peau pour recevoir des conseils personnalisés.';
     }
 
-    const results = latestAnalysis.results as unknown as GeminiAnalysisResult | null;
+    const results =
+      latestAnalysis.results as unknown as GeminiAnalysisResult | null;
     if (!results) {
       return 'Effectuez une nouvelle analyse pour recevoir des conseils personnalisés.';
     }
@@ -510,7 +624,9 @@ export class AnalysisService {
     const conditions2 = new Set(analysis2.conditions);
 
     const newConditions = [...conditions2].filter((c) => !conditions1.has(c));
-    const resolvedConditions = [...conditions1].filter((c) => !conditions2.has(c));
+    const resolvedConditions = [...conditions1].filter(
+      (c) => !conditions2.has(c),
+    );
 
     return {
       analysis1,

@@ -27,11 +27,17 @@ export class MailService {
     userName: string,
     resetToken: string,
   ): Promise<void> {
-    const frontendUrl = this.configService.get<string>('FRONTEND_URL', 'http://localhost:3001');
+    const frontendUrl = this.configService.get<string>(
+      'FRONTEND_URL',
+      'http://localhost:3001',
+    );
     const resetUrl = `${frontendUrl}/auth/reset-password?token=${resetToken}`;
 
     const mailOptions: nodemailer.SendMailOptions = {
-      from: this.configService.get<string>('MAIL_FROM', '"DeepSkyn" <noreply@deepskyn.com>'),
+      from: this.configService.get<string>(
+        'MAIL_FROM',
+        '"DeepSkyn" <noreply@deepskyn.com>',
+      ),
       to,
       subject: 'DeepSkyn - Réinitialisation de votre mot de passe',
       html: this.getPasswordResetTemplate(userName, resetUrl),
@@ -41,8 +47,11 @@ export class MailService {
       await this.transporter.sendMail(mailOptions);
       this.logger.log(`Email de réinitialisation envoyé à ${to}`);
     } catch (error) {
-      this.logger.error(`Erreur lors de l'envoi de l'email à ${to}`, error.stack);
-      throw new Error('Impossible d\'envoyer l\'email de réinitialisation');
+      this.logger.error(
+        `Erreur lors de l'envoi de l'email à ${to}`,
+        error.stack,
+      );
+      throw new Error("Impossible d'envoyer l'email de réinitialisation");
     }
   }
 
@@ -51,7 +60,10 @@ export class MailService {
    */
   async sendPasswordChangedEmail(to: string, userName: string): Promise<void> {
     const mailOptions: nodemailer.SendMailOptions = {
-      from: this.configService.get<string>('MAIL_FROM', '"DeepSkyn" <noreply@deepskyn.com>'),
+      from: this.configService.get<string>(
+        'MAIL_FROM',
+        '"DeepSkyn" <noreply@deepskyn.com>',
+      ),
       to,
       subject: 'DeepSkyn - Votre mot de passe a été modifié',
       html: this.getPasswordChangedTemplate(userName),
@@ -59,9 +71,14 @@ export class MailService {
 
     try {
       await this.transporter.sendMail(mailOptions);
-      this.logger.log(`Email de confirmation de changement de mot de passe envoyé à ${to}`);
+      this.logger.log(
+        `Email de confirmation de changement de mot de passe envoyé à ${to}`,
+      );
     } catch (error) {
-      this.logger.error(`Erreur lors de l'envoi de l'email de confirmation à ${to}`, error.stack);
+      this.logger.error(
+        `Erreur lors de l'envoi de l'email de confirmation à ${to}`,
+        error.stack,
+      );
     }
   }
 
@@ -79,7 +96,10 @@ export class MailService {
         : 'DeepSkyn - Vous nous manquez ! ✨';
 
     const mailOptions: nodemailer.SendMailOptions = {
-      from: this.configService.get<string>('MAIL_FROM', '"DeepSkyn" <noreply@deepskyn.com>'),
+      from: this.configService.get<string>(
+        'MAIL_FROM',
+        '"DeepSkyn" <noreply@deepskyn.com>',
+      ),
       to,
       subject,
       html: this.getReEngagementTemplate(userName, riskLevel),
@@ -87,9 +107,14 @@ export class MailService {
 
     try {
       await this.transporter.sendMail(mailOptions);
-      this.logger.log(`Email de re-engagement envoyé à ${to} (risque: ${riskLevel})`);
+      this.logger.log(
+        `Email de re-engagement envoyé à ${to} (risque: ${riskLevel})`,
+      );
     } catch (error) {
-      this.logger.error(`Erreur lors de l'envoi de l'email de re-engagement à ${to}`, error.stack);
+      this.logger.error(
+        `Erreur lors de l'envoi de l'email de re-engagement à ${to}`,
+        error.stack,
+      );
       throw error;
     }
   }
@@ -213,7 +238,10 @@ export class MailService {
     userName: string,
     riskLevel: 'high' | 'critical',
   ): string {
-    const frontendUrl = this.configService.get<string>('FRONTEND_URL', 'http://localhost:5173');
+    const frontendUrl = this.configService.get<string>(
+      'FRONTEND_URL',
+      'http://localhost:5173',
+    );
     const isCritical = riskLevel === 'critical';
 
     const heroGradient = isCritical
@@ -231,15 +259,43 @@ export class MailService {
 
     const tips = isCritical
       ? [
-          { emoji: '📸', title: 'Nouvelle analyse IA', desc: 'Découvrez comment votre peau a évolué depuis votre dernière visite' },
-          { emoji: '🧴', title: 'Routine personnalisée', desc: 'Obtenez une routine adaptée à votre type de peau actuel' },
-          { emoji: '💬', title: 'Conseils d\'experts', desc: 'Notre IA dermatologue est prête à répondre à vos questions' },
-          { emoji: '🎁', title: 'Surprise pour vous', desc: 'Un cadeau vous attend dans l\'application pour votre retour' },
+          {
+            emoji: '📸',
+            title: 'Nouvelle analyse IA',
+            desc: 'Découvrez comment votre peau a évolué depuis votre dernière visite',
+          },
+          {
+            emoji: '🧴',
+            title: 'Routine personnalisée',
+            desc: 'Obtenez une routine adaptée à votre type de peau actuel',
+          },
+          {
+            emoji: '💬',
+            title: "Conseils d'experts",
+            desc: 'Notre IA dermatologue est prête à répondre à vos questions',
+          },
+          {
+            emoji: '🎁',
+            title: 'Surprise pour vous',
+            desc: "Un cadeau vous attend dans l'application pour votre retour",
+          },
         ]
       : [
-          { emoji: '🌟', title: 'Suivez vos progrès', desc: 'Voyez l\'évolution de votre peau au fil du temps' },
-          { emoji: '📊', title: 'Analyse mise à jour', desc: 'Notre IA s\'est améliorée ! Testez une nouvelle analyse' },
-          { emoji: '🤝', title: 'Communauté active', desc: 'Rejoignez les discussions et partagez vos expériences' },
+          {
+            emoji: '🌟',
+            title: 'Suivez vos progrès',
+            desc: "Voyez l'évolution de votre peau au fil du temps",
+          },
+          {
+            emoji: '📊',
+            title: 'Analyse mise à jour',
+            desc: "Notre IA s'est améliorée ! Testez une nouvelle analyse",
+          },
+          {
+            emoji: '🤝',
+            title: 'Communauté active',
+            desc: 'Rejoignez les discussions et partagez vos expériences',
+          },
         ];
 
     const tipsHtml = tips

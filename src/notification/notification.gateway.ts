@@ -126,7 +126,11 @@ export class NotificationGateway
   /**
    * Send notification read status update
    */
-  sendNotificationReadStatus(userId: string, notificationId: string, isRead: boolean) {
+  sendNotificationReadStatus(
+    userId: string,
+    notificationId: string,
+    isRead: boolean,
+  ) {
     this.server.to(`user:${userId}`).emit('notificationRead', {
       notificationId,
       isRead,
@@ -179,7 +183,9 @@ export class NotificationGateway
    * Check if a user is online
    */
   isUserOnline(userId: string): boolean {
-    return this.userSockets.has(userId) && this.userSockets.get(userId).size > 0;
+    return (
+      this.userSockets.has(userId) && this.userSockets.get(userId).size > 0
+    );
   }
 
   /**

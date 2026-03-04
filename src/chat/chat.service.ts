@@ -9,7 +9,12 @@ import { GeminiService } from '../analysis/services/gemini.service';
 import { SkinProfileService } from '../skin-profile/skin-profile.service';
 import { SubscriptionService } from '../subscription/subscription.service';
 import { CrawlingService } from '../crawling/crawling.service';
-import { CreateChatDto, SendMessageDto, MessageRole, ChatMessageDto } from './dto';
+import {
+  CreateChatDto,
+  SendMessageDto,
+  MessageRole,
+  ChatMessageDto,
+} from './dto';
 import { ChatHistory } from '@prisma/client';
 
 export interface ChatMessage {
@@ -46,7 +51,7 @@ export class ChatService {
   ): Promise<ChatResponse> {
     // Vérifier les limites pour les utilisateurs gratuits
     const isPremium = await this.subscriptionService.isPremium(userId);
-    
+
     if (!isPremium) {
       const todayMessages = await this.getTodayMessageCount(userId);
       if (todayMessages >= this.MAX_FREE_MESSAGES) {
@@ -84,7 +89,11 @@ export class ChatService {
     messages.push(userMessage);
 
     // Générer la réponse AI
-    const aiResponse = await this.generateAIResponse(messages, context, isPremium);
+    const aiResponse = await this.generateAIResponse(
+      messages,
+      context,
+      isPremium,
+    );
 
     const assistantMessage: ChatMessage = {
       role: MessageRole.ASSISTANT,
@@ -114,7 +123,10 @@ export class ChatService {
   /**
    * Créer un nouveau chat
    */
-  async create(userId: string, createChatDto: CreateChatDto): Promise<ChatHistory> {
+  async create(
+    userId: string,
+    createChatDto: CreateChatDto,
+  ): Promise<ChatHistory> {
     const chat = await this.prisma.chatHistory.create({
       data: {
         userId,
@@ -207,7 +219,7 @@ export class ChatService {
       const messages = chat.messages as unknown as ChatMessage[];
       if (Array.isArray(messages)) {
         count += messages.filter(
-          m => m.role === MessageRole.USER && new Date(m.timestamp) >= today,
+          (m) => m.role === MessageRole.USER && new Date(m.timestamp) >= today,
         ).length;
       }
     }
@@ -332,7 +344,10 @@ de passer à Premium pour des recommandations plus détaillées quand c'est pert
 
     const recent = messages.slice(-10); // Garder les 10 derniers messages
     return recent
-      .map(m => `${m.role === MessageRole.USER ? 'Utilisateur' : 'Assistant'}: ${m.content}`)
+      .map(
+        (m) =>
+          `${m.role === MessageRole.USER ? 'Utilisateur' : 'Assistant'}: ${m.content}`,
+      )
       .join('\n');
   }
 
@@ -371,8 +386,9 @@ Pour un service prioritaire, pensez à notre abonnement Premium !`;
     return {
       totalChats: chats.length,
       totalMessages,
-      premiumChats: chats.filter(c => c.isPremium).length,
-      averageMessagesPerChat: chats.length > 0 ? Math.round(totalMessages / chats.length) : 0,
+      premiumChats: chats.filter((c) => c.isPremium).length,
+      averageMessagesPerChat:
+        chats.length > 0 ? Math.round(totalMessages / chats.length) : 0,
     };
   }
 }

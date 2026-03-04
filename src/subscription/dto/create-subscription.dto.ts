@@ -22,7 +22,7 @@ export enum SubscriptionStatus {
 
 export class CreateSubscriptionDto {
   @ApiPropertyOptional({
-    description: 'Plan d\'abonnement',
+    description: "Plan d'abonnement",
     enum: SubscriptionPlan,
     default: 'free',
   })
@@ -31,7 +31,7 @@ export class CreateSubscriptionDto {
   plan?: SubscriptionPlan = SubscriptionPlan.FREE;
 
   @ApiPropertyOptional({
-    description: 'Statut de l\'abonnement',
+    description: "Statut de l'abonnement",
     enum: SubscriptionStatus,
     default: 'active',
   })
@@ -40,7 +40,7 @@ export class CreateSubscriptionDto {
   status?: SubscriptionStatus = SubscriptionStatus.ACTIVE;
 
   @ApiPropertyOptional({
-    description: 'Montant de l\'abonnement',
+    description: "Montant de l'abonnement",
     example: 29.99,
   })
   @IsNumber()
@@ -57,7 +57,7 @@ export class CreateSubscriptionDto {
   currency?: string = 'TND';
 
   @ApiPropertyOptional({
-    description: 'Date de début de l\'abonnement',
+    description: "Date de début de l'abonnement",
     example: '2026-02-04T00:00:00.000Z',
   })
   @IsDateString()
@@ -65,7 +65,7 @@ export class CreateSubscriptionDto {
   startDate?: string;
 
   @ApiPropertyOptional({
-    description: 'Date de fin de l\'abonnement',
+    description: "Date de fin de l'abonnement",
     example: '2026-03-04T00:00:00.000Z',
   })
   @IsDateString()

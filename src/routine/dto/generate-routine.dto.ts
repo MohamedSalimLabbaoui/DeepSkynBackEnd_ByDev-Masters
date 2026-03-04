@@ -1,9 +1,4 @@
-import {
-  IsString,
-  IsOptional,
-  IsEnum,
-  IsArray,
-} from 'class-validator';
+import { IsString, IsOptional, IsEnum, IsArray } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { RoutineType } from './create-routine.dto';
 
@@ -62,7 +57,7 @@ export class GenerateRoutineDto {
   preferredBrands?: string;
 
   @ApiPropertyOptional({
-    description: 'Notes additionnelles pour l\'IA',
+    description: "Notes additionnelles pour l'IA",
     example: 'Je préfère les produits naturels',
   })
   @IsString()
