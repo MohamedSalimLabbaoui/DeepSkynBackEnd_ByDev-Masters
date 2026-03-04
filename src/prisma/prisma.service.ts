@@ -29,6 +29,7 @@ export class PrismaService
     }
 
     // Suppression dans l'ordre inverse des dépendances
+    await this.dermatologyArticle.deleteMany();
     await this.subscription.deleteMany();
     await this.chatHistory.deleteMany();
     await this.routine.deleteMany();

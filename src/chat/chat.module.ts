@@ -5,6 +5,7 @@ import { PrismaModule } from '../prisma/prisma.module';
 import { AnalysisModule } from '../analysis/analysis.module';
 import { SkinProfileModule } from '../skin-profile/skin-profile.module';
 import { SubscriptionModule } from '../subscription/subscription.module';
+import { CrawlingModule } from '../crawling/crawling.module';
 
 @Module({
   imports: [
@@ -12,6 +13,7 @@ import { SubscriptionModule } from '../subscription/subscription.module';
     AnalysisModule, // Pour GeminiService
     SkinProfileModule,
     SubscriptionModule,
+    CrawlingModule, // Pour enrichir le chatbot avec des articles dermatologiques
   ],
   controllers: [ChatController],
   providers: [ChatService],

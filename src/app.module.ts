@@ -15,6 +15,7 @@ import { LikesModule } from './likes/likes.module';
 import { CommentsModule } from './comments/comments.module';
 import { MailModule } from './mail/mail.module';
 import { ChurnModule } from './churn/churn.module';
+import { CrawlingModule } from './crawling/crawling.module';
 
 @Module({
   imports: [
@@ -37,6 +38,7 @@ import { ChurnModule } from './churn/churn.module';
     LikesModule,
     CommentsModule,
     ChurnModule,
+    CrawlingModule,
   ],
   controllers: [],
   providers: [],

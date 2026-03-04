@@ -8,6 +8,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { GeminiService } from '../analysis/services/gemini.service';
 import { SkinProfileService } from '../skin-profile/skin-profile.service';
 import { SubscriptionService } from '../subscription/subscription.service';
+import { CrawlingService } from '../crawling/crawling.service';
 import { CreateChatDto, SendMessageDto, MessageRole, ChatMessageDto } from './dto';
 import { ChatHistory } from '@prisma/client';
 
@@ -33,6 +34,7 @@ export class ChatService {
     private readonly geminiService: GeminiService,
     private readonly skinProfileService: SkinProfileService,
     private readonly subscriptionService: SubscriptionService,
+    private readonly crawlingService: CrawlingService,
   ) {}
 
   /**
@@ -242,16 +244,31 @@ export class ChatService {
   }
 
   /**
-   * Générer une réponse AI avec Gemini
+   * Générer une réponse AI avec Gemini, enrichie par les articles crawlés
    */
   private async generateAIResponse(
     messages: ChatMessage[],
     context: Record<string, any>,
     isPremium: boolean,
   ): Promise<string> {
-    const systemPrompt = this.buildSystemPrompt(context, isPremium);
-    const conversationHistory = this.formatConversationHistory(messages.slice(0, -1)); // Exclude last user message
     const lastUserMessage = messages[messages.length - 1]?.content || '';
+
+    // Enrichir le contexte avec des articles dermatologiques pertinents
+    let articlesContext = '';
+    try {
+      const relevantArticles = await this.crawlingService.getRelevantArticles(lastUserMessage, 3);
+      if (relevantArticles.length > 0) {
+        articlesContext = '\n\nRéférences dermatologiques récentes à utiliser pour enrichir ta réponse:\n' +
+          relevantArticles.map((a, i) => 
+            `${i + 1}. [${a.source}] "${a.title}"\n   ${a.summary}`
+          ).join('\n');
+      }
+    } catch (error) {
+      this.logger.warn('Impossible de récupérer les articles pour le contexte AI', error.message);
+    }
+
+    const systemPrompt = this.buildSystemPrompt(context, isPremium, articlesContext);
+    const conversationHistory = this.formatConversationHistory(messages.slice(0, -1)); // Exclude last user message
 
     try {
       const response = await this.geminiService.chat(
@@ -272,10 +289,12 @@ export class ChatService {
   private buildSystemPrompt(
     context: Record<string, any>,
     isPremium: boolean,
+    articlesContext: string = '',
   ): string {
     let prompt = `Tu es DeepSkyn AI, un assistant expert en dermatologie et soins de la peau. 
 Tu fournis des conseils personnalisés, bienveillants et basés sur des connaissances dermatologiques.
-Réponds toujours en français de manière professionnelle mais accessible.`;
+Réponds toujours en français de manière professionnelle mais accessible.
+Tu t'appuies sur des articles médicaux récents pour fournir des informations à jour.`;
 
     if (context.skinProfile) {
       prompt += `\n\nProfil de peau de l'utilisateur:
@@ -295,6 +314,11 @@ Réponds toujours en français de manière professionnelle mais accessible.`;
     } else {
       prompt += `\n\nL'utilisateur est en plan gratuit. Fournis des conseils généraux et suggère 
 de passer à Premium pour des recommandations plus détaillées quand c'est pertinent.`;
+    }
+
+    // Ajouter le contexte des articles crawlés
+    if (articlesContext) {
+      prompt += articlesContext;
     }
 
     return prompt;

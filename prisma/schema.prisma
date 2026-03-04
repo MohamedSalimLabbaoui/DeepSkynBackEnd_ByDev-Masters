@@ -237,3 +237,25 @@ model Comment {
 
   @@map("comments")
 }
+
+// Table 11: dermatology_articles (Articles dermatologiques crawlés)
+// Base de connaissances alimentée par le crawler pour le chatbot AI
+model DermatologyArticle {
+  id          String    @id @default(uuid())
+  title       String
+  url         String    @unique  // URL source (évite les doublons)
+  source      String    // healthline, dermnet, aad, medicalnewstoday
+  summary     String    // Résumé de l'article (max 500 chars)
+  content     String    // Contenu complet de l'article
+  category    String    // Catégorie normalisée (acne, eczema, etc.)
+  tags        String[]  // Tags extraits automatiquement
+  imageUrl    String?   // URL de l'image principale
+  publishedAt DateTime? // Date de publication originale
+  crawledAt   DateTime  @default(now()) // Date du crawl
+  updatedAt   DateTime  @updatedAt
+
+  @@index([source])
+  @@index([category])
+  @@index([crawledAt])
+  @@map("dermatology_articles")
+}
