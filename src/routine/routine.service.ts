@@ -13,6 +13,7 @@ import {
   UpdateRoutineDto,
   GenerateRoutineDto,
   RoutineType,
+  AdviseRoutineDto,
 } from './dto';
 import { Routine } from '@prisma/client';
 
@@ -642,5 +643,96 @@ Format each step with: order, name, category, description, duration (in seconds)
       where: { id },
       data: { steps: reorderedSteps as any },
     });
+  }
+
+  /**
+   * Get AI advice on a routine change
+   */
+  async adviseOnChange(
+    userId: string,
+    routineId: string,
+    adviseDto: AdviseRoutineDto,
+  ): Promise<{ advice: string; rating: string; emoji: string }> {
+    // Get user's skin profile for context
+    let skinProfile = null;
+    try {
+      skinProfile = await this.skinProfileService.findByUserId(userId);
+    } catch {
+      this.logger.warn(`No skin profile found for user ${userId}`);
+    }
+
+    const prompt = `
+You are an expert dermatologist and skincare advisor. A user just modified their skincare routine.
+
+User profile:
+- Skin type: ${skinProfile?.skinType || 'not specified'}
+- Concerns: ${(skinProfile?.concerns || []).join(', ') || 'none'}
+- Sensitivities: ${(skinProfile?.sensitivities || []).join(', ') || 'none'}
+
+Change made: ${adviseDto.changeType}
+${adviseDto.changeDescription ? `Description: ${adviseDto.changeDescription}` : ''}
+${adviseDto.addedStepName ? `New step added: ${adviseDto.addedStepName}` : ''}
+
+Current routine order after change:
+${adviseDto.currentSteps.map((s, i) => `${i + 1}. ${s}`).join('\n')}
+
+Provide a short (2-3 sentences max), friendly expert opinion on this change.
+Include whether it improves or worsens the routine effectiveness.
+Be encouraging but honest. Use a conversational tone.
+Reply in French.
+Format your response as JSON: { "advice": "your advice text", "rating": "good|neutral|caution", "emoji": "appropriate emoji" }
+    `.trim();
+
+    try {
+      const result = await this.geminiService.getSkincareAdvice(
+        [skinProfile?.skinType || 'normal'],
+        [prompt],
+      );
+
+      const adviceText = typeof result === 'object' ? (result as any)?.advice || JSON.stringify(result) : String(result || '');
+
+      // Try to parse JSON from the response
+      try {
+        const jsonMatch = adviceText.match(/\{[\s\S]*\}/);
+        if (jsonMatch) {
+          const parsed = JSON.parse(jsonMatch[0]);
+          return {
+            advice: parsed.advice || 'Modification enregistrée avec succès.',
+            rating: parsed.rating || 'neutral',
+            emoji: parsed.emoji || '✨',
+          };
+        }
+      } catch {
+        // If JSON parsing fails, return raw advice
+      }
+
+      return {
+        advice:
+          adviceText.substring(0, 300) ||
+          'Modification enregistrée. Continuez à prendre soin de votre peau !',
+        rating: 'neutral',
+        emoji: '✨',
+      };
+    } catch (error) {
+      this.logger.error('Failed to get AI advice', error.message);
+
+      // Return a friendly fallback
+      const fallbacks = {
+        reorder:
+          "Réorganisation notée ! L'ordre d'application est important — du plus léger au plus épais est généralement recommandé. 👍",
+        add_step:
+          "Nouvel ajout intéressant ! Assurez-vous qu'il n'y a pas d'incompatibilité avec vos autres produits. ✨",
+        remove_step:
+          'Étape retirée. Parfois, simplifier sa routine est la meilleure approche ! 🌿',
+      };
+
+      return {
+        advice:
+          fallbacks[adviseDto.changeType] ||
+          'Modification enregistrée avec succès.',
+        rating: 'neutral',
+        emoji: '✨',
+      };
+    }
   }
 }

@@ -25,6 +25,7 @@ import {
   UpdateRoutineDto,
   GenerateRoutineDto,
   RoutineType,
+  AdviseRoutineDto,
 } from './dto';
 import { KeycloakAuthGuard } from '../auth/guards/keycloak-auth.guard';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
@@ -224,6 +225,26 @@ export class RoutineController {
     @Body('newOrder') newOrder: number[],
   ): Promise<Routine> {
     return this.routineService.reorderSteps(id, userId, newOrder);
+  }
+
+  /**
+   * Get AI advice on a routine change
+   * POST /routines/:id/advise
+   */
+  @Post(':id/advise')
+  @ApiOperation({
+    summary: 'Avis IA sur modification',
+    description: "Obtient un avis expert de l'IA sur une modification de routine",
+  })
+  @ApiParam({ name: 'id', description: 'ID de la routine' })
+  @ApiResponse({ status: 200, description: 'Avis IA retourné' })
+  @HttpCode(HttpStatus.OK)
+  async adviseOnChange(
+    @Param('id') id: string,
+    @CurrentUser('sub') userId: string,
+    @Body() adviseDto: AdviseRoutineDto,
+  ): Promise<{ advice: string; rating: string; emoji: string }> {
+    return this.routineService.adviseOnChange(userId, id, adviseDto);
   }
 
   /**
