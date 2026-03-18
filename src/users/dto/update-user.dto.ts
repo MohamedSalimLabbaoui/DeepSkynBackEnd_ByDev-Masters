@@ -6,6 +6,10 @@ export class UpdateUserDto {
     avatar?: string;
 
     @IsOptional()
+    @IsString()
+    avatar3D?: string;
+
+    @IsOptional()
     @IsDateString()
     dateOfBirth?: string;
 

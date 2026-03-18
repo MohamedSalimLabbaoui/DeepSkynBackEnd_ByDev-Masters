@@ -1,5 +1,7 @@
-import { Body, Controller, Get, Patch, UseGuards, NotFoundException, Param, Query } from '@nestjs/common';
+import { Body, Controller, Get, Patch, Post, UseGuards, NotFoundException, Param, Query, UseInterceptors, UploadedFile } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
 import { UsersService } from './users.service';
+import { SupabaseService } from '../analysis/services/supabase.service';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { KeycloakAuthGuard } from '../auth/guards/keycloak-auth.guard';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
@@ -11,7 +13,10 @@ import { UpdateUserStatusDto } from './dto/update-user-status.dto';
 @Controller('users')
 @UseGuards(KeycloakAuthGuard)
 export class UsersController {
-    constructor(private readonly usersService: UsersService) { }
+    constructor(
+        private readonly usersService: UsersService,
+        private readonly supabaseService: SupabaseService
+    ) { }
 
     @Get('me')
     async getProfile(@CurrentUser('email') email: string) {
@@ -32,6 +37,16 @@ export class UsersController {
             throw new NotFoundException('User not found');
         }
         return this.usersService.update(user.id, updateUserDto);
+    }
+
+    @Post('avatar3d')
+    @UseInterceptors(FileInterceptor('file'))
+    async uploadAvatar3D(
+        @CurrentUser('userId') userId: string,
+        @UploadedFile() file: Express.Multer.File,
+    ) {
+        const result = await this.supabaseService.upload3DModel(file, userId);
+        return this.usersService.update(userId, { avatar3D: result.url });
     }
 
     @Get('admin/all')

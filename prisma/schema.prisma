@@ -24,6 +24,7 @@ model User {
   resetPasswordExpires DateTime? // Expiration du token de réinitialisation
   name               String?
   avatar             String?
+  avatar3D           String?
   preferredLanguage  String    @default("fr")
   dateOfBirth        DateTime?
   gender             String?

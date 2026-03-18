@@ -93,6 +93,54 @@ export class SupabaseService {
   }
 
   /**
+   * Upload a 3D model (.glb) to Supabase Storage
+   */
+  async upload3DModel(
+    file: Express.Multer.File,
+    userId: string,
+  ): Promise<UploadResult> {
+    try {
+      const maxSize = 50 * 1024 * 1024; // 50MB
+
+      if (!file.originalname.toLowerCase().endsWith('.glb')) {
+        throw new BadRequestException('Only .glb files are allowed');
+      }
+
+      if (file.size > maxSize) {
+        throw new BadRequestException('File size exceeds 50MB limit');
+      }
+
+      const fileName = `avatars3d/${userId}/${randomUUID()}.glb`;
+
+      this.logger.log(`Attempting 3D avatar upload: ${fileName}`);
+
+      const { data, error } = await this.supabase.storage
+        .from(this.bucket)
+        .upload(fileName, file.buffer, {
+          contentType: file.mimetype || 'model/gltf-binary',
+          upsert: true,
+        });
+
+      if (error) {
+        throw new BadRequestException(`Upload failed: ${error.message}`);
+      }
+
+      const { data: urlData } = this.supabase.storage
+        .from(this.bucket)
+        .getPublicUrl(fileName);
+
+      return {
+        url: urlData.publicUrl,
+        path: fileName,
+        bucket: this.bucket,
+      };
+    } catch (error) {
+      if (error instanceof BadRequestException) throw error;
+      throw new BadRequestException('Failed to upload 3D model');
+    }
+  }
+
+  /**
    * Upload multiple images to Supabase Storage
    */
   async uploadMultipleImages(
