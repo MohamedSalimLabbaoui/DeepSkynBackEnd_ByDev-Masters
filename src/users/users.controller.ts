@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Patch, Post, UseGuards, NotFoundException, Param, Query, UseInterceptors, UploadedFile } from '@nestjs/common';
+import { Body, Controller, Get, Patch, Post, UseGuards, NotFoundException, BadRequestException, Param, Query, UseInterceptors, UploadedFile } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { UsersService } from './users.service';
 import { SupabaseService } from '../analysis/services/supabase.service';
@@ -42,11 +42,20 @@ export class UsersController {
     @Post('avatar3d')
     @UseInterceptors(FileInterceptor('file'))
     async uploadAvatar3D(
-        @CurrentUser('userId') userId: string,
+        @CurrentUser('email') email: string,
         @UploadedFile() file: Express.Multer.File,
     ) {
-        const result = await this.supabaseService.upload3DModel(file, userId);
-        return this.usersService.update(userId, { avatar3D: result.url });
+        if (!file) {
+            throw new BadRequestException('Aucun fichier fourni');
+        }
+
+        const user = await this.usersService.findByEmail(email);
+        if (!user) {
+            throw new NotFoundException('Utilisateur non trouvé');
+        }
+
+        const result = await this.supabaseService.upload3DModel(file, user.id);
+        return this.usersService.update(user.id, { avatar3D: result.url });
     }
 
     @Get('admin/all')
