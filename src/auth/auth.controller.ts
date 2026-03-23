@@ -4,6 +4,7 @@ import {
   Patch,
   Body,
   Get,
+  Delete,
   Req,
   Res,
   UseGuards,
@@ -49,6 +50,7 @@ import { ForgotPasswordDto } from './dto/forgot-password.dto';
 import { ResetPasswordDto } from './dto/reset-password.dto';
 import { RegisterDto } from './dto/register.dto';
 import { UpdateProfileDto } from './dto/update-profile.dto';
+import { UpdateAddressDto } from './dto/update-address.dto';
 import { PasswordResetService } from './services/password-reset.service';
 import { PrismaService } from '../prisma/prisma.service';
 import axios from 'axios';
@@ -293,12 +295,48 @@ export class AuthController {
     // Try finding by ID first
     let user = await this.prisma.user.findUnique({
       where: { id: userId },
+      select: {
+        id: true,
+        email: true,
+        name: true,
+        avatar: true,
+        coverPhoto: true,
+        dateOfBirth: true,
+        gender: true,
+        address: true,
+        city: true,
+        zipCode: true,
+        country: true,
+        latitude: true,
+        longitude: true,
+        preferredLanguage: true,
+        createdAt: true,
+        updatedAt: true,
+      },
     });
 
     // Fallback: search by email if ID lookup failed
     if (!user && currentUser.email) {
       user = await this.prisma.user.findUnique({
         where: { email: currentUser.email },
+        select: {
+          id: true,
+          email: true,
+          name: true,
+          avatar: true,
+          coverPhoto: true,
+          dateOfBirth: true,
+          gender: true,
+          address: true,
+          city: true,
+          zipCode: true,
+          country: true,
+          latitude: true,
+          longitude: true,
+          preferredLanguage: true,
+          createdAt: true,
+          updatedAt: true,
+        },
       });
     }
 
@@ -306,8 +344,7 @@ export class AuthController {
       throw new UnauthorizedException('Utilisateur non trouvé dans la base de données');
     }
 
-    const { password, refreshToken, twoFactorSecret, ...safeUser } = user;
-    return safeUser;
+    return user;
   }
 
   @Patch('profile')
@@ -325,10 +362,197 @@ export class AuthController {
     const user = await this.prisma.user.update({
       where: { id: userId },
       data: updateDto,
+      select: {
+        id: true,
+        email: true,
+        name: true,
+        avatar: true,
+        coverPhoto: true,
+        dateOfBirth: true,
+        gender: true,
+        address: true,
+        city: true,
+        zipCode: true,
+        country: true,
+        latitude: true,
+        longitude: true,
+        createdAt: true,
+        updatedAt: true,
+      },
     });
 
-    const { password, refreshToken, twoFactorSecret, ...safeUser } = user;
-    return safeUser;
+    return user;
+  }
+
+  // ==================== Address Management ====================
+
+  @Get('address')
+  @UseGuards(KeycloakAuthGuard)
+  @ApiBearerAuth('JWT-auth')
+  @ApiOperation({
+    summary: 'Récupérer l\'adresse',
+    description: 'Récupère les informations d\'adresse de l\'utilisateur',
+  })
+  @ApiResponse({ status: 200, description: 'Adresse retournée' })
+  @ApiResponse({ status: 401, description: 'Non authentifié' })
+  async getAddress(@CurrentUser('sub') userId: string) {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: {
+        id: true,
+        address: true,
+        city: true,
+        zipCode: true,
+        country: true,
+        latitude: true,
+        longitude: true,
+      },
+    });
+
+    if (!user) {
+      throw new UnauthorizedException('Utilisateur non trouvé');
+    }
+
+    return user;
+  }
+
+  @Post('address')
+  @UseGuards(KeycloakAuthGuard)
+  @ApiBearerAuth('JWT-auth')
+  @ApiOperation({
+    summary: 'Mettre à jour l\'adresse',
+    description: 'Met à jour l\'adresse et les coordonnées GPS de l\'utilisateur',
+  })
+  @ApiResponse({ status: 200, description: 'Adresse mise à jour' })
+  @ApiResponse({ status: 401, description: 'Non authentifié' })
+  async updateAddress(
+    @CurrentUser('sub') userId: string,
+    @Body() updateAddressDto: UpdateAddressDto,
+  ) {
+    const user = await this.prisma.user.update({
+      where: { id: userId },
+      data: {
+        address: updateAddressDto.address,
+        city: updateAddressDto.city,
+        zipCode: updateAddressDto.zipCode,
+        country: updateAddressDto.country,
+        latitude: updateAddressDto.latitude,
+        longitude: updateAddressDto.longitude,
+      },
+      select: {
+        id: true,
+        address: true,
+        city: true,
+        zipCode: true,
+        country: true,
+        latitude: true,
+        longitude: true,
+      },
+    });
+
+    return user;
+  }
+
+  @Delete('address')
+  @UseGuards(KeycloakAuthGuard)
+  @ApiBearerAuth('JWT-auth')
+  @ApiOperation({
+    summary: 'Supprimer l\'adresse',
+    description: 'Supprime les informations d\'adresse de l\'utilisateur',
+  })
+  @ApiResponse({ status: 200, description: 'Adresse supprimée' })
+  @ApiResponse({ status: 401, description: 'Non authentifié' })
+  async deleteAddress(@CurrentUser('sub') userId: string) {
+    const user = await this.prisma.user.update({
+      where: { id: userId },
+      data: {
+        address: null,
+        city: null,
+        zipCode: null,
+        country: null,
+        latitude: null,
+        longitude: null,
+      },
+      select: {
+        id: true,
+        address: true,
+        city: true,
+        zipCode: true,
+        country: true,
+        latitude: true,
+        longitude: true,
+      },
+    });
+
+    return user;
+  }
+
+  // ==================== Profile Media Management ====================
+
+  @Patch('profile/cover')
+  @UseGuards(KeycloakAuthGuard)
+  @ApiBearerAuth('JWT-auth')
+  @ApiOperation({
+    summary: 'Mettre à jour la photo de couverture',
+    description: 'Met à jour la photo de couverture du profil utilisateur',
+  })
+  @ApiResponse({ status: 200, description: 'Photo de couverture mise à jour' })
+  @ApiResponse({ status: 400, description: 'URL de photo invalide' })
+  @ApiResponse({ status: 401, description: 'Non authentifié' })
+  async updateCoverPhoto(
+    @CurrentUser('sub') userId: string,
+    @Body() body: { coverPhotoUrl: string },
+  ) {
+    if (!body.coverPhotoUrl || typeof body.coverPhotoUrl !== 'string') {
+      throw new BadRequestException('URL de photo de couverture requise et doit être une chaîne');
+    }
+
+    const user = await this.prisma.user.update({
+      where: { id: userId },
+      data: { coverPhoto: body.coverPhotoUrl },
+      select: {
+        id: true,
+        avatar: true,
+        coverPhoto: true,
+        name: true,
+        email: true,
+      },
+    });
+
+    return user;
+  }
+
+  @Patch('profile/avatar')
+  @UseGuards(KeycloakAuthGuard)
+  @ApiBearerAuth('JWT-auth')
+  @ApiOperation({
+    summary: 'Mettre à jour la photo de profil',
+    description: 'Met à jour l\'avatar/photo de profil de l\'utilisateur',
+  })
+  @ApiResponse({ status: 200, description: 'Photo de profil mise à jour' })
+  @ApiResponse({ status: 400, description: 'URL d\'avatar invalide' })
+  @ApiResponse({ status: 401, description: 'Non authentifié' })
+  async updateAvatar(
+    @CurrentUser('sub') userId: string,
+    @Body() body: { avatarUrl: string },
+  ) {
+    if (!body.avatarUrl || typeof body.avatarUrl !== 'string') {
+      throw new BadRequestException('URL d\'avatar requise et doit être une chaîne');
+    }
+
+    const user = await this.prisma.user.update({
+      where: { id: userId },
+      data: { avatar: body.avatarUrl },
+      select: {
+        id: true,
+        avatar: true,
+        coverPhoto: true,
+        name: true,
+        email: true,
+      },
+    });
+
+    return user;
   }
 
   @Get('roles')

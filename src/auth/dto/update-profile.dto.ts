@@ -1,4 +1,4 @@
-import { IsEmail, IsOptional, IsString, IsDateString } from 'class-validator';
+import { IsEmail, IsOptional, IsString, IsDateString, IsNumber, IsLatitude, IsLongitude } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 
 export class UpdateProfileDto {
@@ -31,4 +31,36 @@ export class UpdateProfileDto {
     @IsOptional()
     @IsString()
     preferredLanguage?: string;
+
+    @ApiProperty({ example: '123 Rue de la Paix, Tunis', required: false })
+    @IsOptional()
+    @IsString()
+    address?: string;
+
+    @ApiProperty({ example: 'Tunis', required: false })
+    @IsOptional()
+    @IsString()
+    city?: string;
+
+    @ApiProperty({ example: '1000', required: false })
+    @IsOptional()
+    @IsString()
+    zipCode?: string;
+
+    @ApiProperty({ example: 'Tunisia', required: false })
+    @IsOptional()
+    @IsString()
+    country?: string;
+
+    @ApiProperty({ example: 36.8065, required: false })
+    @IsOptional()
+    @IsNumber()
+    @IsLatitude()
+    latitude?: number;
+
+    @ApiProperty({ example: 10.1956, required: false })
+    @IsOptional()
+    @IsNumber()
+    @IsLongitude()
+    longitude?: number;
 }

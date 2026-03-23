@@ -25,6 +25,7 @@ model User {
   name               String?
   avatar             String?
   avatar3D           String?
+  coverPhoto         String?   // URL de la photo de couverture
   preferredLanguage  String    @default("fr")
   dateOfBirth        DateTime?
   gender             String?
@@ -41,6 +42,15 @@ model User {
   churnRiskLevel     String?   // low, medium, high, critical
   lastChurnAnalysis  DateTime? // Dernière analyse de churn
   reEngagementSentAt DateTime? // Dernier email de re-engagement envoyé
+  
+  // Localisation
+  address            String?   // Adresse complète
+  city               String?   // Ville
+  zipCode            String?   // Code postal
+  country            String?   // Pays
+  latitude           Float?    // Latitude (Google Maps)
+  longitude          Float?    // Longitude (Google Maps)
+  
   createdAt          DateTime  @default(now())
   updatedAt          DateTime  @updatedAt
 
