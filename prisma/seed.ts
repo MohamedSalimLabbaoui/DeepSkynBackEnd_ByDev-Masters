@@ -1,153 +1,133 @@
 import { PrismaClient } from '@prisma/client';
+import * as bcrypt from 'bcrypt';
 
 const prisma = new PrismaClient();
 
-async function main() {
-  console.log('🌱 Starting database seeding...');
-
-  // Créer un utilisateur admin
-  const adminUser = await prisma.user.upsert({
-    where: { email: 'admin@deepskyn.com' },
-    update: {},
-    create: {
-      email: 'admin@deepskyn.com',
-      name: 'Admin DeepSkyn',
-      role: 'admin',
-      emailVerified: true,
-      onboardingComplete: true,
-      preferredLanguage: 'fr',
-      settings: {
-        theme: 'light',
-        notifications: {
-          email: true,
-          push: true,
-        },
-      },
-    },
-  });
-
-  console.log('✅ Admin user created:', adminUser.email);
-
-  // Créer un utilisateur test
-  const testUser = await prisma.user.upsert({
-    where: { email: 'test@deepskyn.com' },
-    update: {},
-    create: {
-      email: 'test@deepskyn.com',
-      name: 'Test User',
-      role: 'user',
-      emailVerified: true,
-      onboardingComplete: true,
-      preferredLanguage: 'fr',
-      dateOfBirth: new Date('1990-01-15'),
-      gender: 'female',
-      settings: {
-        theme: 'dark',
-        notifications: {
-          email: true,
-          push: false,
-        },
-      },
-    },
-  });
-
-  console.log('✅ Test user created:', testUser.email);
-
-  // Créer un profil de peau pour l'utilisateur test
-  const skinProfile = await prisma.skinProfile.upsert({
-    where: { userId: testUser.id },
-    update: {},
-    create: {
-      userId: testUser.id,
-      skinType: 'combination',
-      fitzpatrickType: 3,
-      concerns: ['acne', 'hyperpigmentation', 'dryness'],
-      sensitivities: ['fragrances', 'alcohol'],
-      skinAge: 28,
-      healthScore: 72,
-    },
-  });
-
-  console.log('✅ Skin profile created for:', testUser.email);
-
-  // Créer un abonnement gratuit pour l'utilisateur test
-  const subscription = await prisma.subscription.upsert({
-    where: { userId: testUser.id },
-    update: {},
-    create: {
-      userId: testUser.id,
-      plan: 'free',
-      status: 'active',
-      currency: 'TND',
-    },
-  });
-
-  console.log('✅ Subscription created for:', testUser.email);
-
-  // Créer une routine de soins pour l'utilisateur test
-  const morningRoutine = await prisma.routine.create({
-    data: {
-      userId: testUser.id,
-      name: 'Routine Matinale',
-      type: 'AM',
-      isAIGenerated: true,
-      isActive: true,
-      steps: [
-        {
-          order: 1,
-          step: 'Nettoyage',
-          product: 'Nettoyant doux moussant',
-          duration: '60 seconds',
-        },
-        {
-          order: 2,
-          step: 'Tonique',
-          product: 'Lotion tonique hydratante',
-          duration: '30 seconds',
-        },
-        {
-          order: 3,
-          step: 'Sérum',
-          product: 'Sérum Vitamine C',
-          duration: '30 seconds',
-        },
-        {
-          order: 4,
-          step: 'Crème hydratante',
-          product: 'Crème jour SPF 30',
-          duration: '30 seconds',
-        },
-      ],
-      notes: 'Routine générée par AI basée sur votre profil de peau',
-    },
-  });
-
-  console.log('✅ Morning routine created');
-
-  // Créer une notification pour l'utilisateur test
-  const notification = await prisma.notification.create({
-    data: {
-      userId: testUser.id,
-      title: 'Bienvenue sur DeepSkyn!',
-      message:
-        'Votre compte a été créé avec succès. Commencez votre analyse de peau dès maintenant.',
-      type: 'success',
-      isRead: false,
-      actionUrl: '/analysis/new',
-    },
-  });
-
-  console.log('✅ Welcome notification created');
-
-  console.log('🎉 Database seeding completed successfully!');
+// Helper to hash passwords
+async function hashPassword(password: string): Promise<string> {
+  return bcrypt.hash(password, 10);
 }
 
-main()
-  .then(async () => {
-    await prisma.$disconnect();
-  })
-  .catch(async (e) => {
-    console.error('❌ Seeding error:', e);
-    await prisma.$disconnect();
+interface UserSeedData {
+  email: string;
+  password: string;
+  name: string;
+  skinType: 'dry' | 'oily' | 'combination' | 'normal' | 'sensitive';
+  concerns: string[];
+}
+
+const testUsers: UserSeedData[] = [
+  {
+    email: 'john.doe@example.com',
+    password: 'Password123!',
+    name: 'John Doe',
+    skinType: 'combination',
+    concerns: ['acne', 'oiliness'],
+  },
+  {
+    email: 'marie.smith@example.com',
+    password: 'SecurePass456!',
+    name: 'Marie Smith',
+    skinType: 'dry',
+    concerns: ['wrinkles', 'dryness', 'sensitivity'],
+  },
+  {
+    email: 'alex.johnson@example.com',
+    password: 'TestPassword789!',
+    name: 'Alex Johnson',
+    skinType: 'oily',
+    concerns: ['acne', 'pores', 'shine'],
+  },
+  {
+    email: 'emma.wilson@example.com',
+    password: 'Admin12345!',
+    name: 'Emma Wilson',
+    skinType: 'sensitive',
+    concerns: ['redness', 'irritation', 'sensitivity'],
+  },
+  {
+    email: 'demo@deepskyn.com',
+    password: 'Demo12345!',
+    name: 'Demo User',
+    skinType: 'normal',
+    concerns: ['maintenance', 'prevention'],
+  },
+];
+
+async function main() {
+  console.log('🌱 Starting database seeding...\n');
+
+  try {
+    // Create users with related data
+    for (const userData of testUsers) {
+      console.log(`👤 Creating user: ${userData.email}`);
+
+      const hashedPassword = await hashPassword(userData.password);
+
+      // Create user
+      const user = await prisma.user.create({
+        data: {
+          email: userData.email,
+          password: hashedPassword,
+          name: userData.name,
+          emailVerified: true,
+          onboardingComplete: true,
+          preferredLanguage: 'fr',
+          role: 'user',
+          isActive: true,
+        },
+      });
+
+      console.log(`   ✅ User created with ID: ${user.id}`);
+      console.log(`   📧 Email: ${userData.email}`);
+      console.log(`   🔑 Password: ${userData.password}`);
+
+      // Create skin profile
+      await prisma.skinProfile.create({
+        data: {
+          userId: user.id,
+          skinType: userData.skinType,
+          fitzpatrickType: Math.floor(Math.random() * 6) + 1,
+          concerns: userData.concerns,
+          sensitivities: ['fragrances', 'alcohol'],
+          skinAge: Math.floor(Math.random() * 30) + 20,
+          healthScore: Math.floor(Math.random() * 40) + 60,
+          lastAnalysisAt: new Date(),
+        },
+      });
+      console.log(`   🧴 Skin profile created`);
+
+      // Create subscription
+      await prisma.subscription.create({
+        data: {
+          userId: user.id,
+          plan: Math.random() > 0.7 ? 'premium' : 'free',
+          status: 'active',
+          currency: 'TND',
+          autoRenew: true,
+        },
+      });
+      console.log(`   💳 Subscription created`);
+
+      console.log(`\n✨ User ${userData.email} setup completed!\n`);
+    }
+
+    console.log('\n✅ Database seeding completed successfully!');
+    console.log('\n📋 Test Users Created:');
+    console.log('─'.repeat(70));
+    testUsers.forEach((user) => {
+      console.log(`📧 ${user.email.padEnd(35)} 🔑 ${user.password}`);
+    });
+    console.log('─'.repeat(70));
+    console.log('\n🌐 API Base URL: http://192.168.1.45:3000');
+    console.log('🔗 Login Endpoint: POST /auth/login');
+    console.log('📝 Send: {"username": "email@example.com", "password": "..."}\n');
+  } catch (error) {
+    console.error('❌ Error seeding database:', error);
     process.exit(1);
-  });
+  } finally {
+    await prisma.$disconnect();
+  }
+}
+
+main();
