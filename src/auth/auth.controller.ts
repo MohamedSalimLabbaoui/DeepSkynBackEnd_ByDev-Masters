@@ -11,6 +11,7 @@ import {
   HttpCode,
   HttpStatus,
   UnauthorizedException,
+  BadRequestException,
   Param,
   Logger,
 } from '@nestjs/common';
@@ -433,6 +434,30 @@ export class AuthController {
       return { valid: false };
     }
     return this.passwordResetService.validateResetToken(token);
+  }
+
+  @Post('change-password')
+  @UseGuards(KeycloakAuthGuard)
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Changer le mot de passe',
+    description: 'Permet à un utilisateur authentifié de changer son mot de passe',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Mot de passe changé avec succès',
+  })
+  @ApiResponse({ status: 401, description: 'Non authentifié' })
+  @ApiResponse({ status: 400, description: 'Mot de passe actuel incorrect' })
+  async changePassword(
+    @Req() req,
+    @Body() changePasswordDto: { currentPassword: string; newPassword: string },
+  ) {
+    const userId = req.user?.sub;
+    if (!userId) {
+      throw new BadRequestException('User not found');
+    }
+    return this.authService.changePassword(userId, changePasswordDto.currentPassword, changePasswordDto.newPassword);
   }
 
   // ==================== Google OAuth Endpoints ====================

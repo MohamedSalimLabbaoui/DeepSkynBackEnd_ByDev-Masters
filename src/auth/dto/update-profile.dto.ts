@@ -26,4 +26,9 @@ export class UpdateProfileDto {
     @IsOptional()
     @IsDateString()
     dateOfBirth?: string;
+
+    @ApiProperty({ example: 'fr', required: false })
+    @IsOptional()
+    @IsString()
+    preferredLanguage?: string;
 }
