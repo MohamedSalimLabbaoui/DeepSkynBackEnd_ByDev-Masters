@@ -17,6 +17,7 @@ import { MailModule } from './mail/mail.module';
 import { ChurnModule } from './churn/churn.module';
 import { CrawlingModule } from './crawling/crawling.module';
 import { UsersModule } from './users/users.module';
+import { WeatherModule } from './weather/weather.module';
 
 @Module({
   imports: [
@@ -41,6 +42,7 @@ import { UsersModule } from './users/users.module';
     CommentsModule,
     ChurnModule,
     CrawlingModule,
+    WeatherModule,
   ],
   controllers: [],
   providers: [],
