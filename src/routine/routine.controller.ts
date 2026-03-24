@@ -26,6 +26,8 @@ import {
   GenerateRoutineDto,
   RoutineType,
   AdviseRoutineDto,
+  RecommendProductDto,
+  ProductRecommendation,
 } from './dto';
 import { KeycloakAuthGuard } from '../auth/guards/keycloak-auth.guard';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
@@ -97,6 +99,21 @@ export class RoutineController {
   @ApiResponse({ status: 200, description: 'Statistiques retournées' })
   async getStatistics(@CurrentUser('sub') userId: string) {
     return this.routineService.getStatistics(userId);
+  }
+
+  @Post('recommend-product')
+  @ApiOperation({
+    summary: 'Recommander un produit pour un step',
+    description:
+      "Utilise l'IA et les articles crawlés pour recommander un produit spécifique pour une étape de routine, et génère un QR code d'achat.",
+  })
+  @ApiResponse({ status: 200, description: 'Produit recommandé avec QR code' })
+  @HttpCode(HttpStatus.OK)
+  async recommendProduct(
+    @CurrentUser('sub') userId: string,
+    @Body() dto: RecommendProductDto,
+  ): Promise<ProductRecommendation> {
+    return this.routineService.recommendProductForStep(userId, dto);
   }
 
   @Get('active/:type')

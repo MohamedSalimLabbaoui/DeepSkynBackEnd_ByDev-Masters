@@ -20,4 +20,7 @@ export class UpdateUserDto {
     @IsOptional()
     @IsString()
     preferredLanguage?: string;
+
+    @IsOptional()
+    settings?: any;
 }

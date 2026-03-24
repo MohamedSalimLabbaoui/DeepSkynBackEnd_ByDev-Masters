@@ -8,14 +8,18 @@ import { PrismaService } from '../prisma/prisma.service';
 import { GeminiService } from '../analysis/services/gemini.service';
 import { SkinProfileService } from '../skin-profile/skin-profile.service';
 import { NotificationService } from '../notification/notification.service';
+import { CrawlingService } from '../crawling/crawling.service';
 import {
   CreateRoutineDto,
   UpdateRoutineDto,
   GenerateRoutineDto,
   RoutineType,
   AdviseRoutineDto,
+  RecommendProductDto,
+  ProductRecommendation,
 } from './dto';
 import { Routine } from '@prisma/client';
+import * as QRCode from 'qrcode';
 
 export interface RoutineStep {
   order: number;
@@ -46,6 +50,7 @@ export class RoutineService {
     private readonly geminiService: GeminiService,
     private readonly skinProfileService: SkinProfileService,
     private readonly notificationService: NotificationService,
+    private readonly crawlingService: CrawlingService,
   ) {}
 
   /**
@@ -734,5 +739,186 @@ Format your response as JSON: { "advice": "your advice text", "rating": "good|ne
         emoji: '✨',
       };
     }
+  }
+
+  /**
+   * Recommend a product for a routine step using AI + crawled articles
+   */
+  async recommendProductForStep(
+    userId: string,
+    dto: RecommendProductDto,
+  ): Promise<ProductRecommendation> {
+    // 1. Get user skin profile
+    let skinProfile = null;
+    try {
+      skinProfile = await this.skinProfileService.findByUserId(userId);
+    } catch {
+      this.logger.warn(`No skin profile for user ${userId}`);
+    }
+
+    const skinType = dto.skinType || skinProfile?.skinType || 'normal';
+    const concerns = dto.concerns
+      ? dto.concerns.split(',')
+      : skinProfile?.concerns || [];
+
+    // 2. Search crawled articles for relevant product info
+    const searchQuery = `${dto.stepCategory} ${dto.stepName} ${skinType} ${concerns.join(' ')}`;
+    let relevantArticles: { title: string; summary: string; source: string; url: string }[] = [];
+    try {
+      relevantArticles = await this.crawlingService.getRelevantArticles(searchQuery, 5);
+    } catch {
+      this.logger.warn('Failed to fetch relevant articles for recommendation');
+    }
+
+    const articlesContext = relevantArticles.length > 0
+      ? relevantArticles.map((a, i) => `${i + 1}. "${a.title}" (${a.source}) — ${a.summary?.substring(0, 200)}`).join('\n')
+      : 'Aucun article trouvé dans la base de connaissances.';
+
+    // 3. Ask Gemini to recommend a specific product
+    const prompt = `
+Tu es un expert dermatologue et conseiller skincare.
+Un utilisateur cherche le meilleur produit pour cette étape de sa routine :
+
+- Étape : ${dto.stepName}
+- Catégorie : ${dto.stepCategory}
+- Description : ${dto.stepDescription || 'Non spécifiée'}
+- Type de peau : ${skinType}
+- Préoccupations : ${concerns.join(', ') || 'aucune spécifiée'}
+
+Articles de référence de notre base de connaissances dermatologiques :
+${articlesContext}
+
+Recommande UN produit spécifique disponible à l'achat. Réponds UNIQUEMENT en JSON valide :
+{
+  "productName": "nom exact du produit",
+  "brand": "marque",
+  "description": "description courte du produit (2 phrases max, en français)",
+  "keyIngredients": ["ingrédient 1", "ingrédient 2", "ingrédient 3"],
+  "whyRecommended": "explication courte pourquoi ce produit est idéal pour ce step ET ce type de peau (2-3 phrases, en français)",
+  "estimatedPrice": "fourchette de prix en EUR (ex: 15-25€)",
+  "purchaseUrl": "URL d'achat réel sur un site e-commerce fiable (Amazon, Sephora, Lookfantastic, etc.)",
+  "rating": "excellent|good|alternative"
+}
+    `.trim();
+
+    let productData: any;
+    try {
+      const result = await this.geminiService.getSkincareAdvice(
+        [skinType],
+        [prompt],
+      );
+
+      const adviceText = typeof result === 'object'
+        ? (result as any)?.advice || JSON.stringify(result)
+        : String(result || '');
+
+      const jsonMatch = adviceText.match(/\{[\s\S]*\}/);
+      if (jsonMatch) {
+        productData = JSON.parse(jsonMatch[0]);
+      }
+    } catch (error) {
+      this.logger.error('AI product recommendation failed', error.message);
+    }
+
+    // Fallback if AI fails
+    if (!productData) {
+      productData = this.getFallbackProduct(dto.stepCategory, skinType);
+    }
+
+    // 4. Generate QR code for purchase URL
+    const purchaseUrl = productData.purchaseUrl || `https://www.sephora.fr/search?q=${encodeURIComponent(productData.productName || dto.stepName)}`;
+    let qrCodeDataUrl = '';
+    try {
+      qrCodeDataUrl = await QRCode.toDataURL(purchaseUrl, {
+        width: 280,
+        margin: 2,
+        color: { dark: '#0EA5E9', light: '#ffffff' },
+        errorCorrectionLevel: 'M',
+      });
+    } catch {
+      this.logger.warn('QR code generation failed');
+    }
+
+    return {
+      productName: productData.productName || `${dto.stepName} recommandé`,
+      brand: productData.brand || 'Marque recommandée',
+      description: productData.description || `Produit idéal pour l'étape ${dto.stepName}`,
+      keyIngredients: productData.keyIngredients || [],
+      whyRecommended: productData.whyRecommended || `Ce produit est adapté à votre type de peau ${skinType}.`,
+      estimatedPrice: productData.estimatedPrice || '15-30€',
+      purchaseUrl,
+      qrCodeDataUrl,
+      rating: productData.rating || 'good',
+      sourceArticles: relevantArticles.map((a) => ({ title: a.title, url: a.url })),
+    };
+  }
+
+  /**
+   * Fallback product recommendation if AI fails
+   */
+  private getFallbackProduct(category: string, skinType: string): any {
+    const fallbacks: Record<string, any> = {
+      cleanser: {
+        productName: 'CeraVe Hydrating Cleanser',
+        brand: 'CeraVe',
+        description: 'Nettoyant hydratant doux pour le visage avec céramides et acide hyaluronique.',
+        keyIngredients: ['Céramides', 'Acide Hyaluronique', 'MVE Technology'],
+        whyRecommended: `Parfait pour les peaux ${skinType}. Nettoie sans déshydrater et respecte la barrière cutanée.`,
+        estimatedPrice: '10-15€',
+        purchaseUrl: 'https://www.amazon.fr/s?k=CeraVe+Hydrating+Cleanser',
+        rating: 'excellent',
+      },
+      serum: {
+        productName: 'The Ordinary Niacinamide 10% + Zinc 1%',
+        brand: 'The Ordinary',
+        description: 'Sérum concentré en niacinamide pour réduire les imperfections et affiner le grain de peau.',
+        keyIngredients: ['Niacinamide 10%', 'Zinc PCA 1%'],
+        whyRecommended: `Idéal pour les peaux ${skinType}. Régule le sébum et améliore la texture de la peau.`,
+        estimatedPrice: '6-10€',
+        purchaseUrl: 'https://www.amazon.fr/s?k=The+Ordinary+Niacinamide',
+        rating: 'excellent',
+      },
+      moisturizer: {
+        productName: 'La Roche-Posay Toleriane Double Repair',
+        brand: 'La Roche-Posay',
+        description: 'Crème hydratante réparatrice qui restaure la barrière cutanée.',
+        keyIngredients: ['Céramide-3', 'Niacinamide', 'Glycérine'],
+        whyRecommended: `Excellent choix pour les peaux ${skinType}. Hydrate en profondeur sans laisser de film gras.`,
+        estimatedPrice: '15-20€',
+        purchaseUrl: 'https://www.amazon.fr/s?k=La+Roche-Posay+Toleriane',
+        rating: 'excellent',
+      },
+      sunscreen: {
+        productName: 'La Roche-Posay Anthelios UVMune 400 SPF50+',
+        brand: 'La Roche-Posay',
+        description: 'Protection solaire très haute à large spectre, fluide invisible.',
+        keyIngredients: ['Mexoryl 400', 'Filtres UVA/UVB', 'Eau thermale'],
+        whyRecommended: `Indispensable pour toutes les peaux. Protection maximale avec une texture ultra-légère.`,
+        estimatedPrice: '15-22€',
+        purchaseUrl: 'https://www.amazon.fr/s?k=La+Roche-Posay+Anthelios+SPF50',
+        rating: 'excellent',
+      },
+      toner: {
+        productName: 'Paula\'s Choice Skin Perfecting 2% BHA',
+        brand: 'Paula\'s Choice',
+        description: 'Exfoliant liquide à l\'acide salicylique pour désobstruer les pores.',
+        keyIngredients: ['Acide Salicylique 2%', 'Thé vert', 'Glycérine'],
+        whyRecommended: `Adapté aux peaux ${skinType}. Affine le grain de peau et prévient les imperfections.`,
+        estimatedPrice: '15-35€',
+        purchaseUrl: 'https://www.amazon.fr/s?k=Paulas+Choice+BHA',
+        rating: 'good',
+      },
+    };
+
+    return fallbacks[category] || {
+      productName: `Produit ${category} recommandé`,
+      brand: 'CeraVe',
+      description: `Produit adapté pour l'étape ${category} de votre routine skincare.`,
+      keyIngredients: ['Céramides', 'Acide Hyaluronique'],
+      whyRecommended: `Ce produit est recommandé pour les peaux ${skinType}.`,
+      estimatedPrice: '10-25€',
+      purchaseUrl: `https://www.amazon.fr/s?k=${encodeURIComponent(category)}+skincare`,
+      rating: 'good',
+    };
   }
 }

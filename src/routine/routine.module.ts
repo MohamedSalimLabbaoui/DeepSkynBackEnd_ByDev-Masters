@@ -5,6 +5,7 @@ import { PrismaModule } from '../prisma/prisma.module';
 import { AnalysisModule } from '../analysis/analysis.module';
 import { SkinProfileModule } from '../skin-profile/skin-profile.module';
 import { NotificationModule } from '../notification/notification.module';
+import { CrawlingModule } from '../crawling/crawling.module';
 
 @Module({
   imports: [
@@ -12,6 +13,7 @@ import { NotificationModule } from '../notification/notification.module';
     AnalysisModule,
     SkinProfileModule,
     NotificationModule,
+    CrawlingModule,
   ],
   controllers: [RoutineController],
   providers: [RoutineService],
