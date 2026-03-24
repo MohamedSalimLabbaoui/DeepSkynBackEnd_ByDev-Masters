@@ -7,6 +7,10 @@ export class UpdateUserDto {
 
     @IsOptional()
     @IsString()
+    coverPhoto?: string;
+
+    @IsOptional()
+    @IsString()
     avatar3D?: string;
 
     @IsOptional()

@@ -17,6 +17,11 @@ export class UpdateProfileDto {
     @IsString()
     avatar?: string;
 
+    @ApiProperty({ example: 'https://example.com/cover.png', required: false })
+    @IsOptional()
+    @IsString()
+    coverPhoto?: string;
+
     @ApiProperty({ example: 'Male', required: false })
     @IsOptional()
     @IsString()
