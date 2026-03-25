@@ -43,6 +43,10 @@ model User {
   lastChurnAnalysis  DateTime? // Dernière analyse de churn
   reEngagementSentAt DateTime? // Dernier email de re-engagement envoyé
   
+  // Confidentialité
+  isPublic           Boolean   @default(false)
+  receiveRecommendations Boolean @default(true)
+  
   // Localisation
   address            String?   // Adresse complète
   city               String?   // Ville

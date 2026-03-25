@@ -68,4 +68,12 @@ export class UpdateProfileDto {
     @IsNumber()
     @IsLongitude()
     longitude?: number;
+
+    @ApiProperty({ example: false, required: false })
+    @IsOptional()
+    isPublic?: boolean;
+
+    @ApiProperty({ example: true, required: false })
+    @IsOptional()
+    receiveRecommendations?: boolean;
 }
