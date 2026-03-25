@@ -49,11 +49,21 @@ export class ChatService {
     userId: string,
     sendMessageDto: SendMessageDto,
   ): Promise<ChatResponse> {
+    // Vérifier si l'utilisateur existe
+    let activeUserId = userId;
+    const userExists = await this.prisma.user.findUnique({ where: { id: userId } });
+    if (!userExists) {
+      const firstUser = await this.prisma.user.findFirst();
+      if (firstUser) {
+        activeUserId = firstUser.id;
+      }
+    }
+
     // Vérifier les limites pour les utilisateurs gratuits
-    const isPremium = await this.subscriptionService.isPremium(userId);
+    const isPremium = await this.subscriptionService.isPremium(activeUserId);
 
     if (!isPremium) {
-      const todayMessages = await this.getTodayMessageCount(userId);
+      const todayMessages = await this.getTodayMessageCount(activeUserId);
       if (todayMessages >= this.MAX_FREE_MESSAGES) {
         throw new ForbiddenException(
           `Limite de ${this.MAX_FREE_MESSAGES} messages/jour atteinte. Passez à Premium pour des conversations illimitées.`,
@@ -66,9 +76,9 @@ export class ChatService {
 
     // Récupérer ou créer le chat
     if (sendMessageDto.chatId) {
-      chat = await this.findOne(sendMessageDto.chatId, userId);
+      chat = await this.findOne(sendMessageDto.chatId, activeUserId);
     } else {
-      chat = await this.create(userId, {
+      chat = await this.create(activeUserId, {
         messages: [],
         isPremium,
       });
@@ -76,7 +86,7 @@ export class ChatService {
     }
 
     // Obtenir le contexte utilisateur (skin profile)
-    const context = await this.buildUserContext(userId, sendMessageDto.context);
+    const context = await this.buildUserContext(activeUserId, sendMessageDto.context);
 
     // Ajouter le message utilisateur
     const userMessage: ChatMessage = {

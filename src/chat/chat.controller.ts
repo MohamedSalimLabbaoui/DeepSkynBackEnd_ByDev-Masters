@@ -39,7 +39,7 @@ export class ChatController {
   })
   @ApiResponse({ status: 200, description: 'Réponse du chatbot' })
   @ApiResponse({ status: 400, description: 'Message invalide' })
-  // @UseGuards(JwtAuthGuard)
+  // @UseGuards(KeycloakAuthGuard)
   async sendMessage(@Req() req: any, @Body() sendMessageDto: SendMessageDto) {
     const userId = req.user?.id || '89324390-127f-48c4-b382-2aef40f76add';
     return this.chatService.sendMessage(userId, sendMessageDto);

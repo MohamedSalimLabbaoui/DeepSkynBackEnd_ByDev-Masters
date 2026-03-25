@@ -68,6 +68,7 @@ model User {
   posts          Post[]
   likes          Like[]
   comments       Comment[]
+  stories        Story[]
 
   @@map("users")
 }
@@ -274,4 +275,20 @@ model DermatologyArticle {
   @@index([category])
   @@index([crawledAt])
   @@map("dermatology_articles")
+}
+
+// Table 12: stories (Stories)
+// Publications éphémères de la communauté
+model Story {
+  id        String   @id @default(uuid())
+  userId    String
+  mediaUrl  String   // URL de l'image ou de la vidéo de la story
+  expiresAt DateTime // Date d'expiration de la story
+  createdAt DateTime @default(now())
+
+  // Relations
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([expiresAt])
+  @@map("stories")
 }
