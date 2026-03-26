@@ -9,6 +9,7 @@ import { GeminiService } from '../analysis/services/gemini.service';
 import { SkinProfileService } from '../skin-profile/skin-profile.service';
 import { NotificationService } from '../notification/notification.service';
 import { CrawlingService } from '../crawling/crawling.service';
+import { PostsService } from '../posts/posts.service';
 import {
   CreateRoutineDto,
   UpdateRoutineDto,
@@ -17,6 +18,7 @@ import {
   AdviseRoutineDto,
   RecommendProductDto,
   ProductRecommendation,
+  ShareRoutineDto,
 } from './dto';
 import { Routine } from '@prisma/client';
 import * as QRCode from 'qrcode';
@@ -51,6 +53,7 @@ export class RoutineService {
     private readonly skinProfileService: SkinProfileService,
     private readonly notificationService: NotificationService,
     private readonly crawlingService: CrawlingService,
+    private readonly postsService: PostsService,
   ) {}
 
   /**
@@ -920,5 +923,102 @@ Recommande UN produit spécifique disponible à l'achat. Réponds UNIQUEMENT en 
       purchaseUrl: `https://www.amazon.fr/s?k=${encodeURIComponent(category)}+skincare`,
       rating: 'good',
     };
+  }
+
+  /**
+   * Share a routine as a social post
+   */
+  async shareAsPost(
+    routineId: string,
+    userId: string,
+    shareDto: ShareRoutineDto,
+  ): Promise<any> {
+    // Verify routine exists and belongs to user
+    const routine = await this.findOne(routineId, userId);
+
+    // Format routine as an attractive post message
+    const postMessage = this.formatRoutineAsPost(routine, shareDto.customMessage);
+
+    // Create the post with the formatted routine
+    const post = await this.postsService.create(userId, {
+      message: postMessage,
+      media: shareDto.coverImage,
+    });
+
+    this.logger.log(
+      `Routine ${routineId} shared as post ${post.id} by user ${userId}`,
+    );
+
+    return {
+      post,
+      routine,
+      message: 'Routine partagée avec succès!',
+    };
+  }
+
+  /**
+   * Format routine as an attractive post message
+   */
+  private formatRoutineAsPost(
+    routine: Routine,
+    customMessage?: string,
+  ): string {
+    const steps = (routine.steps as unknown as RoutineStep[]) || [];
+    
+    const typeEmoji = {
+      AM: '🌅',
+      PM: '🌙',
+      weekly: '⭐',
+    };
+
+    const emoji = typeEmoji[routine.type as keyof typeof typeEmoji] || '✨';
+
+    // Format the routine title with better structure
+    let message = `${emoji} ${routine.name}\n`;
+    message += `━━━━━━━━━━━━━━━━━━━━━━\n`;
+    message += `${routine.type} • ${steps.length} étapes\n\n`;
+
+    // Add custom message if provided with emphasis
+    if (customMessage) {
+      message += `💬 "${customMessage}"\n`;
+      message += `\n`;
+    }
+
+    // Add steps summary with better formatting
+    message += '📋 Étapes de la routine:\n';
+    message += `━━━━━━━━━━━━━━━━━━━━━━\n\n`;
+    
+    steps.slice(0, 5).forEach((step, index) => {
+      const stepNum = index + 1;
+      message += `${stepNum}️⃣ ${step.name}`;
+      if (step.productName) {
+        message += ` ✨ ${step.productName}`;
+      }
+      if (step.duration) {
+        const minutes = Math.round(step.duration / 60);
+        message += ` ⏱️ ${minutes}m`;
+      }
+      message += '\n';
+    });
+
+    if (steps.length > 5) {
+      message += `\n... et ${steps.length - 5} étape(s) supplémentaire(s)\n`;
+    }
+
+    // Add routine notes if available
+    if (routine.notes) {
+      message += `\n📝 ${routine.notes.substring(0, 120)}\n`;
+    }
+
+    // Add hashtags for better discoverability with separator
+    message += `\n━━━━━━━━━━━━━━━━━━━━━━\n`;
+    message += `#SkincareRoutine #DeepSkyn #BeautyCare #RoutineBeauté #SkinCare`;
+
+    // Ensure message doesn't exceed post limit
+    if (message.length > 1900) {
+      message = message.substring(0, 1890) + '...';
+    }
+
+    return message;
   }
 }

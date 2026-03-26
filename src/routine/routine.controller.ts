@@ -28,6 +28,7 @@ import {
   AdviseRoutineDto,
   RecommendProductDto,
   ProductRecommendation,
+  ShareRoutineDto,
 } from './dto';
 import { KeycloakAuthGuard } from '../auth/guards/keycloak-auth.guard';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
@@ -275,6 +276,27 @@ export class RoutineController {
     @Body('name') newName?: string,
   ): Promise<Routine> {
     return this.routineService.duplicate(id, userId, newName);
+  }
+
+  /**
+   * Share a routine as a post
+   * POST /routines/:id/share
+   */
+  @Post(':id/share')
+  @ApiOperation({
+    summary: 'Partager une routine',
+    description: 'Partage une routine comme un post social',
+  })
+  @ApiParam({ name: 'id', description: 'ID de la routine' })
+  @ApiResponse({ status: 201, description: 'Routine partagée avec succès' })
+  @ApiResponse({ status: 400, description: 'Données invalides' })
+  @ApiResponse({ status: 404, description: 'Routine non trouvée' })
+  async shareRoutine(
+    @Param('id') id: string,
+    @CurrentUser('sub') userId: string,
+    @Body() shareDto: ShareRoutineDto,
+  ): Promise<any> {
+    return this.routineService.shareAsPost(id, userId, shareDto);
   }
 
   /**

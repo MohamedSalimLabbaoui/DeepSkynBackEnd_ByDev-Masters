@@ -6,6 +6,7 @@ import { AnalysisModule } from '../analysis/analysis.module';
 import { SkinProfileModule } from '../skin-profile/skin-profile.module';
 import { NotificationModule } from '../notification/notification.module';
 import { CrawlingModule } from '../crawling/crawling.module';
+import { PostsModule } from '../posts/posts.module';
 
 @Module({
   imports: [
@@ -14,6 +15,7 @@ import { CrawlingModule } from '../crawling/crawling.module';
     SkinProfileModule,
     NotificationModule,
     CrawlingModule,
+    PostsModule,
   ],
   controllers: [RoutineController],
   providers: [RoutineService],
