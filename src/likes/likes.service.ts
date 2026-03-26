@@ -60,7 +60,8 @@ export class LikesService {
   async toggle(
     userId: string,
     postId: string,
-  ): Promise<{ liked: boolean; likesCount: number }> {
+    reactionType: string = 'like',
+  ): Promise<{ liked: boolean; type: string; likesCount: number }> {
     const post = await this.prisma.post.findUnique({ where: { id: postId } });
     if (!post) {
       throw new NotFoundException(`Post ${postId} non trouvé`);
@@ -70,19 +71,38 @@ export class LikesService {
       where: { userId_postId: { userId, postId } },
     });
 
+    let liked = true;
+    let finalType = reactionType;
+
     if (existingLike) {
-      await this.prisma.like.delete({
-        where: { userId_postId: { userId, postId } },
-      });
+      if (existingLike.type === reactionType) {
+        // Same reaction clicked -> Unlike
+        await this.prisma.like.delete({
+          where: { userId_postId: { userId, postId } },
+        });
+        liked = false;
+        finalType = null;
+      } else {
+        // Different reaction clicked -> Change type
+        await this.prisma.like.update({
+          where: { userId_postId: { userId, postId } },
+          data: { type: reactionType },
+        });
+        liked = true;
+        finalType = reactionType;
+      }
     } else {
+      // No like exists -> Create new
       await this.prisma.like.create({
-        data: { userId, postId },
+        data: { userId, postId, type: reactionType },
       });
+      liked = true;
+      finalType = reactionType;
     }
 
     const likesCount = await this.prisma.like.count({ where: { postId } });
 
-    return { liked: !existingLike, likesCount };
+    return { liked, type: finalType, likesCount };
   }
 
   /**

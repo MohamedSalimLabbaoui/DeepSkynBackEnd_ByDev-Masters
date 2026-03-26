@@ -54,11 +54,36 @@ export class CommentsController {
   @ApiQuery({ name: 'page', required: false, type: Number })
   @ApiQuery({ name: 'limit', required: false, type: Number })
   async findByPost(
+    @CurrentUser('sub') userId: string,
     @Param('postId') postId: string,
     @Query('page') page?: number,
     @Query('limit') limit?: number,
   ) {
-    return this.commentsService.findByPost(postId, page || 1, limit || 20);
+    return this.commentsService.findByPost(postId, page || 1, limit || 20, userId);
+  }
+
+  @Get(':id/replies')
+  @ApiOperation({
+    summary: "Réponses d'un commentaire",
+    description: "Récupère les réponses imbriquées d'un commentaire",
+  })
+  async findReplies(
+    @CurrentUser('sub') userId: string,
+    @Param('id') id: string,
+  ) {
+    return this.commentsService.findReplies(id, userId);
+  }
+
+  @Post(':id/like')
+  @ApiOperation({
+    summary: 'Liker / Unliker un commentaire',
+    description: 'Bascule le like sur un commentaire',
+  })
+  async toggleLike(
+    @CurrentUser('sub') userId: string,
+    @Param('id') id: string,
+  ) {
+    return this.commentsService.toggleLike(id, userId);
   }
 
   @Get(':id')
@@ -66,11 +91,11 @@ export class CommentsController {
     summary: "Détail d'un commentaire",
     description: 'Récupère un commentaire par ID',
   })
-  @ApiParam({ name: 'id', description: 'ID du commentaire' })
-  @ApiResponse({ status: 200, description: 'Détail du commentaire' })
-  @ApiResponse({ status: 404, description: 'Commentaire non trouvé' })
-  async findOne(@Param('id') id: string) {
-    return this.commentsService.findOne(id);
+  async findOne(
+    @CurrentUser('sub') userId: string,
+    @Param('id') id: string,
+  ) {
+    return this.commentsService.findOne(id, userId);
   }
 
   @Patch(':id')
@@ -78,9 +103,6 @@ export class CommentsController {
     summary: 'Modifier un commentaire',
     description: 'Modifie un commentaire (propriétaire uniquement)',
   })
-  @ApiParam({ name: 'id', description: 'ID du commentaire' })
-  @ApiResponse({ status: 200, description: 'Commentaire modifié' })
-  @ApiResponse({ status: 403, description: 'Non autorisé' })
   async update(
     @CurrentUser('sub') userId: string,
     @Param('id') id: string,
@@ -95,9 +117,6 @@ export class CommentsController {
     summary: 'Supprimer un commentaire',
     description: 'Supprime un commentaire (propriétaire uniquement)',
   })
-  @ApiParam({ name: 'id', description: 'ID du commentaire' })
-  @ApiResponse({ status: 204, description: 'Commentaire supprimé' })
-  @ApiResponse({ status: 403, description: 'Non autorisé' })
   async remove(@CurrentUser('sub') userId: string, @Param('id') id: string) {
     return this.commentsService.remove(id, userId);
   }

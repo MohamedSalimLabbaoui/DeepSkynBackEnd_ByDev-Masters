@@ -11,11 +11,16 @@ export class UpdatePostDto {
   @MaxLength(2000)
   message?: string;
 
-  @ApiPropertyOptional({
-    description: 'URL du média (image/vidéo)',
-    example: 'https://example.com/image.jpg',
-  })
   @IsOptional()
   @IsString()
   media?: string;
+
+  @ApiPropertyOptional({
+    description: 'Statut du post',
+    example: 'published',
+    enum: ['published', 'archived', 'deleted'],
+  })
+  @IsOptional()
+  @IsString()
+  status?: string;
 }

@@ -18,6 +18,7 @@ import { ChurnModule } from './churn/churn.module';
 import { CrawlingModule } from './crawling/crawling.module';
 import { UsersModule } from './users/users.module';
 import { WeatherModule } from './weather/weather.module';
+import { StoriesModule } from './stories/stories.module';
 
 @Module({
   imports: [
@@ -43,6 +44,7 @@ import { WeatherModule } from './weather/weather.module';
     ChurnModule,
     CrawlingModule,
     WeatherModule,
+    StoriesModule,
   ],
   controllers: [],
   providers: [],

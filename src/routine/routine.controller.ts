@@ -278,6 +278,19 @@ export class RoutineController {
   }
 
   /**
+   * Get routines by userId (publicly)
+   * GET /routines/user/:userId
+   */
+  @Get('user/:userId')
+  @ApiOperation({
+    summary: "Routines d'un utilisateur spécifique",
+    description: "Récupère toutes les routines d'un utilisateur spécifique",
+  })
+  async findByUser(@Param('userId') userId: string): Promise<Routine[]> {
+    return this.routineService.findAllByUser(userId, { isActive: true });
+  }
+
+  /**
    * Delete a routine
    * DELETE /routines/:id
    */

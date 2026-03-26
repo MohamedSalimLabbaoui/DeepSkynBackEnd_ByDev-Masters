@@ -76,6 +76,19 @@ export class UsersController {
         return user;
     }
 
+    @Get('suggestions')
+    async getSuggestions(@CurrentUser('sub') userId: string) {
+        return this.usersService.findSuggestions(userId);
+    }
+
+    @Post('follow/:id')
+    async toggleFollow(
+        @CurrentUser('sub') followerId: string,
+        @Param('id') followingId: string
+    ) {
+        return this.usersService.toggleFollow(followerId, followingId);
+    }
+
     @Patch('admin/:id/status')
     @UseGuards(RolesGuard)
     @Roles('admin')
@@ -84,5 +97,22 @@ export class UsersController {
         @Body() dto: UpdateUserStatusDto,
     ) {
         return this.usersService.updateStatus(id, dto.isActive);
+    }
+
+    @Get(':id')
+    async findOne(
+        @Param('id') id: string,
+        @CurrentUser('sub') viewerId: string
+    ) {
+        const user = await this.usersService.findByIdWithFollowStatus(id, viewerId);
+        if (!user) {
+            throw new NotFoundException('Utilisateur non trouvé');
+        }
+        return user;
+    }
+
+    @Get(':id/stats')
+    async getUserStats(@Param('id') id: string) {
+        return this.usersService.getUserStats(id);
     }
 }

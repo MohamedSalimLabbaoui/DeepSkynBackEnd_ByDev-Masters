@@ -40,32 +40,60 @@ export class PostsService {
     page: number = 1,
     limit: number = 20,
     currentUserId?: string,
-  ): Promise<{ posts: PostWithDetails[]; total: number }> {
+  ): Promise<any> {
     const skip = (page - 1) * limit;
+    let where: any = { user: { isPublic: true } };
+
+    if (currentUserId) {
+      // 1. Get list of users I follow
+      const followed = await this.prisma.follower.findMany({
+        where: { followerId: currentUserId },
+        select: { followingId: true },
+      });
+      const followingIds = followed.map((f) => f.followingId);
+
+      // 2. Feed = My posts + People I follow
+      // Logic: I want to see MY posts AND posts from people I follow
+      where = {
+        userId: { in: [currentUserId, ...followingIds] },
+        status: 'published',
+      };
+    } else {
+      where.status = 'published';
+    }
+
 
     const [posts, total] = await Promise.all([
       this.prisma.post.findMany({
+        where,
         orderBy: { createdAt: 'desc' },
         skip,
         take: limit,
         include: {
-          user: { select: { id: true, name: true, avatar: true } },
+          user: { select: { id: true, name: true, avatar: true, isPublic: true } },
           _count: { select: { likes: true, comments: true } },
           likes: currentUserId
-            ? { where: { userId: currentUserId }, select: { id: true } }
+            ? { where: { userId: currentUserId }, select: { id: true, type: true } }
             : false,
         },
       }),
-      this.prisma.post.count(),
+      this.prisma.post.count({ where }),
     ]);
 
     const postsWithLiked = posts.map((post: any) => ({
       ...post,
       isLiked: currentUserId ? post.likes?.length > 0 : false,
+      reaction: (currentUserId && post.likes?.length > 0) ? post.likes[0].type : null,
       likes: undefined,
     }));
 
-    return { posts: postsWithLiked, total };
+    return { 
+      data: postsWithLiked, 
+      total,
+      page,
+      limit,
+      totalPages: Math.ceil(total / limit)
+    };
   }
 
   /**
@@ -76,12 +104,15 @@ export class PostsService {
     page: number = 1,
     limit: number = 20,
     currentUserId?: string,
-  ): Promise<{ posts: PostWithDetails[]; total: number }> {
+  ): Promise<any> {
     const skip = (page - 1) * limit;
 
     const [posts, total] = await Promise.all([
       this.prisma.post.findMany({
-        where: { userId },
+        where: { 
+          userId,
+          status: currentUserId === userId ? { not: 'deleted' } : 'published',
+        },
         orderBy: { createdAt: 'desc' },
         skip,
         take: limit,
@@ -89,20 +120,74 @@ export class PostsService {
           user: { select: { id: true, name: true, avatar: true } },
           _count: { select: { likes: true, comments: true } },
           likes: currentUserId
-            ? { where: { userId: currentUserId }, select: { id: true } }
+            ? { where: { userId: currentUserId }, select: { id: true, type: true } }
             : false,
         },
       }),
-      this.prisma.post.count({ where: { userId } }),
+      this.prisma.post.count({ 
+        where: { 
+          userId,
+          status: currentUserId === userId ? { not: 'deleted' } : 'published',
+        } 
+      }),
     ]);
 
     const postsWithLiked = posts.map((post: any) => ({
       ...post,
       isLiked: currentUserId ? post.likes?.length > 0 : false,
+      reaction: (currentUserId && post.likes?.length > 0) ? post.likes[0].type : null,
       likes: undefined,
     }));
 
-    return { posts: postsWithLiked, total };
+    return { 
+      data: postsWithLiked, 
+      total,
+      page,
+      limit,
+      totalPages: Math.ceil(total / limit)
+    };
+  }
+
+  async findArchives(userId: string, page: number = 1, limit: number = 20) {
+    const skip = (page - 1) * limit;
+
+    const [posts, total] = await Promise.all([
+      this.prisma.post.findMany({
+        where: { 
+          userId,
+          status: 'archived',
+        },
+        orderBy: { updatedAt: 'desc' },
+        skip,
+        take: limit,
+        include: {
+          user: { select: { id: true, name: true, avatar: true } },
+          _count: { select: { likes: true, comments: true } },
+          likes: { where: { userId }, select: { id: true, type: true } },
+        },
+      }),
+      this.prisma.post.count({ 
+        where: { 
+          userId,
+          status: 'archived',
+        } 
+      }),
+    ]);
+
+    const postsWithLiked = posts.map((post: any) => ({
+      ...post,
+      isLiked: post.likes?.length > 0,
+      reaction: post.likes?.length > 0 ? post.likes[0].type : null,
+      likes: undefined,
+    }));
+
+    return { 
+      data: postsWithLiked,
+      total,
+      page,
+      limit,
+      totalPages: Math.ceil(total / limit),
+    };
   }
 
   /**
@@ -127,6 +212,7 @@ export class PostsService {
     return {
       ...post,
       isLiked: currentUserId ? (post as any).likes?.length > 0 : false,
+      reaction: (currentUserId && (post as any).likes?.length > 0) ? (post as any).likes[0].type : null,
       likes: undefined as any,
     } as PostWithDetails;
   }
@@ -177,6 +263,33 @@ export class PostsService {
     }
 
     return this.prisma.post.delete({ where: { id } });
+  }
+
+  /**
+   * Archiver/Désarchiver un post
+   */
+  async toggleArchive(id: string, userId: string): Promise<Post> {
+    const post = await this.prisma.post.findUnique({ where: { id } });
+
+    if (!post) {
+      throw new NotFoundException(`Post ${id} non trouvé`);
+    }
+
+    if (post.userId !== userId) {
+      throw new ForbiddenException(
+        'Vous ne pouvez archiver que vos propres posts',
+      );
+    }
+
+    const nextStatus = post.status === 'archived' ? 'published' : 'archived';
+
+    return this.prisma.post.update({
+      where: { id },
+      data: { status: nextStatus },
+      include: {
+        user: { select: { id: true, name: true, avatar: true } },
+      },
+    });
   }
 
   async findAllForAdmin(

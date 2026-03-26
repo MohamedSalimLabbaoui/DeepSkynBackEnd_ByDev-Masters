@@ -99,6 +99,21 @@ export class PostsController {
     return this.postsService.findByUser(userId, page || 1, limit || 20, userId);
   }
 
+  @Get('archives')
+  @ApiOperation({
+    summary: 'Mes archives',
+    description: 'Récupère les posts archivés de l’utilisateur',
+  })
+  @ApiQuery({ name: 'page', required: false, type: Number })
+  @ApiQuery({ name: 'limit', required: false, type: Number })
+  async findArchives(
+    @CurrentUser('sub') userId: string,
+    @Query('page') page?: number,
+    @Query('limit') limit?: number,
+  ) {
+    return this.postsService.findArchives(userId, page || 1, limit || 20);
+  }
+
   @Get('admin/all')
   @UseGuards(RolesGuard)
   @Roles('admin')
@@ -160,5 +175,19 @@ export class PostsController {
   @ApiResponse({ status: 403, description: 'Non autorisé' })
   async remove(@CurrentUser('sub') userId: string, @Param('id') id: string) {
     return this.postsService.remove(id, userId);
+  }
+
+  @Patch(':id/archive')
+  @ApiOperation({
+    summary: 'Archiver / Désarchiver un post',
+    description: 'Archive ou désarchive un post (propriétaire uniquement)',
+  })
+  @ApiParam({ name: 'id', description: 'ID du post' })
+  @ApiResponse({ status: 200, description: 'Statut du post mis à jour' })
+  async toggleArchive(
+    @CurrentUser('sub') userId: string,
+    @Param('id') id: string,
+  ) {
+    return this.postsService.toggleArchive(id, userId);
   }
 }
