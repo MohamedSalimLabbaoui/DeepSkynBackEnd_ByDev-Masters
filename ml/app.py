@@ -125,26 +125,86 @@ def generate_mock_translation(text: str, language: str) -> TranslateResponse:
     """
     Génère une traduction de démonstration avec données fictives
     Utilisé quand le modèle n'est pas disponible
+    
+    Les keypoints doivent être NORMALISÉES entre 0.0 et 1.0
     """
-    # Créer des keypoints de démonstration (simple skeleton)
-    demo_keypoints = [
-        Keypoint(id=f"kp_{i}", x=float(i) * 50 + 100, y=150.0, z=0.0)
-        for i in range(5)
-    ]
-
-    # Créer quelques frames de démonstration
-    demo_frames = [
-        Frame(
-            hand_right_keypoints=demo_keypoints.copy(),
-            hand_left_keypoints=demo_keypoints.copy(),
-            pose_keypoints=demo_keypoints.copy()
-        )
-        for _ in range(12)  # 12 frames @ 24fps = 0.5 secondes
-    ]
-
+    import math
+    import hashlib
+    
+    # Créer des keypoints de main (21 points MediaPipe format) - NORMALISÉS
+    def generate_hand_keypoints(text_hash: float, is_right: bool) -> List[Keypoint]:
+        """Génère 21 keypoints MediaPipe pour une main"""
+        # Offset horizontal pour main droite vs gauche
+        x_offset = 0.65 if is_right else 0.35
+        y_base = 0.3 + hash(text) % 10 * 0.02
+        
+        keypoints = []
+        for i in range(21):
+            # Position basée sur hash du texte (déterministe)
+            x = x_offset + (i % 7) * 0.08 + math.sin(text_hash + i) * 0.05
+            y = y_base + (i // 7) * 0.12 + math.cos(text_hash + i) * 0.05
+            
+            keypoints.append(Keypoint(
+                id=f"kp_{i}",
+                x=max(0.1, min(0.9, x)),  # Clamp entre 0.1 et 0.9
+                y=max(0.1, min(0.9, y)),
+                z=0.1 + math.sin(text_hash + i * 0.5) * 0.05
+            ))
+        return keypoints
+    
+    # Créer les keypoints du corps (8 points) - NORMALISÉS
+    def generate_body_keypoints(text_hash: float) -> List[Keypoint]:
+        """Génère 8 keypoints de corps"""
+        body_positions = [
+            (0.5, 0.15),   # NOSE
+            (0.4, 0.35),   # RIGHT_SHOULDER
+            (0.6, 0.35),   # LEFT_SHOULDER
+            (0.35, 0.5),   # RIGHT_ELBOW
+            (0.65, 0.5),   # LEFT_ELBOW
+            (0.3, 0.65),   # RIGHT_WRIST
+            (0.7, 0.65),   # LEFT_WRIST
+        ]
+        
+        body_keypoints = []
+        BODY_IDS = [
+            "NOSE", "RIGHT_SHOULDER", "LEFT_SHOULDER",
+            "RIGHT_ELBOW", "LEFT_ELBOW",
+            "RIGHT_WRIST", "LEFT_WRIST"
+        ]
+        
+        for idx, (x, y) in enumerate(body_positions):
+            # Ajouter du mouvement basé sur le hash
+            dx = math.sin(text_hash + idx) * 0.05
+            dy = math.cos(text_hash + idx) * 0.05
+            
+            body_keypoints.append(Keypoint(
+                id=BODY_IDS[idx],
+                x=max(0.0, min(1.0, x + dx)),
+                y=max(0.0, min(1.0, y + dy)),
+                z=0.0
+            ))
+        return body_keypoints
+    
+    # Générer un hash déterministe du texte pour avoir des gestures différents
+    text_bytes = text.encode('utf-8')
+    text_hash = float(hashlib.md5(text_bytes).hexdigest()[:8], 16) / 0xFFFFFFFF
+    
+    # Générer les frames
+    num_frames = 30  # 30 frames pour animation smooth @ 60fps
+    demo_frames = []
+    
+    for frame_idx in range(num_frames):
+        frame_hash = text_hash + frame_idx * 0.08
+        
+        demo_frames.append(Frame(
+            hand_right_keypoints=generate_hand_keypoints(frame_hash, True),
+            hand_left_keypoints=generate_hand_keypoints(frame_hash, False),
+            pose_keypoints=generate_body_keypoints(frame_hash)
+        ))
+    
     # Générer un gloss simplifié
-    gloss = text.upper().replace(" ", "-")[:50]  # Limiter la longueur
-
+    gloss = text.upper().replace(" ", "-")[:50]
+    
     return TranslateResponse(
         frames=demo_frames,
         metadata=SignTranslationMetadata(
