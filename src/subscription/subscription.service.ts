@@ -195,6 +195,17 @@ export class SubscriptionService {
     const currentSub = await this.findOrCreateByUserId(userId);
     const newPlan = upgradeDto.plan;
 
+    // Bloquer le changement de plan si un abonnement premium est encore actif et non expiré
+    if (
+      currentSub.plan !== SubscriptionPlan.FREE &&
+      currentSub.status === SubscriptionStatus.ACTIVE &&
+      (!currentSub.endDate || new Date() <= new Date(currentSub.endDate))
+    ) {
+      throw new BadRequestException(
+        'Subscription is still active. You cannot change plan until it expires or is cancelled.',
+      );
+    }
+
     // Vérifier que c'est bien une mise à niveau
     if (currentSub.plan === newPlan) {
       throw new BadRequestException('Already on this plan');
@@ -341,7 +352,11 @@ export class SubscriptionService {
         // Mettre à jour le statut
         await this.prisma.subscription.update({
           where: { id: subscription.id },
-          data: { status: SubscriptionStatus.EXPIRED },
+          data: {
+            status: SubscriptionStatus.EXPIRED,
+            plan: SubscriptionPlan.FREE,
+            autoRenew: false,
+          },
         });
         return false;
       }
@@ -531,6 +546,8 @@ export class SubscriptionService {
       },
       data: {
         status: SubscriptionStatus.EXPIRED,
+        plan: SubscriptionPlan.FREE,
+        autoRenew: false,
       },
     });
 

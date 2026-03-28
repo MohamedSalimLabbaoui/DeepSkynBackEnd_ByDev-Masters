@@ -3,12 +3,14 @@ import {
   NotFoundException,
   BadRequestException,
   Logger,
+  ForbiddenException,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { GeminiService, GeminiAnalysisResult } from './services/gemini.service';
 import { SupabaseService, UploadResult } from './services/supabase.service';
 import { SkinProfileService } from '../skin-profile/skin-profile.service';
 import { NotificationService } from '../notification/notification.service';
+import { SubscriptionService } from '../subscription/subscription.service';
 import { CreateAnalysisDto } from './dto/create-analysis.dto';
 import { RealTimeScanDto } from './dto/real-time-scan.dto';
 import { Analysis } from '@prisma/client';
@@ -31,13 +33,38 @@ export interface AnalysisStats {
 export class AnalysisService {
   private readonly logger = new Logger(AnalysisService.name);
 
+  private readonly freeMonthlyAnalysisLimit = 3;
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly geminiService: GeminiService,
     private readonly supabaseService: SupabaseService,
     private readonly skinProfileService: SkinProfileService,
     private readonly notificationService: NotificationService,
+    private readonly subscriptionService: SubscriptionService,
   ) {}
+
+  private async enforceAnalysisAccess(userId: string): Promise<void> {
+    const isPremium = await this.subscriptionService.isPremium(userId);
+    if (isPremium) return;
+
+    const startOfMonth = new Date();
+    startOfMonth.setDate(1);
+    startOfMonth.setHours(0, 0, 0, 0);
+
+    const thisMonthCount = await this.prisma.analysis.count({
+      where: {
+        userId,
+        createdAt: { gte: startOfMonth },
+      },
+    });
+
+    if (thisMonthCount >= this.freeMonthlyAnalysisLimit) {
+      throw new ForbiddenException(
+        `Monthly analysis limit reached (${this.freeMonthlyAnalysisLimit}). Upgrade to premium for unlimited analyses.`,
+      );
+    }
+  }
 
   /**
    * Create and process a new skin analysis with uploaded images
@@ -48,6 +75,8 @@ export class AnalysisService {
     questionnaire?: Record<string, any>,
   ): Promise<Analysis> {
     const startTime = Date.now();
+
+    await this.enforceAnalysisAccess(userId);
 
     // Upload images to Supabase
     let uploadedImages: UploadResult[] = [];
@@ -96,6 +125,8 @@ export class AnalysisService {
   ): Promise<Analysis> {
     const startTime = Date.now();
 
+    await this.enforceAnalysisAccess(userId);
+
     const analysis = await this.prisma.analysis.create({
       data: {
         userId,
@@ -126,6 +157,10 @@ export class AnalysisService {
     realTimeScanDto: RealTimeScanDto,
   ): Promise<GeminiAnalysisResult> {
     const startTime = Date.now();
+
+    if (realTimeScanDto.saveAnalysis) {
+      await this.enforceAnalysisAccess(userId);
+    }
 
     try {
       // Optionally save the scan image

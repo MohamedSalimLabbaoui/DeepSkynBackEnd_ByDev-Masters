@@ -9,6 +9,15 @@ async function bootstrap() {
   const app = await NestFactory.create(AppModule);
 
   // Increase payload limit
+  app.use(
+    '/webhook',
+    json({
+      verify: (req: any, _res, buf) => {
+        req.rawBody = buf;
+      },
+      limit: '5mb',
+    }),
+  );
   app.use(json({ limit: '50mb' }));
   app.use(urlencoded({ extended: true, limit: '50mb' }));
 

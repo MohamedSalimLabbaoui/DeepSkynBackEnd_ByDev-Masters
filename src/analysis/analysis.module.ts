@@ -8,9 +8,16 @@ import { SupabaseService } from './services/supabase.service';
 import { PrismaModule } from '../prisma/prisma.module';
 import { SkinProfileModule } from '../skin-profile/skin-profile.module';
 import { NotificationModule } from '../notification/notification.module';
+import { SubscriptionModule } from '../subscription/subscription.module';
 
 @Module({
-  imports: [ConfigModule, PrismaModule, SkinProfileModule, NotificationModule],
+  imports: [
+    ConfigModule,
+    PrismaModule,
+    SkinProfileModule,
+    NotificationModule,
+    SubscriptionModule,
+  ],
   controllers: [AnalysisController, AnalysisTestController],
   providers: [AnalysisService, GeminiService, SupabaseService],
   exports: [AnalysisService, GeminiService, SupabaseService],
