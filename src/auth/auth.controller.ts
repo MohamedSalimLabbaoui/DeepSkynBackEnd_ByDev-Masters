@@ -49,9 +49,12 @@ import { GoogleTokenDto } from './dto/google-token.dto';
 import { ForgotPasswordDto } from './dto/forgot-password.dto';
 import { ResetPasswordDto } from './dto/reset-password.dto';
 import { RegisterDto } from './dto/register.dto';
+import { RequestSignupCodeDto } from './dto/request-signup-code.dto';
+import { VerifySignupCodeDto } from './dto/verify-signup-code.dto';
 import { UpdateProfileDto } from './dto/update-profile.dto';
 import { UpdateAddressDto } from './dto/update-address.dto';
 import { PasswordResetService } from './services/password-reset.service';
+import { SignupVerificationService } from './services/signup-verification.service';
 import { PrismaService } from '../prisma/prisma.service';
 import axios from 'axios';
 
@@ -67,6 +70,7 @@ export class AuthController {
     private readonly facebookAuthService: FacebookAuthService,
     private readonly recaptchaService: RecaptchaService,
     private readonly passwordResetService: PasswordResetService,
+    private readonly signupVerificationService: SignupVerificationService,
     private readonly prisma: PrismaService,
   ) { }
 
@@ -123,6 +127,51 @@ export class AuthController {
       registerDto.name,
       registerDto.firstName,
       registerDto.lastName,
+    );
+  }
+
+  @Post('register/request-code')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Demander un code email pour inscription',
+    description:
+      "Envoie un code de verification a 6 chiffres sur l'email avant de finaliser l'inscription.",
+  })
+  @ApiResponse({ status: 200, description: 'Code envoye' })
+  @ApiResponse({ status: 400, description: 'Donnees invalides ou email deja utilise' })
+  @ApiResponse({ status: 429, description: 'Demande de code trop frequente' })
+  async requestSignupCode(@Body() dto: RequestSignupCodeDto) {
+    if (dto.captchaToken) {
+      const isCaptchaValid = await this.recaptchaService.verify(dto.captchaToken);
+      if (!isCaptchaValid) {
+        throw new UnauthorizedException('Validation captcha echouee');
+      }
+    }
+
+    return this.signupVerificationService.requestCode(dto);
+  }
+
+  @Post('register/verify-code')
+  @HttpCode(HttpStatus.CREATED)
+  @ApiOperation({
+    summary: 'Verifier le code email et creer le compte',
+    description:
+      "Verifie le code recu par email puis finalise la creation du compte (Keycloak + base de donnees).",
+  })
+  @ApiResponse({ status: 201, description: 'Compte cree et utilisateur authentifie' })
+  @ApiResponse({ status: 400, description: 'Code invalide/expire ou demande absente' })
+  async verifySignupCode(@Body() dto: VerifySignupCodeDto): Promise<LoginResponse> {
+    const payload = this.signupVerificationService.verifyCodeAndConsume(
+      dto.email,
+      dto.code,
+    );
+
+    return this.authService.register(
+      payload.email,
+      payload.password,
+      payload.name,
+      payload.firstName,
+      payload.lastName,
     );
   }
 
