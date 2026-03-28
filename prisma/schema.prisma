@@ -196,6 +196,7 @@ model Post {
   impressions Int     @default(0)
   comments  Comment[]
   likes     Like[]
+  signTranslation SignTranslation?
   user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@map("posts")
@@ -306,4 +307,20 @@ model StoryComment {
   story     Story    @relation(fields: [storyId], references: [id], onDelete: Cascade)
 
   @@map("story_comments")
+}
+
+model SignTranslation {
+  id          String   @id @default(uuid())
+  postId      String   @unique
+  transcript  String
+  language    String   @default("fr")
+  frames      Json
+  metadata    Json
+  status      String   @default("completed")
+  errorMessage String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  post        Post     @relation(fields: [postId], references: [id], onDelete: Cascade)
+
+  @@map("sign_translations")
 }

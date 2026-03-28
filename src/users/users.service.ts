@@ -155,10 +155,11 @@ export class UsersService {
     async findSuggestions(userId: string, limit: number = 20) {
         // Find users that are public and NOT the current user
         // and that the current user is NOT already following
-        const followingIds = await this.prisma.follower.findMany({
-            where: { followerId: userId },
-            select: { followingId: true }
-        }).then(follows => follows.map(f => f.followingId));
+        const connections = await this.prisma.follower.findMany({
+            where: { OR: [{ followerId: userId }, { followingId: userId }] },
+            select: { followerId: true, followingId: true }
+        });
+        const followingIds = connections.map(f => f.followerId === userId ? f.followingId : f.followerId);
 
         return this.prisma.user.findMany({
             where: {
@@ -185,9 +186,12 @@ export class UsersService {
     async toggleFollow(followerId: string, followingId: string) {
         if (followerId === followingId) throw new Error("Vous ne pouvez pas vous suivre vous-même");
 
-        const existing = await this.prisma.follower.findUnique({
+        const existing = await this.prisma.follower.findFirst({
             where: {
-                followerId_followingId: { followerId, followingId }
+                OR: [
+                    { followerId, followingId },
+                    { followerId: followingId, followingId: followerId }
+                ]
             }
         });
 
@@ -217,16 +221,15 @@ export class UsersService {
 
         const [postsCount, followersCount, followingCount, recentFollowers, totalLikes, totalComments, weeklyPosts, aggregates] = await Promise.all([
             this.prisma.post.count({ where: { userId, status: 'published' } }),
-            this.prisma.follower.count({ where: { followingId: userId } }),
-            this.prisma.follower.count({ where: { followerId: userId } }),
+            this.prisma.follower.count({ where: { OR: [{ followingId: userId }, { followerId: userId }] } }),
+            this.prisma.follower.count({ where: { OR: [{ followingId: userId }, { followerId: userId }] } }),
             this.prisma.follower.findMany({
-                where: { followingId: userId },
-                take: 5,
+                where: { OR: [{ followingId: userId }, { followerId: userId }] },
+                take: 15, // Let's bring more friends to the grid!
                 orderBy: { createdAt: 'desc' },
                 include: {
-                    follower: {
-                        select: { avatar: true, name: true }
-                    }
+                    follower: { select: { id: true, avatar: true, name: true } },
+                    following: { select: { id: true, avatar: true, name: true } }
                 }
             }),
             this.prisma.like.count({ where: { post: { userId } } }),
@@ -255,15 +258,19 @@ export class UsersService {
         });
 
         const avatars = recentFollowers
-            .map(f => f.follower.avatar)
+            .map(f => f.followerId === userId ? f.following.avatar : f.follower.avatar)
             .filter((a): a is string => !!a);
 
-        const followersList = recentFollowers.map(f => ({
-            name: f.follower.name || 'Anonyme',
-            avatar: f.follower.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(f.follower.name || 'A')}`,
-            time: this.getRelativeTime(f.createdAt),
-            views: Math.floor(Math.random() * 100) + 50 // Keep some variety for individual rows
-        }));
+        const followersList = recentFollowers.map(f => {
+            const friend = f.followerId === userId ? f.following : f.follower;
+            return {
+                id: friend.id,
+                name: friend.name || 'Anonyme',
+                avatar: friend.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(friend.name || 'A')}`,
+                time: this.getRelativeTime(f.createdAt),
+                views: Math.floor(Math.random() * 100) + 50 
+            };
+        });
 
         return {
             posts: postsCount,

@@ -19,6 +19,7 @@ import { CrawlingModule } from './crawling/crawling.module';
 import { UsersModule } from './users/users.module';
 import { WeatherModule } from './weather/weather.module';
 import { StoriesModule } from './stories/stories.module';
+import { SignTranslationModule } from './sign-translation/sign-translation.module';
 
 @Module({
   imports: [
@@ -45,6 +46,7 @@ import { StoriesModule } from './stories/stories.module';
     CrawlingModule,
     WeatherModule,
     StoriesModule,
+    SignTranslationModule,
   ],
   controllers: [],
   providers: [],
