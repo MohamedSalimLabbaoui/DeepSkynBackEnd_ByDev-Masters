@@ -3,6 +3,7 @@ import {
   Logger,
   NotFoundException,
   BadRequestException,
+  ForbiddenException,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { GeminiService } from '../analysis/services/gemini.service';
@@ -10,6 +11,7 @@ import { SkinProfileService } from '../skin-profile/skin-profile.service';
 import { NotificationService } from '../notification/notification.service';
 import { CrawlingService } from '../crawling/crawling.service';
 import { PostsService } from '../posts/posts.service';
+import { SubscriptionService } from '../subscription/subscription.service';
 import {
   CreateRoutineDto,
   UpdateRoutineDto,
@@ -47,6 +49,8 @@ export interface AIGeneratedRoutine {
 export class RoutineService {
   private readonly logger = new Logger(RoutineService.name);
 
+  private readonly freeMonthlyAiRoutineLimit = 3;
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly geminiService: GeminiService,
@@ -54,7 +58,34 @@ export class RoutineService {
     private readonly notificationService: NotificationService,
     private readonly crawlingService: CrawlingService,
     private readonly postsService: PostsService,
+    private readonly subscriptionService: SubscriptionService,
   ) {}
+
+  private async enforceAiRoutineAccess(userId: string): Promise<void> {
+    const isPremium = await this.subscriptionService.isPremium(userId);
+    if (isPremium) return;
+
+    const startOfMonth = new Date();
+    startOfMonth.setDate(1);
+    startOfMonth.setHours(0, 0, 0, 0);
+
+    const startOfNextMonth = new Date(startOfMonth);
+    startOfNextMonth.setMonth(startOfNextMonth.getMonth() + 1);
+
+    const thisMonthCount = await this.prisma.routine.count({
+      where: {
+        userId,
+        isAIGenerated: true,
+        createdAt: { gte: startOfMonth },
+      },
+    });
+
+    if (thisMonthCount >= this.freeMonthlyAiRoutineLimit) {
+      throw new ForbiddenException(
+        `Limite de ${this.freeMonthlyAiRoutineLimit} routines IA/mois atteinte. Réinitialisation: ${startOfNextMonth.toISOString()}. Passez à Premium pour des routines illimitées.`,
+      );
+    }
+  }
 
   /**
    * Create a manual routine
@@ -87,6 +118,8 @@ export class RoutineService {
     userId: string,
     generateDto: GenerateRoutineDto,
   ): Promise<Routine> {
+    await this.enforceAiRoutineAccess(userId);
+
     // Get user's skin profile if available
     let skinProfile = null;
     try {

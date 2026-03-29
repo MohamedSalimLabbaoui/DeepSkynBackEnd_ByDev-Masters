@@ -11,6 +11,7 @@ import Stripe from 'stripe';
 import { SubscriptionService } from './subscription.service';
 import { SubscriptionPlan, SubscriptionStatus } from './dto/create-subscription.dto';
 import { PrismaService } from '../prisma/prisma.service';
+import { NotificationService } from '../notification/notification.service';
 
 @ApiTags('Subscriptions')
 @Controller()
@@ -20,6 +21,7 @@ export class StripeWebhookController {
   constructor(
     private readonly subscriptionService: SubscriptionService,
     private readonly prisma: PrismaService,
+    private readonly notificationService: NotificationService,
   ) {}
 
   private stripeClient(): Stripe {
@@ -115,6 +117,14 @@ export class StripeWebhookController {
             cancelledAt: null,
             planId: stripeSubscriptionId ?? undefined,
           },
+        });
+
+        await this.notificationService.create({
+          userId,
+          title: 'Abonnement activé',
+          message: `Votre abonnement ${planInfo?.name || String(plan)} est maintenant actif.`,
+          type: 'success',
+          actionUrl: '/subscription',
         });
 
         this.logger.log(

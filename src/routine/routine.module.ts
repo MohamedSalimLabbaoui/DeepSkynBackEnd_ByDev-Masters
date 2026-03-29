@@ -7,6 +7,7 @@ import { SkinProfileModule } from '../skin-profile/skin-profile.module';
 import { NotificationModule } from '../notification/notification.module';
 import { CrawlingModule } from '../crawling/crawling.module';
 import { PostsModule } from '../posts/posts.module';
+import { SubscriptionModule } from '../subscription/subscription.module';
 
 @Module({
   imports: [
@@ -16,6 +17,7 @@ import { PostsModule } from '../posts/posts.module';
     NotificationModule,
     CrawlingModule,
     PostsModule,
+    SubscriptionModule,
   ],
   controllers: [RoutineController],
   providers: [RoutineService],

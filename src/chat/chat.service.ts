@@ -65,8 +65,11 @@ export class ChatService {
     if (!isPremium) {
       const todayMessages = await this.getTodayMessageCount(activeUserId);
       if (todayMessages >= this.MAX_FREE_MESSAGES) {
+        const startOfTomorrow = new Date();
+        startOfTomorrow.setHours(0, 0, 0, 0);
+        startOfTomorrow.setDate(startOfTomorrow.getDate() + 1);
         throw new ForbiddenException(
-          `Limite de ${this.MAX_FREE_MESSAGES} messages/jour atteinte. Passez à Premium pour des conversations illimitées.`,
+          `Limite de ${this.MAX_FREE_MESSAGES} messages/jour atteinte. Réinitialisation: ${startOfTomorrow.toISOString()}. Passez à Premium pour des conversations illimitées.`,
         );
       }
     }

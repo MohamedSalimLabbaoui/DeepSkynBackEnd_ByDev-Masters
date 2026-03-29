@@ -52,6 +52,9 @@ export class AnalysisService {
     startOfMonth.setDate(1);
     startOfMonth.setHours(0, 0, 0, 0);
 
+    const startOfNextMonth = new Date(startOfMonth);
+    startOfNextMonth.setMonth(startOfNextMonth.getMonth() + 1);
+
     const thisMonthCount = await this.prisma.analysis.count({
       where: {
         userId,
@@ -61,7 +64,7 @@ export class AnalysisService {
 
     if (thisMonthCount >= this.freeMonthlyAnalysisLimit) {
       throw new ForbiddenException(
-        `Monthly analysis limit reached (${this.freeMonthlyAnalysisLimit}). Upgrade to premium for unlimited analyses.`,
+        `Monthly analysis limit reached (${this.freeMonthlyAnalysisLimit}). Resets at ${startOfNextMonth.toISOString()}. Upgrade to premium for unlimited analyses.`,
       );
     }
   }

@@ -78,6 +78,17 @@ export class SubscriptionController {
   async getMySubscription(@CurrentUser('userId') userId: string) {
     return this.subscriptionService.getCurrentPlanDetails(userId);
   }
+  
+  @Get('me/usage')
+  @ApiOperation({
+    summary: 'Usage de l\'abonnement',
+    description: "Récupère le résumé des quotas et de l'utilisation de l'abonnement",
+  })
+  @ApiResponse({ status: 200, description: 'Résumé de l\'utilisation retourné' })
+  @UseGuards(KeycloakAuthGuard)
+  async getMyUsage(@CurrentUser('userId') userId: string) {
+    return this.subscriptionService.getUsageSummary(userId);
+  }
 
   @Get('me/premium')
   @ApiOperation({

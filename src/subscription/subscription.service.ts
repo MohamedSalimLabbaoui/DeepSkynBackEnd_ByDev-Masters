@@ -28,42 +28,48 @@ export interface PlanDetails {
 export class SubscriptionService {
   private readonly logger = new Logger(SubscriptionService.name);
 
+  private readonly freeMonthlyAnalysisLimit = 3;
+  private readonly freeMonthlyAiRoutineLimit = 3;
+  private readonly freeDailyChatMessageLimit = 10;
+
   // Configuration des plans
   private readonly planDetails: Record<SubscriptionPlan, PlanDetails> = {
     [SubscriptionPlan.FREE]: {
-      name: 'Gratuit',
+      name: 'Free',
       price: 0,
       currency: 'TND',
       duration: -1, // illimité
       features: [
-        '3 analyses par mois',
-        'Routines basiques',
-        'Conseils généraux',
+        '3 analyses per month',
+        '3 AI routines per month',
+        'Unlimited manual routines',
+        'AI chat limited to 10 messages/day',
+        'General guidance',
       ],
     },
     [SubscriptionPlan.PREMIUM]: {
-      name: 'Premium Mensuel',
+      name: 'Premium Monthly',
       price: 19.99,
       currency: 'TND',
       duration: 30,
       features: [
-        'Analyses illimitées',
-        'Routines personnalisées AI',
-        'Chat AI illimité',
-        'Suivi avancé',
-        'Recommandations produits',
-        'Support prioritaire',
+        'Unlimited analyses',
+        'AI personalized routines',
+        'Unlimited AI chat',
+        'Advanced tracking',
+        'Product recommendations',
+        'Priority support',
       ],
     },
     [SubscriptionPlan.PREMIUM_YEARLY]: {
-      name: 'Premium Annuel',
+      name: 'Premium Yearly',
       price: 199.99,
       currency: 'TND',
       duration: 365,
       features: [
-        'Toutes les fonctionnalités Premium',
-        '2 mois gratuits',
-        'Accès anticipé aux nouvelles fonctionnalités',
+        'All Premium features',
+        '2 months free',
+        'Early access to new features',
       ],
     },
   };
@@ -72,6 +78,131 @@ export class SubscriptionService {
     private readonly prisma: PrismaService,
     private readonly notificationService: NotificationService,
   ) {}
+
+  async getUsageSummary(userId: string): Promise<{
+    isPremium: boolean;
+    subscription: Subscription;
+    quotas: {
+      analyses: {
+        used: number;
+        limit: number | null;
+        remaining: number | null;
+        resetsAt: Date | null;
+      };
+      aiRoutines: {
+        used: number;
+        limit: number | null;
+        remaining: number | null;
+        resetsAt: Date | null;
+      };
+      chatMessages: {
+        used: number;
+        limit: number | null;
+        remaining: number | null;
+        resetsAt: Date | null;
+      };
+    };
+  }> {
+    const subscription = await this.findOrCreateByUserId(userId);
+    const isPremium = await this.isPremium(userId);
+
+    if (isPremium) {
+      return {
+        isPremium,
+        subscription,
+        quotas: {
+          analyses: { used: 0, limit: null, remaining: null, resetsAt: null },
+          aiRoutines: { used: 0, limit: null, remaining: null, resetsAt: null },
+          chatMessages: { used: 0, limit: null, remaining: null, resetsAt: null },
+        },
+      };
+    }
+
+    const now = new Date();
+
+    const startOfMonth = new Date(now);
+    startOfMonth.setDate(1);
+    startOfMonth.setHours(0, 0, 0, 0);
+    const startOfNextMonth = new Date(startOfMonth);
+    startOfNextMonth.setMonth(startOfNextMonth.getMonth() + 1);
+
+    const startOfToday = new Date(now);
+    startOfToday.setHours(0, 0, 0, 0);
+    const startOfTomorrow = new Date(startOfToday);
+    startOfTomorrow.setDate(startOfTomorrow.getDate() + 1);
+
+    const [analysesUsed, aiRoutinesUsed] = await Promise.all([
+      this.prisma.analysis.count({
+        where: { userId, createdAt: { gte: startOfMonth } },
+      }),
+      this.prisma.routine.count({
+        where: {
+          userId,
+          isAIGenerated: true,
+          createdAt: { gte: startOfMonth },
+        },
+      }),
+    ]);
+
+    const chats = await this.prisma.chatHistory.findMany({
+      where: {
+        userId,
+        updatedAt: { gte: startOfToday },
+      },
+    });
+
+    let chatMessagesUsed = 0;
+    for (const chat of chats) {
+      const messages = chat.messages as unknown as Array<{
+        role?: string;
+        timestamp?: string;
+      }>;
+      if (!Array.isArray(messages)) continue;
+      chatMessagesUsed += messages.filter((m) => {
+        const role = (m.role || '').toLowerCase();
+        const ts = m.timestamp ? new Date(m.timestamp) : null;
+        return role === 'user' && !!ts && ts >= startOfToday;
+      }).length;
+    }
+
+    const analysisRemaining = Math.max(
+      0,
+      this.freeMonthlyAnalysisLimit - analysesUsed,
+    );
+    const aiRoutineRemaining = Math.max(
+      0,
+      this.freeMonthlyAiRoutineLimit - aiRoutinesUsed,
+    );
+    const chatRemaining = Math.max(
+      0,
+      this.freeDailyChatMessageLimit - chatMessagesUsed,
+    );
+
+    return {
+      isPremium,
+      subscription,
+      quotas: {
+        analyses: {
+          used: analysesUsed,
+          limit: this.freeMonthlyAnalysisLimit,
+          remaining: analysisRemaining,
+          resetsAt: startOfNextMonth,
+        },
+        aiRoutines: {
+          used: aiRoutinesUsed,
+          limit: this.freeMonthlyAiRoutineLimit,
+          remaining: aiRoutineRemaining,
+          resetsAt: startOfNextMonth,
+        },
+        chatMessages: {
+          used: chatMessagesUsed,
+          limit: this.freeDailyChatMessageLimit,
+          remaining: chatRemaining,
+          resetsAt: startOfTomorrow,
+        },
+      },
+    };
+  }
 
   /**
    * Créer un abonnement pour un utilisateur
