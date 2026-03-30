@@ -8,10 +8,11 @@ import {
 import { PrismaService } from '../prisma/prisma.service';
 import { NotificationService } from '../notification/notification.service';
 import {
+  CreatePlanDto,
   CreateSubscriptionDto,
+  UpdatePlanDto,
   UpdateSubscriptionDto,
   UpgradeSubscriptionDto,
-  SubscriptionPlan,
   SubscriptionStatus,
 } from './dto';
 import { Subscription } from '@prisma/client';
@@ -28,13 +29,17 @@ export interface PlanDetails {
 export class SubscriptionService {
   private readonly logger = new Logger(SubscriptionService.name);
 
+  private static readonly FREE_PLAN_CODE = 'free';
+  private static readonly PREMIUM_MONTHLY_PLAN_CODE = 'premium';
+  private static readonly PREMIUM_YEARLY_PLAN_CODE = 'premium_yearly';
+
   private readonly freeMonthlyAnalysisLimit = 3;
   private readonly freeMonthlyAiRoutineLimit = 3;
   private readonly freeDailyChatMessageLimit = 10;
 
   // Configuration des plans
-  private readonly planDetails: Record<SubscriptionPlan, PlanDetails> = {
-    [SubscriptionPlan.FREE]: {
+  private readonly planDetailsFallback: Record<string, PlanDetails> = {
+    [SubscriptionService.FREE_PLAN_CODE]: {
       name: 'Free',
       price: 0,
       currency: 'TND',
@@ -47,7 +52,7 @@ export class SubscriptionService {
         'General guidance',
       ],
     },
-    [SubscriptionPlan.PREMIUM]: {
+    [SubscriptionService.PREMIUM_MONTHLY_PLAN_CODE]: {
       name: 'Premium Monthly',
       price: 19.99,
       currency: 'TND',
@@ -61,7 +66,7 @@ export class SubscriptionService {
         'Priority support',
       ],
     },
-    [SubscriptionPlan.PREMIUM_YEARLY]: {
+    [SubscriptionService.PREMIUM_YEARLY_PLAN_CODE]: {
       name: 'Premium Yearly',
       price: 199.99,
       currency: 'TND',
@@ -74,10 +79,194 @@ export class SubscriptionService {
     },
   };
 
+  private normalizePlanCode(planCode: string | undefined | null): string {
+    const normalized = String(planCode || '').trim().toLowerCase();
+    return normalized || SubscriptionService.FREE_PLAN_CODE;
+  }
+
+  private startOfDay(date: Date): Date {
+    const d = new Date(date);
+    d.setHours(0, 0, 0, 0);
+    return d;
+  }
+
+  private daysInMonth(year: number, monthIndex0: number): number {
+    return new Date(year, monthIndex0 + 1, 0).getDate();
+  }
+
+  private buildMonthlyResetDate(
+    year: number,
+    monthIndex0: number,
+    anchorDay: number,
+  ): Date {
+    const day = Math.min(anchorDay, this.daysInMonth(year, monthIndex0));
+    const d = new Date(year, monthIndex0, day);
+    d.setHours(0, 0, 0, 0);
+    return d;
+  }
+
+  private computeMonthlyWindow(anchorDate: Date, now: Date): {
+    periodStart: Date;
+    nextReset: Date;
+  } {
+    const anchorDay = this.startOfDay(anchorDate).getDate();
+    const today = this.startOfDay(now);
+
+    const thisMonthReset = this.buildMonthlyResetDate(
+      today.getFullYear(),
+      today.getMonth(),
+      anchorDay,
+    );
+
+    if (today >= thisMonthReset) {
+      const nextMonth = new Date(today.getFullYear(), today.getMonth() + 1, 1);
+      return {
+        periodStart: thisMonthReset,
+        nextReset: this.buildMonthlyResetDate(
+          nextMonth.getFullYear(),
+          nextMonth.getMonth(),
+          anchorDay,
+        ),
+      };
+    }
+
+    const prevMonth = new Date(today.getFullYear(), today.getMonth() - 1, 1);
+
+    return {
+      periodStart: this.buildMonthlyResetDate(
+        prevMonth.getFullYear(),
+        prevMonth.getMonth(),
+        anchorDay,
+      ),
+      nextReset: thisMonthReset,
+    };
+  }
+
+  /**
+   * For free-tier monthly quotas: compute window based on subscription start day.
+   * Example: started on 15th => resets every 15th.
+   */
+  async getFreeMonthlyQuotaWindow(userId: string): Promise<{
+    periodStart: Date;
+    resetsAt: Date;
+  }> {
+    const subscription = await this.findOrCreateByUserId(userId);
+    const anchor = subscription.startDate || subscription.createdAt;
+    const { periodStart, nextReset } = this.computeMonthlyWindow(anchor, new Date());
+    return { periodStart, resetsAt: nextReset };
+  }
+
+  private planRowToDetails(row: {
+    name: string;
+    price: number;
+    currency: string;
+    durationDays: number;
+    features: any;
+  }): PlanDetails {
+    const features = Array.isArray(row.features)
+      ? (row.features as string[])
+      : [];
+
+    return {
+      name: row.name,
+      price: row.price,
+      currency: row.currency,
+      duration: row.durationDays,
+      features,
+    };
+  }
+
+  private async getPlanFromDb(planCode: string): Promise<{
+    id: string;
+    code: string;
+    name: string;
+    price: number;
+    currency: string;
+    durationDays: number;
+    features: any;
+    stripePriceId: string | null;
+    isActive: boolean;
+  } | null> {
+    return this.prisma.subscriptionPlan.findUnique({
+      where: { code: planCode },
+    });
+  }
+
+  private async getPlanDetails(planCodeInput: string): Promise<{
+    planCode: string;
+    details: PlanDetails;
+    subscriptionPlanId?: string;
+    stripePriceId?: string | null;
+  }> {
+    const planCode = this.normalizePlanCode(planCodeInput);
+
+    const planRow = await this.getPlanFromDb(planCode);
+    if (planRow && planRow.isActive) {
+      return {
+        planCode,
+        details: this.planRowToDetails(planRow),
+        subscriptionPlanId: planRow.id,
+        stripePriceId: planRow.stripePriceId,
+      };
+    }
+
+    const fallback =
+      this.planDetailsFallback[planCode] ||
+      this.planDetailsFallback[SubscriptionService.FREE_PLAN_CODE];
+
+    return { planCode, details: fallback };
+  }
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly notificationService: NotificationService,
   ) {}
+
+  async adminListPlans() {
+    return this.prisma.subscriptionPlan.findMany({
+      orderBy: [{ isActive: 'desc' }, { price: 'asc' }],
+    });
+  }
+
+  async adminCreatePlan(dto: CreatePlanDto) {
+    return this.prisma.subscriptionPlan.create({
+      data: {
+        code: this.normalizePlanCode(dto.code),
+        name: dto.name,
+        price: dto.price ?? 0,
+        currency: dto.currency ?? 'TND',
+        durationDays: dto.durationDays ?? -1,
+        features: dto.features ?? [],
+        stripePriceId: dto.stripePriceId ?? null,
+        isActive: dto.isActive ?? true,
+      },
+    });
+  }
+
+  async adminUpdatePlan(id: string, dto: UpdatePlanDto) {
+    const data: any = {};
+    if (dto.code !== undefined) data.code = this.normalizePlanCode(dto.code);
+    if (dto.name !== undefined) data.name = dto.name;
+    if (dto.price !== undefined) data.price = dto.price;
+    if (dto.currency !== undefined) data.currency = dto.currency;
+    if (dto.durationDays !== undefined) data.durationDays = dto.durationDays;
+    if (dto.features !== undefined) data.features = dto.features;
+    if (dto.stripePriceId !== undefined) data.stripePriceId = dto.stripePriceId;
+    if (dto.isActive !== undefined) data.isActive = dto.isActive;
+
+    return this.prisma.subscriptionPlan.update({
+      where: { id },
+      data,
+    });
+  }
+
+  async adminDeletePlan(id: string) {
+    // Soft-delete to avoid breaking existing subscriptions
+    return this.prisma.subscriptionPlan.update({
+      where: { id },
+      data: { isActive: false },
+    });
+  }
 
   async getUsageSummary(userId: string): Promise<{
     isPremium: boolean;
@@ -120,11 +309,7 @@ export class SubscriptionService {
 
     const now = new Date();
 
-    const startOfMonth = new Date(now);
-    startOfMonth.setDate(1);
-    startOfMonth.setHours(0, 0, 0, 0);
-    const startOfNextMonth = new Date(startOfMonth);
-    startOfNextMonth.setMonth(startOfNextMonth.getMonth() + 1);
+    const { periodStart, resetsAt } = await this.getFreeMonthlyQuotaWindow(userId);
 
     const startOfToday = new Date(now);
     startOfToday.setHours(0, 0, 0, 0);
@@ -133,13 +318,13 @@ export class SubscriptionService {
 
     const [analysesUsed, aiRoutinesUsed] = await Promise.all([
       this.prisma.analysis.count({
-        where: { userId, createdAt: { gte: startOfMonth } },
+        where: { userId, createdAt: { gte: periodStart, lt: resetsAt } },
       }),
       this.prisma.routine.count({
         where: {
           userId,
           isAIGenerated: true,
-          createdAt: { gte: startOfMonth },
+          createdAt: { gte: periodStart, lt: resetsAt },
         },
       }),
     ]);
@@ -186,13 +371,13 @@ export class SubscriptionService {
           used: analysesUsed,
           limit: this.freeMonthlyAnalysisLimit,
           remaining: analysisRemaining,
-          resetsAt: startOfNextMonth,
+          resetsAt,
         },
         aiRoutines: {
           used: aiRoutinesUsed,
           limit: this.freeMonthlyAiRoutineLimit,
           remaining: aiRoutineRemaining,
-          resetsAt: startOfNextMonth,
+          resetsAt,
         },
         chatMessages: {
           used: chatMessagesUsed,
@@ -220,8 +405,11 @@ export class SubscriptionService {
       throw new ConflictException('User already has a subscription');
     }
 
-    const plan = createSubscriptionDto.plan || SubscriptionPlan.FREE;
-    const planInfo = this.planDetails[plan];
+    const planCode = this.normalizePlanCode(
+      createSubscriptionDto.plan || createSubscriptionDto.planCode,
+    );
+    const { details: planInfo, subscriptionPlanId } =
+      await this.getPlanDetails(planCode);
 
     const startDate = createSubscriptionDto.startDate
       ? new Date(createSubscriptionDto.startDate)
@@ -236,7 +424,8 @@ export class SubscriptionService {
     const subscription = await this.prisma.subscription.create({
       data: {
         userId,
-        plan,
+        plan: planCode,
+        subscriptionPlanId,
         status: createSubscriptionDto.status || SubscriptionStatus.ACTIVE,
         amount: createSubscriptionDto.amount ?? planInfo.price,
         currency: createSubscriptionDto.currency || planInfo.currency,
@@ -245,7 +434,7 @@ export class SubscriptionService {
       },
     });
 
-    this.logger.log(`Subscription created for user ${userId}: ${plan}`);
+    this.logger.log(`Subscription created for user ${userId}: ${planCode}`);
 
     return subscription;
   }
@@ -275,7 +464,7 @@ export class SubscriptionService {
 
     if (!subscription) {
       subscription = await this.create(userId, {
-        plan: SubscriptionPlan.FREE,
+        planCode: SubscriptionService.FREE_PLAN_CODE,
         status: SubscriptionStatus.ACTIVE,
       });
     }
@@ -294,8 +483,12 @@ export class SubscriptionService {
 
     const updateData: any = {};
 
-    if (updateSubscriptionDto.plan) {
-      updateData.plan = updateSubscriptionDto.plan;
+    const incomingPlan = updateSubscriptionDto.plan || updateSubscriptionDto.planCode;
+    if (incomingPlan) {
+      const planCode = this.normalizePlanCode(incomingPlan);
+      const { subscriptionPlanId } = await this.getPlanDetails(planCode);
+      updateData.plan = planCode;
+      updateData.subscriptionPlanId = subscriptionPlanId ?? null;
     }
     if (updateSubscriptionDto.status) {
       updateData.status = updateSubscriptionDto.status;
@@ -324,11 +517,11 @@ export class SubscriptionService {
     upgradeDto: UpgradeSubscriptionDto,
   ): Promise<Subscription> {
     const currentSub = await this.findOrCreateByUserId(userId);
-    const newPlan = upgradeDto.plan;
+    const newPlanCode = this.normalizePlanCode(upgradeDto.plan || upgradeDto.planCode);
 
     // Bloquer le changement de plan si un abonnement premium est encore actif et non expiré
     if (
-      currentSub.plan !== SubscriptionPlan.FREE &&
+      currentSub.plan !== SubscriptionService.FREE_PLAN_CODE &&
       currentSub.status === SubscriptionStatus.ACTIVE &&
       (!currentSub.endDate || new Date() <= new Date(currentSub.endDate))
     ) {
@@ -338,18 +531,19 @@ export class SubscriptionService {
     }
 
     // Vérifier que c'est bien une mise à niveau
-    if (currentSub.plan === newPlan) {
+    if (currentSub.plan === newPlanCode) {
       throw new BadRequestException('Already on this plan');
     }
 
     if (
-      currentSub.plan === SubscriptionPlan.PREMIUM_YEARLY &&
-      newPlan === SubscriptionPlan.PREMIUM
+      currentSub.plan === SubscriptionService.PREMIUM_YEARLY_PLAN_CODE &&
+      newPlanCode === SubscriptionService.PREMIUM_MONTHLY_PLAN_CODE
     ) {
       throw new BadRequestException('Cannot downgrade from yearly to monthly');
     }
 
-    const planInfo = this.planDetails[newPlan];
+    const { details: planInfo, subscriptionPlanId } =
+      await this.getPlanDetails(newPlanCode);
 
     const startDate = new Date();
     let endDate: Date | null = null;
@@ -365,7 +559,8 @@ export class SubscriptionService {
     const subscription = await this.prisma.subscription.update({
       where: { id: currentSub.id },
       data: {
-        plan: newPlan,
+        plan: newPlanCode,
+        subscriptionPlanId: subscriptionPlanId ?? null,
         status: SubscriptionStatus.ACTIVE,
         amount: planInfo.price,
         currency: planInfo.currency,
@@ -384,7 +579,7 @@ export class SubscriptionService {
       actionUrl: '/subscription',
     });
 
-    this.logger.log(`Subscription upgraded for user ${userId}: ${newPlan}`);
+    this.logger.log(`Subscription upgraded for user ${userId}: ${newPlanCode}`);
 
     return subscription;
   }
@@ -395,7 +590,7 @@ export class SubscriptionService {
   async cancel(userId: string): Promise<Subscription> {
     const subscription = await this.findByUserId(userId);
 
-    if (subscription.plan === SubscriptionPlan.FREE) {
+    if (subscription.plan === SubscriptionService.FREE_PLAN_CODE) {
       throw new BadRequestException('Cannot cancel free plan');
     }
 
@@ -474,7 +669,7 @@ export class SubscriptionService {
         return false;
       }
 
-      if (subscription.plan === SubscriptionPlan.FREE) {
+      if (subscription.plan === SubscriptionService.FREE_PLAN_CODE) {
         return false;
       }
 
@@ -485,7 +680,8 @@ export class SubscriptionService {
           where: { id: subscription.id },
           data: {
             status: SubscriptionStatus.EXPIRED,
-            plan: SubscriptionPlan.FREE,
+            plan: SubscriptionService.FREE_PLAN_CODE,
+            subscriptionPlanId: null,
             autoRenew: false,
           },
         });
@@ -508,7 +704,7 @@ export class SubscriptionService {
     daysRemaining: number | null;
   }> {
     const subscription = await this.findOrCreateByUserId(userId);
-    const planDetails = this.planDetails[subscription.plan as SubscriptionPlan];
+    const { details: planDetails } = await this.getPlanDetails(subscription.plan);
     const isPremium = await this.isPremium(userId);
 
     let daysRemaining: number | null = null;
@@ -529,11 +725,49 @@ export class SubscriptionService {
     };
   }
 
+  async getStripePriceIdForPlan(planCodeInput: string): Promise<string> {
+    const planCode = this.normalizePlanCode(planCodeInput);
+    if (planCode === SubscriptionService.FREE_PLAN_CODE) {
+      throw new BadRequestException('Stripe Checkout is only supported for paid plans');
+    }
+
+    const { stripePriceId } = await this.getPlanDetails(planCode);
+
+    if (stripePriceId) return stripePriceId;
+
+    // Fallback to env vars (useful when DB plans exist but stripePriceId wasn't seeded yet)
+    const envPriceId =
+      planCode === SubscriptionService.PREMIUM_MONTHLY_PLAN_CODE
+        ? process.env.STRIPE_PRICE_ID_PREMIUM_MONTHLY
+        : planCode === SubscriptionService.PREMIUM_YEARLY_PLAN_CODE
+          ? process.env.STRIPE_PRICE_ID_PREMIUM_YEARLY
+          : undefined;
+
+    if (envPriceId) return envPriceId;
+
+    throw new BadRequestException(
+      `Missing stripePriceId for planCode=${planCode}. Set it in subscription_plans table or in env vars (STRIPE_PRICE_ID_PREMIUM_MONTHLY / STRIPE_PRICE_ID_PREMIUM_YEARLY).`,
+    );
+  }
+
   /**
    * Obtenir tous les plans disponibles
    */
-  getAvailablePlans(): Record<string, PlanDetails> {
-    return this.planDetails;
+  async getAvailablePlans(): Promise<Record<string, PlanDetails>> {
+    const plans = await this.prisma.subscriptionPlan.findMany({
+      where: { isActive: true },
+      orderBy: { price: 'asc' },
+    });
+
+    if (plans.length === 0) {
+      return this.planDetailsFallback;
+    }
+
+    const result: Record<string, PlanDetails> = {};
+    for (const plan of plans) {
+      result[plan.code] = this.planRowToDetails(plan);
+    }
+    return result;
   }
 
   /**
@@ -542,11 +776,11 @@ export class SubscriptionService {
   async renew(userId: string): Promise<Subscription> {
     const subscription = await this.findByUserId(userId);
 
-    if (subscription.plan === SubscriptionPlan.FREE) {
+    if (subscription.plan === SubscriptionService.FREE_PLAN_CODE) {
       throw new BadRequestException('Cannot renew free plan');
     }
 
-    const planInfo = this.planDetails[subscription.plan as SubscriptionPlan];
+    const { details: planInfo } = await this.getPlanDetails(subscription.plan);
 
     const startDate = new Date();
     const endDate = new Date(startDate);
@@ -588,11 +822,7 @@ export class SubscriptionService {
   }> {
     const subscriptions = await this.prisma.subscription.findMany();
 
-    const byPlan: Record<string, number> = {
-      free: 0,
-      premium: 0,
-      premium_yearly: 0,
-    };
+    const byPlan: Record<string, number> = {};
 
     const byStatus: Record<string, number> = {
       active: 0,
@@ -627,7 +857,7 @@ export class SubscriptionService {
    * Obtenir tous les abonnements (admin)
    */
   async findAll(options?: {
-    plan?: SubscriptionPlan;
+    plan?: string;
     status?: SubscriptionStatus;
     limit?: number;
     offset?: number;
@@ -673,11 +903,12 @@ export class SubscriptionService {
       where: {
         status: SubscriptionStatus.ACTIVE,
         endDate: { lt: now },
-        plan: { not: SubscriptionPlan.FREE },
+        plan: { not: SubscriptionService.FREE_PLAN_CODE },
       },
       data: {
         status: SubscriptionStatus.EXPIRED,
-        plan: SubscriptionPlan.FREE,
+        plan: SubscriptionService.FREE_PLAN_CODE,
+        subscriptionPlanId: null,
         autoRenew: false,
       },
     });

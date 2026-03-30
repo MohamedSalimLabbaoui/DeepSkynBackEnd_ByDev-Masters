@@ -65,24 +65,20 @@ export class RoutineService {
     const isPremium = await this.subscriptionService.isPremium(userId);
     if (isPremium) return;
 
-    const startOfMonth = new Date();
-    startOfMonth.setDate(1);
-    startOfMonth.setHours(0, 0, 0, 0);
-
-    const startOfNextMonth = new Date(startOfMonth);
-    startOfNextMonth.setMonth(startOfNextMonth.getMonth() + 1);
+    const { periodStart, resetsAt } =
+      await this.subscriptionService.getFreeMonthlyQuotaWindow(userId);
 
     const thisMonthCount = await this.prisma.routine.count({
       where: {
         userId,
         isAIGenerated: true,
-        createdAt: { gte: startOfMonth },
+        createdAt: { gte: periodStart, lt: resetsAt },
       },
     });
 
     if (thisMonthCount >= this.freeMonthlyAiRoutineLimit) {
       throw new ForbiddenException(
-        `Limite de ${this.freeMonthlyAiRoutineLimit} routines IA/mois atteinte. Réinitialisation: ${startOfNextMonth.toISOString()}. Passez à Premium pour des routines illimitées.`,
+        `Limite de ${this.freeMonthlyAiRoutineLimit} routines IA/mois atteinte. Réinitialisation: ${resetsAt.toISOString()}. Passez à Premium pour des routines illimitées.`,
       );
     }
   }

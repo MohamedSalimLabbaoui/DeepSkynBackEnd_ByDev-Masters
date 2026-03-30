@@ -9,7 +9,7 @@ import {
 import { ApiTags } from '@nestjs/swagger';
 import Stripe from 'stripe';
 import { SubscriptionService } from './subscription.service';
-import { SubscriptionPlan, SubscriptionStatus } from './dto/create-subscription.dto';
+import { SubscriptionStatus } from './dto/create-subscription.dto';
 import { PrismaService } from '../prisma/prisma.service';
 import { NotificationService } from '../notification/notification.service';
 
@@ -73,15 +73,18 @@ export class StripeWebhookController {
       case 'checkout.session.completed': {
         const session = event.data.object as Stripe.Checkout.Session;
         const userId = (session.metadata?.userId as string) || (session.client_reference_id as string);
-        const plan = session.metadata?.plan as SubscriptionPlan | undefined;
+        const planCodeRaw =
+          (session.metadata?.planCode as string | undefined) ||
+          (session.metadata?.plan as string | undefined);
+        const planCode = String(planCodeRaw || '').trim().toLowerCase();
 
         if (!userId) {
           this.logger.warn('checkout.session.completed missing userId');
           break;
         }
-        if (!plan || plan === SubscriptionPlan.FREE) {
+        if (!planCode || planCode === 'free') {
           this.logger.warn(
-            `checkout.session.completed missing/invalid plan: ${String(plan)}`,
+            `checkout.session.completed missing/invalid planCode: ${String(planCodeRaw)}`,
           );
           break;
         }
@@ -89,10 +92,10 @@ export class StripeWebhookController {
         // Ensure subscription row exists
         await this.subscriptionService.findOrCreateByUserId(userId);
 
-        const plans = this.subscriptionService.getAvailablePlans();
-        const planInfo = plans[plan];
+        const plans = await this.subscriptionService.getAvailablePlans();
+        const planInfo = plans[planCode];
         if (!planInfo || planInfo.duration <= 0) {
-          this.logger.warn(`Plan details not found for plan=${plan}`);
+          this.logger.warn(`Plan details not found for planCode=${planCode}`);
         }
 
         const startDate = new Date();
@@ -105,10 +108,15 @@ export class StripeWebhookController {
         const stripeSubscriptionId =
           typeof session.subscription === 'string' ? session.subscription : null;
 
+        const planRow = await this.prisma.subscriptionPlan.findUnique({
+          where: { code: planCode },
+          select: { id: true },
+        });
+
         await this.prisma.subscription.update({
           where: { userId },
           data: {
-            plan,
+            plan: planCode,
             status: SubscriptionStatus.ACTIVE,
             amount: planInfo?.price ?? undefined,
             currency: planInfo?.currency ?? undefined,
@@ -116,19 +124,20 @@ export class StripeWebhookController {
             endDate,
             cancelledAt: null,
             planId: stripeSubscriptionId ?? undefined,
+            subscriptionPlanId: planRow?.id ?? null,
           },
         });
 
         await this.notificationService.create({
           userId,
           title: 'Abonnement activé',
-          message: `Votre abonnement ${planInfo?.name || String(plan)} est maintenant actif.`,
+          message: `Votre abonnement ${planInfo?.name || String(planCode)} est maintenant actif.`,
           type: 'success',
           actionUrl: '/subscription',
         });
 
         this.logger.log(
-          `Subscription updated for user=${userId} plan=${plan} stripeSub=${stripeSubscriptionId ?? 'n/a'}`,
+          `Subscription updated for user=${userId} planCode=${planCode} stripeSub=${stripeSubscriptionId ?? 'n/a'}`,
         );
         break;
       }

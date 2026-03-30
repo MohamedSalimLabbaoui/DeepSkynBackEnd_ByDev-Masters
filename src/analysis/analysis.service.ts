@@ -48,23 +48,19 @@ export class AnalysisService {
     const isPremium = await this.subscriptionService.isPremium(userId);
     if (isPremium) return;
 
-    const startOfMonth = new Date();
-    startOfMonth.setDate(1);
-    startOfMonth.setHours(0, 0, 0, 0);
-
-    const startOfNextMonth = new Date(startOfMonth);
-    startOfNextMonth.setMonth(startOfNextMonth.getMonth() + 1);
+    const { periodStart, resetsAt } =
+      await this.subscriptionService.getFreeMonthlyQuotaWindow(userId);
 
     const thisMonthCount = await this.prisma.analysis.count({
       where: {
         userId,
-        createdAt: { gte: startOfMonth },
+        createdAt: { gte: periodStart, lt: resetsAt },
       },
     });
 
     if (thisMonthCount >= this.freeMonthlyAnalysisLimit) {
       throw new ForbiddenException(
-        `Monthly analysis limit reached (${this.freeMonthlyAnalysisLimit}). Resets at ${startOfNextMonth.toISOString()}. Upgrade to premium for unlimited analyses.`,
+        `Monthly analysis limit reached (${this.freeMonthlyAnalysisLimit}). Resets at ${resetsAt.toISOString()}. Upgrade to premium for unlimited analyses.`,
       );
     }
   }

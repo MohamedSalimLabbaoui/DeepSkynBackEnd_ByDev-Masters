@@ -58,6 +58,105 @@ async function main() {
   console.log('🌱 Starting database seeding...\n');
 
   try {
+    const stripePriceMonthly = process.env.STRIPE_PRICE_ID_PREMIUM_MONTHLY ?? null;
+    const stripePriceYearly = process.env.STRIPE_PRICE_ID_PREMIUM_YEARLY ?? null;
+
+    // Seed subscription plans (upsert)
+    await prisma.subscriptionPlan.upsert({
+      where: { code: 'free' },
+      update: {
+        name: 'Free',
+        price: 0,
+        currency: 'TND',
+        durationDays: -1,
+        features: [
+          '3 analyses per month',
+          '3 AI routines per month',
+          'Unlimited manual routines',
+          'AI chat limited to 10 messages/day',
+          'General guidance',
+        ],
+        stripePriceId: null,
+        isActive: true,
+      },
+      create: {
+        code: 'free',
+        name: 'Free',
+        price: 0,
+        currency: 'TND',
+        durationDays: -1,
+        features: [
+          '3 analyses per month',
+          '3 AI routines per month',
+          'Unlimited manual routines',
+          'AI chat limited to 10 messages/day',
+          'General guidance',
+        ],
+        stripePriceId: null,
+        isActive: true,
+      },
+    });
+
+    await prisma.subscriptionPlan.upsert({
+      where: { code: 'premium' },
+      update: {
+        name: 'Premium Monthly',
+        price: 19.99,
+        currency: 'TND',
+        durationDays: 30,
+        features: [
+          'Unlimited analyses',
+          'AI personalized routines',
+          'Unlimited AI chat',
+          'Advanced tracking',
+          'Product recommendations',
+          'Priority support',
+        ],
+        stripePriceId: stripePriceMonthly,
+        isActive: true,
+      },
+      create: {
+        code: 'premium',
+        name: 'Premium Monthly',
+        price: 19.99,
+        currency: 'TND',
+        durationDays: 30,
+        features: [
+          'Unlimited analyses',
+          'AI personalized routines',
+          'Unlimited AI chat',
+          'Advanced tracking',
+          'Product recommendations',
+          'Priority support',
+        ],
+        stripePriceId: stripePriceMonthly,
+        isActive: true,
+      },
+    });
+
+    await prisma.subscriptionPlan.upsert({
+      where: { code: 'premium_yearly' },
+      update: {
+        name: 'Premium Yearly',
+        price: 199.99,
+        currency: 'TND',
+        durationDays: 365,
+        features: ['All Premium features', '2 months free', 'Early access to new features'],
+        stripePriceId: stripePriceYearly,
+        isActive: true,
+      },
+      create: {
+        code: 'premium_yearly',
+        name: 'Premium Yearly',
+        price: 199.99,
+        currency: 'TND',
+        durationDays: 365,
+        features: ['All Premium features', '2 months free', 'Early access to new features'],
+        stripePriceId: stripePriceYearly,
+        isActive: true,
+      },
+    });
+
     // Create users with related data
     for (const userData of testUsers) {
       console.log(`👤 Creating user: ${userData.email}`);

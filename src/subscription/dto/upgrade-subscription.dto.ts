@@ -1,15 +1,21 @@
-import { IsEnum, IsOptional, IsString } from 'class-validator';
+import { IsOptional, IsString } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { SubscriptionPlan } from './create-subscription.dto';
 
 export class UpgradeSubscriptionDto {
   @ApiProperty({
     description: 'Plan vers lequel upgrader',
-    enum: SubscriptionPlan,
     example: 'premium',
   })
-  @IsEnum(SubscriptionPlan)
-  plan: SubscriptionPlan;
+  @IsString()
+  plan: string;
+
+  @ApiPropertyOptional({
+    description: 'Alias rétro-compatible (préférer plan)',
+    example: 'premium',
+  })
+  @IsString()
+  @IsOptional()
+  planCode?: string;
 
   @ApiPropertyOptional({
     description: 'Méthode de paiement (pour intégration future)',

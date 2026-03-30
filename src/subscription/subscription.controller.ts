@@ -3,6 +3,7 @@ import {
   Get,
   Post,
   Patch,
+  Delete,
   Body,
   Query,
   UseGuards,
@@ -21,9 +22,10 @@ import { SubscriptionService } from './subscription.service';
 import {
   CreateSubscriptionDto,
   CreateStripeCheckoutDto,
+  CreatePlanDto,
   UpdateSubscriptionDto,
+  UpdatePlanDto,
   UpgradeSubscriptionDto,
-  SubscriptionPlan,
   SubscriptionStatus,
 } from './dto';
 import { KeycloakAuthGuard } from '../auth/guards/keycloak-auth.guard';
@@ -47,24 +49,8 @@ export class SubscriptionController {
     });
   }
 
-  private getStripePriceId(plan: SubscriptionPlan): string {
-    if (plan === SubscriptionPlan.PREMIUM) {
-      const priceId = process.env.STRIPE_PRICE_ID_PREMIUM_MONTHLY;
-      if (!priceId) {
-        throw new Error('Missing STRIPE_PRICE_ID_PREMIUM_MONTHLY in environment');
-      }
-      return priceId;
-    }
-
-    if (plan === SubscriptionPlan.PREMIUM_YEARLY) {
-      const priceId = process.env.STRIPE_PRICE_ID_PREMIUM_YEARLY;
-      if (!priceId) {
-        throw new Error('Missing STRIPE_PRICE_ID_PREMIUM_YEARLY in environment');
-      }
-      return priceId;
-    }
-
-    throw new Error('Stripe Checkout is only supported for premium plans');
+  private async getStripePriceId(planCode: string): Promise<string> {
+    return this.subscriptionService.getStripePriceIdForPlan(planCode);
   }
 
   @Get('me')
@@ -106,7 +92,7 @@ export class SubscriptionController {
    * Obtenir les plans disponibles
    */
   @Get('plans')
-  getPlans() {
+  async getPlans() {
     return this.subscriptionService.getAvailablePlans();
   }
 
@@ -121,7 +107,8 @@ export class SubscriptionController {
     @Body() dto: CreateStripeCheckoutDto,
   ) {
     const stripe = this.stripeClient();
-    const priceId = this.getStripePriceId(dto.plan);
+    const planCode = dto.plan || dto.planCode;
+    const priceId = await this.getStripePriceId(planCode);
 
     const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
     const successUrl = `${frontendUrl}/payment/success?session_id={CHECKOUT_SESSION_ID}`;
@@ -135,7 +122,8 @@ export class SubscriptionController {
       client_reference_id: userId,
       metadata: {
         userId,
-        plan: dto.plan,
+        planCode,
+        plan: planCode,
       },
     });
 
@@ -216,7 +204,7 @@ export class SubscriptionController {
   @UseGuards(KeycloakAuthGuard, RolesGuard)
   @Roles('admin')
   async getAllSubscriptions(
-    @Query('plan') plan?: SubscriptionPlan,
+    @Query('plan') plan?: string,
     @Query('status') status?: SubscriptionStatus,
     @Query('limit') limit?: string,
     @Query('offset') offset?: string,
@@ -227,6 +215,36 @@ export class SubscriptionController {
       limit: limit ? parseInt(limit, 10) : undefined,
       offset: offset ? parseInt(offset, 10) : undefined,
     });
+  }
+
+  // ========== ADMIN PLAN CRUD ==========
+
+  @Get('admin/plans')
+  @UseGuards(KeycloakAuthGuard, RolesGuard)
+  @Roles('admin')
+  async adminListPlans() {
+    return this.subscriptionService.adminListPlans();
+  }
+
+  @Post('admin/plans')
+  @UseGuards(KeycloakAuthGuard, RolesGuard)
+  @Roles('admin')
+  async adminCreatePlan(@Body() dto: CreatePlanDto) {
+    return this.subscriptionService.adminCreatePlan(dto);
+  }
+
+  @Patch('admin/plans/:id')
+  @UseGuards(KeycloakAuthGuard, RolesGuard)
+  @Roles('admin')
+  async adminUpdatePlan(@Param('id') id: string, @Body() dto: UpdatePlanDto) {
+    return this.subscriptionService.adminUpdatePlan(id, dto);
+  }
+
+  @Delete('admin/plans/:id')
+  @UseGuards(KeycloakAuthGuard, RolesGuard)
+  @Roles('admin')
+  async adminDeletePlan(@Param('id') id: string) {
+    return this.subscriptionService.adminDeletePlan(id);
   }
 
   /**

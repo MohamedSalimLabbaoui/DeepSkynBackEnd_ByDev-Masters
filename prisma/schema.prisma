@@ -168,6 +168,7 @@ model Subscription {
   id            String    @id @default(uuid())
   userId        String    @unique
   planId        String?
+  subscriptionPlanId String?
   plan          String    @default("free")
   status        String    @default("active")
   amount        Float?
@@ -180,8 +181,26 @@ model Subscription {
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
   user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  subscriptionPlan SubscriptionPlan? @relation(fields: [subscriptionPlanId], references: [id], onDelete: SetNull)
 
   @@map("subscriptions")
+}
+
+model SubscriptionPlan {
+  id            String   @id @default(uuid())
+  code          String   @unique
+  name          String
+  price         Float    @default(0)
+  currency      String   @default("TND")
+  durationDays  Int      @default(-1)
+  features      Json?
+  stripePriceId String?
+  isActive      Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  subscriptions Subscription[]
+
+  @@map("subscription_plans")
 }
 
 model Post {
