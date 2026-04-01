@@ -1,6 +1,12 @@
 import { Injectable, Logger, HttpException, HttpStatus } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import axios, { AxiosError } from 'axios';
+import { OllamaService } from './ollama.service';
+import {
+  compressWhitespace,
+  buildCompactAnalysisPrompt,
+  buildCompactScanPrompt,
+} from './prompt-compression.util';
 
 export interface GeminiAnalysisResult {
   skinType: string;
@@ -45,11 +51,13 @@ export class GeminiService {
   private readonly apiUrl: string;
   private readonly maxRetries = 3;
   private readonly retryDelay = 2000; // 2 seconds
+  private readonly ollamaService: OllamaService;
 
   constructor(private readonly configService: ConfigService) {
     this.apiKey = this.configService.get<string>('GEMINI_API_KEY');
     this.apiUrl =
-      'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent';
+      'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent';
+    this.ollamaService = new OllamaService(configService);
   }
 
   /**
@@ -108,7 +116,7 @@ export class GeminiService {
   }
 
   /**
-   * Analyze skin images using Gemini AI
+   * Analyze skin images using Gemini AI with Ollama fallback
    */
   async analyzeSkinImages(
     imageUrls: string[],
@@ -128,7 +136,7 @@ export class GeminiService {
           temperature: 0.4,
           topK: 32,
           topP: 1,
-          maxOutputTokens: 4096,
+          maxOutputTokens: 8192,
         },
         safetySettings: [
           {
@@ -171,13 +179,32 @@ export class GeminiService {
 
       return this.parseAnalysisResponse(textResponse);
     } catch (error) {
-      this.logger.error('Gemini analysis failed', error);
+      this.logger.error('Gemini analysis failed, trying Ollama fallback', error);
+      
+      // Fallback to Ollama with vision model
+      try {
+        const isOllamaAvailable = await this.ollamaService.isAvailable();
+        if (isOllamaAvailable) {
+          this.logger.log('Using Ollama vision fallback for image analysis');
+          const fallbackPrompt = this.buildAnalysisPrompt(questionnaire);
+          const fallbackImageParts = await this.prepareImageParts(imageUrls);
+          
+          if (fallbackImageParts.length > 0) {
+            const base64Image = fallbackImageParts[0].inlineData.data;
+            const ollamaResponse = await this.ollamaService.analyzeImage(base64Image, fallbackPrompt);
+            return this.parseAnalysisResponse(ollamaResponse);
+          }
+        }
+      } catch (ollamaError) {
+        this.logger.error('Ollama fallback also failed', ollamaError);
+      }
+      
       throw error;
     }
   }
 
   /**
-   * Analyze real-time face scan
+   * Analyze real-time face scan with Ollama fallback
    */
   async analyzeRealTimeScan(
     base64Image: string,
@@ -204,7 +231,7 @@ export class GeminiService {
           temperature: 0.4,
           topK: 32,
           topP: 1,
-          maxOutputTokens: 4096,
+          maxOutputTokens: 8192,
         },
       };
 
@@ -229,85 +256,37 @@ export class GeminiService {
 
       return this.parseAnalysisResponse(textResponse);
     } catch (error) {
-      this.logger.error('Real-time scan analysis failed', error);
+      this.logger.error('Real-time scan analysis failed, trying Ollama fallback', error);
+      
+      // Fallback to Ollama with vision model
+      try {
+        const isOllamaAvailable = await this.ollamaService.isAvailable();
+        if (isOllamaAvailable) {
+          this.logger.log('Using Ollama vision fallback for real-time scan');
+          const prompt = this.buildRealTimeScanPrompt();
+          const ollamaResponse = await this.ollamaService.analyzeImage(base64Image, prompt);
+          return this.parseAnalysisResponse(ollamaResponse);
+        }
+      } catch (ollamaError) {
+        this.logger.error('Ollama fallback also failed', ollamaError);
+      }
+      
       throw error;
     }
   }
 
   /**
-   * Build the analysis prompt
+   * Build the compressed analysis prompt (~50% token reduction)
    */
   private buildAnalysisPrompt(questionnaire?: Record<string, any>): string {
-    let prompt = `You are an expert dermatologist AI assistant. Analyze the provided skin images and provide a comprehensive dermatological assessment.
-
-Please analyze the skin in the images and provide your assessment in the following JSON format ONLY (no additional text):
-
-{
-  "skinType": "dry|oily|combination|normal|sensitive",
-  "skinAge": <estimated skin age as number>,
-  "healthScore": <0-100 score>,
-  "conditions": ["list of detected skin conditions"],
-  "concerns": ["list of skin concerns"],
-  "recommendations": {
-    "products": ["recommended product types"],
-    "ingredients": ["beneficial ingredients to look for"],
-    "lifestyle": ["lifestyle recommendations"],
-    "warnings": ["ingredients or practices to avoid"]
-  },
-  "detailedAnalysis": {
-    "hydration": { "score": <0-100>, "description": "brief description" },
-    "texture": { "score": <0-100>, "description": "brief description" },
-    "pores": { "score": <0-100>, "description": "brief description" },
-    "pigmentation": { "score": <0-100>, "description": "brief description" },
-    "wrinkles": { "score": <0-100>, "description": "brief description" },
-    "acne": { "score": <0-100>, "description": "brief description" },
-    "redness": { "score": <0-100>, "description": "brief description" },
-    "elasticity": { "score": <0-100>, "description": "brief description" }
-  },
-  "fitzpatrickType": <1-6>,
-  "summary": "A comprehensive summary of the skin analysis in 2-3 sentences"
-}`;
-
-    if (questionnaire) {
-      prompt += `\n\nUser questionnaire responses:\n${JSON.stringify(questionnaire, null, 2)}`;
-    }
-
-    return prompt;
+    return buildCompactAnalysisPrompt(questionnaire);
   }
 
   /**
-   * Build prompt for real-time scan
+   * Build compressed prompt for real-time scan (~60% token reduction)
    */
   private buildRealTimeScanPrompt(): string {
-    return `You are an expert dermatologist AI. Analyze this real-time face scan and provide a quick skin assessment.
-
-Provide your assessment in the following JSON format ONLY:
-
-{
-  "skinType": "dry|oily|combination|normal|sensitive",
-  "skinAge": <estimated skin age>,
-  "healthScore": <0-100>,
-  "conditions": ["detected conditions"],
-  "concerns": ["main concerns"],
-  "recommendations": {
-    "products": ["quick product recommendations"],
-    "ingredients": ["key ingredients"],
-    "lifestyle": ["lifestyle tips"],
-    "warnings": ["things to avoid"]
-  },
-  "detailedAnalysis": {
-    "hydration": { "score": <0-100>, "description": "brief" },
-    "texture": { "score": <0-100>, "description": "brief" },
-    "pores": { "score": <0-100>, "description": "brief" },
-    "pigmentation": { "score": <0-100>, "description": "brief" },
-    "wrinkles": { "score": <0-100>, "description": "brief" },
-    "acne": { "score": <0-100>, "description": "brief" },
-    "redness": { "score": <0-100>, "description": "brief" },
-    "elasticity": { "score": <0-100>, "description": "brief" }
-  },
-  "fitzpatrickType": <1-6>,
-  "summary": "Quick summary"
-}`;
+    return buildCompactScanPrompt();
   }
 
   /**
@@ -410,7 +389,7 @@ Provide your assessment in the following JSON format ONLY:
   }
 
   /**
-   * Get skincare advice based on conditions
+   * Get skincare advice based on conditions with Ollama fallback
    */
   async getSkincareAdvice(
     conditions: string[],
@@ -422,11 +401,12 @@ Provide your assessment in the following JSON format ONLY:
     const concernsList =
       concerns?.length > 0 ? concerns.join(', ') : 'overall skincare';
 
-    const prompt = `As a dermatologist, provide brief skincare advice for someone with:
-    Conditions: ${conditionsList}
-    Concerns: ${concernsList}
-    
-    Provide practical, actionable advice in 3-4 sentences.`;
+    // Compressed prompt
+    const prompt = compressWhitespace(`
+Dermatologist. Advice for:
+Cond:${conditionsList}
+Concerns:${concernsList}
+3-4 sentences, actionable.`);
 
     try {
       const response = await this.makeRequestWithRetry(() =>
@@ -436,7 +416,7 @@ Provide your assessment in the following JSON format ONLY:
             contents: [{ parts: [{ text: prompt }] }],
             generationConfig: {
               temperature: 0.7,
-              maxOutputTokens: 256,
+              maxOutputTokens: 1024,
             },
           },
           { headers: { 'Content-Type': 'application/json' }, timeout: 30000 },
@@ -448,27 +428,40 @@ Provide your assessment in the following JSON format ONLY:
         'Unable to generate advice.'
       );
     } catch (error) {
-      this.logger.error('Failed to get skincare advice', error);
+      this.logger.error('Failed to get skincare advice from Gemini, trying Ollama', error);
+      
+      try {
+        const isOllamaAvailable = await this.ollamaService.isAvailable();
+        if (isOllamaAvailable) {
+          this.logger.log('Using Ollama fallback for skincare advice');
+          return await this.ollamaService.getSkincareAdvice(conditions, concerns);
+        }
+      } catch (ollamaError) {
+        this.logger.error('Ollama fallback also failed', ollamaError);
+      }
+      
       return 'Unable to generate advice at this time. Please try again later.';
     }
   }
 
   /**
-   * Chat with AI - Conversational skincare assistant
+   * Chat with AI - Conversational skincare assistant (compressed)
    */
   async chat(
     systemPrompt: string,
     conversationHistory: string,
     userMessage: string,
   ): Promise<string> {
-    const prompt = `${systemPrompt}
+    // Compress history by keeping only last 500 chars
+    const compressedHistory = conversationHistory?.length > 500 
+      ? '...' + conversationHistory.slice(-500) 
+      : (conversationHistory || '-');
 
-Historique de la conversation:
-${conversationHistory || 'Nouvelle conversation'}
-
-Dernier message de l'utilisateur: ${userMessage}
-
-Réponds de manière utile, personnalisée et professionnelle en français:`;
+    const prompt = compressWhitespace(`
+${systemPrompt}
+Hist:${compressedHistory}
+User:${userMessage}
+Rép:français,utile,pro.`);
 
     try {
       const response = await this.makeRequestWithRetry(() =>
@@ -480,7 +473,7 @@ Réponds de manière utile, personnalisée et professionnelle en français:`;
               temperature: 0.7,
               topK: 40,
               topP: 0.95,
-              maxOutputTokens: 1024,
+              maxOutputTokens: 2048,
             },
           },
           { headers: { 'Content-Type': 'application/json' }, timeout: 30000 },
@@ -492,7 +485,18 @@ Réponds de manière utile, personnalisée et professionnelle en français:`;
         "Je suis désolé, je n'ai pas pu générer une réponse."
       );
     } catch (error) {
-      this.logger.error('Failed to generate chat response', error);
+      this.logger.error('Failed to generate chat response from Gemini, trying Ollama', error);
+      
+      try {
+        const isOllamaAvailable = await this.ollamaService.isAvailable();
+        if (isOllamaAvailable) {
+          this.logger.log('Using Ollama fallback for chat');
+          return await this.ollamaService.chatSkincare(systemPrompt, conversationHistory, userMessage);
+        }
+      } catch (ollamaError) {
+        this.logger.error('Ollama fallback also failed', ollamaError);
+      }
+      
       throw error;
     }
   }

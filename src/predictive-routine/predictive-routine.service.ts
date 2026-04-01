@@ -1,7 +1,12 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, HttpException, HttpStatus } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../prisma/prisma.service';
-import Anthropic from '@anthropic-ai/sdk';
+import axios, { AxiosError } from 'axios';
+import {
+  compressWhitespace,
+  compressWeatherForecast,
+  abbrevSkinType,
+} from './prompt-compression.util';
 
 interface AnalysisResult {
   condition: string;
@@ -31,19 +36,134 @@ export interface GeneratedRoutine {
   globalAdvice: string;
 }
 
+interface GeminiResponse {
+  candidates: {
+    content: {
+      parts: {
+        text: string;
+      }[];
+    };
+  }[];
+}
+
+interface OllamaGenerateResponse {
+  model: string;
+  response: string;
+  done: boolean;
+}
+
 @Injectable()
 export class PredictiveRoutineService {
   private readonly logger = new Logger(PredictiveRoutineService.name);
-  private readonly anthropic: Anthropic;
+  private readonly apiKey: string;
+  private readonly apiUrl: string;
+  private readonly ollamaBaseUrl: string;
+  private readonly ollamaTextModel: string;
+  private readonly maxRetries = 3;
+  private readonly retryDelay = 2000;
 
   constructor(
     private readonly prisma: PrismaService,
     private readonly config: ConfigService,
   ) {
-    const apiKey = this.config.get<string>('ANTHROPIC_API_KEY');
-    if (apiKey) {
-      this.anthropic = new Anthropic({ apiKey });
+    this.apiKey = this.config.get<string>('GEMINI_API_KEY');
+    this.apiUrl =
+      'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent';
+    this.ollamaBaseUrl = this.config.get<string>('OLLAMA_BASE_URL') || 'http://localhost:11434';
+    this.ollamaTextModel = this.config.get<string>('OLLAMA_TEXT_MODEL') || 'llama3:8b';
+  }
+
+  /**
+   * Check if Ollama is available
+   */
+  private async isOllamaAvailable(): Promise<boolean> {
+    try {
+      const response = await axios.get(`${this.ollamaBaseUrl}/api/tags`, { timeout: 3000 });
+      return response.status === 200;
+    } catch {
+      return false;
     }
+  }
+
+  /**
+   * Generate with Ollama fallback
+   */
+  private async generateWithOllama(prompt: string): Promise<string> {
+    const response = await axios.post<OllamaGenerateResponse>(
+      `${this.ollamaBaseUrl}/api/generate`,
+      {
+        model: this.ollamaTextModel,
+        prompt,
+        stream: false,
+        options: {
+          temperature: 0.7,
+          top_p: 0.9,
+          num_predict: 2048,
+        },
+      },
+      { timeout: 120000 },
+    );
+
+    if (response.data?.response) {
+      return response.data.response;
+    }
+
+    throw new Error('Empty response from Ollama');
+  }
+
+  /**
+   * Sleep helper for retry delays
+   */
+  private sleep(ms: number): Promise<void> {
+    return new Promise((resolve) => setTimeout(resolve, ms));
+  }
+
+  /**
+   * Make API request with retry logic
+   */
+  private async makeRequestWithRetry<T>(
+    requestFn: () => Promise<T>,
+    retries = this.maxRetries,
+  ): Promise<T> {
+    for (let attempt = 1; attempt <= retries; attempt++) {
+      try {
+        return await requestFn();
+      } catch (error) {
+        const axiosError = error as AxiosError;
+
+        if (axiosError.response?.status === 429) {
+          if (attempt < retries) {
+            const delay = this.retryDelay * attempt;
+            this.logger.warn(
+              `Rate limited (429). Retrying in ${delay}ms... (attempt ${attempt}/${retries})`,
+            );
+            await this.sleep(delay);
+            continue;
+          }
+          throw new HttpException(
+            'API rate limit exceeded. Please try again later.',
+            HttpStatus.TOO_MANY_REQUESTS,
+          );
+        }
+
+        if (
+          axiosError.response?.status === 503 ||
+          axiosError.response?.status === 500
+        ) {
+          if (attempt < retries) {
+            const delay = this.retryDelay * attempt;
+            this.logger.warn(
+              `Server error (${axiosError.response?.status}). Retrying in ${delay}ms...`,
+            );
+            await this.sleep(delay);
+            continue;
+          }
+        }
+
+        throw error;
+      }
+    }
+    throw new Error('Max retries exceeded');
   }
 
   async generatePredictiveRoutine(
@@ -62,8 +182,8 @@ export class PredictiveRoutineService {
       // 2. Get user profile (optional: cycle phase, products)
       const userProfile = await this.getUserProfile(userId);
       
-      // 3. Generate routine with Claude AI
-      const routine = await this.generateWithClaude(
+      // 3. Generate routine with Gemini AI
+      const routine = await this.generateWithGemini(
         analysisResult,
         weatherData,
         userProfile.cyclePhase,
@@ -168,86 +288,116 @@ export class PredictiveRoutineService {
     }
   }
 
-  private async generateWithClaude(
+  private async generateWithGemini(
     analysisResult: AnalysisResult,
     weatherData: WeatherForecast,
     cyclePhase: string | null,
     products: string[] | null,
   ): Promise<GeneratedRoutine> {
-    if (!this.anthropic) {
-      this.logger.warn('Claude API not configured, using fallback');
+    if (!this.apiKey) {
+      this.logger.warn('Gemini API not configured, using fallback');
       return this.getFallbackRoutine(analysisResult.skinType);
     }
 
     try {
-      // Format weather summary
-      const weatherSummary = this.formatWeatherSummary(weatherData);
+      // Compressed weather format: L31:uv,rain,temp|Ma1:uv,rain,temp|...
+      const weatherSummary = compressWeatherForecast(weatherData.daily);
+      const st = abbrevSkinType(analysisResult.skinType);
+      const issues = analysisResult.detectedIssues.slice(0, 3).join(',') || '-';
+      const prods = products?.slice(0, 5).join(',') || '-';
 
-      // Build user prompt
-      const userPrompt = `État de peau actuel: ${analysisResult.condition}, problèmes détectés: ${analysisResult.detectedIssues.join(', ')}, type de peau: ${analysisResult.skinType}.
-Prévisions météo 7 jours: ${weatherSummary}.
-Phase du cycle: ${cyclePhase || 'non renseigné'}.
-Produits disponibles: ${products?.join(', ') || 'non renseignés'}.
-Génère la routine prédictive 7 jours en JSON strict.`;
+      // Compressed prompt - ~55% token reduction
+      const prompt = compressWhitespace(`
+Dermato/cosmeto expert. Routine prédictive 7j.
+Peau:${st},${analysisResult.condition},${issues}
+Météo7j(jour:uv,pluie,temp):${weatherSummary}
+Cycle:${cyclePhase || '-'}
+Produits:${prods}
+Rép JSON strict:{days:[{day,morning:[],evening:[],tip,warning}],globalAdvice}
+Français, 7 jours.`);
 
-      const systemPrompt = `Tu es un expert dermatologue et cosmétologue. 
-Tu génères des routines de soin cutané personnalisées et prédictives.
-Réponds UNIQUEMENT en JSON valide, aucun texte avant ou après.
-Format exact:
-{
-  "days": [
-    {
-      "day": "Lundi 31 Mars",
-      "morning": ["étape 1", "étape 2"],
-      "evening": ["étape 1", "étape 2"],
-      "tip": "conseil spécifique du jour",
-      "warning": "alerte si UV élevé ou pluie etc (null si rien)"
-    }
-  ],
-  "globalAdvice": "conseil général pour la semaine"
-}`;
+      this.logger.log('Calling Gemini API with compressed prompt...');
 
-      this.logger.log('Calling Claude API...');
-
-      const message = await this.anthropic.messages.create({
-        model: 'claude-sonnet-4-20250514',
-        max_tokens: 2048,
-        temperature: 0.7,
-        system: systemPrompt,
-        messages: [
+      const response = await this.makeRequestWithRetry(() =>
+        axios.post<GeminiResponse>(
+          `${this.apiUrl}?key=${this.apiKey}`,
           {
-            role: 'user',
-            content: userPrompt,
+            contents: [{ parts: [{ text: prompt }] }],
+            generationConfig: {
+              temperature: 0.7,
+              topK: 40,
+              topP: 0.95,
+              maxOutputTokens: 4096,
+            },
           },
-        ],
-      });
+          {
+            headers: { 'Content-Type': 'application/json' },
+            timeout: 60000,
+          },
+        ),
+      );
 
-      const content = message.content[0];
-      if (content.type !== 'text') {
-        throw new Error('Unexpected response type from Claude');
+      const textResponse = response.data.candidates[0]?.content?.parts[0]?.text;
+
+      if (!textResponse) {
+        throw new Error('No response from Gemini API');
       }
 
-      const responseText = content.text.trim();
-      
-      // Extract JSON from response (handle markdown code blocks)
-      let jsonText = responseText;
-      if (responseText.includes('```json')) {
-        jsonText = responseText.split('```json')[1].split('```')[0].trim();
-      } else if (responseText.includes('```')) {
-        jsonText = responseText.split('```')[1].split('```')[0].trim();
+      let jsonText = textResponse.trim();
+      if (jsonText.includes('```json')) {
+        jsonText = jsonText.split('```json')[1].split('```')[0].trim();
+      } else if (jsonText.includes('```')) {
+        jsonText = jsonText.split('```')[1].split('```')[0].trim();
       }
 
       const routine = JSON.parse(jsonText) as GeneratedRoutine;
 
-      // Validate structure
       if (!routine.days || !Array.isArray(routine.days) || routine.days.length === 0) {
         throw new Error('Invalid routine structure');
       }
 
-      this.logger.log('Claude AI routine generated successfully');
+      this.logger.log('Gemini AI routine generated successfully');
       return routine;
     } catch (error) {
-      this.logger.error(`Claude API failed: ${error.message}`, error.stack);
+      this.logger.error(`Gemini API failed: ${error.message}, trying Ollama fallback`, error.stack);
+      
+      try {
+        const isOllamaAvailable = await this.isOllamaAvailable();
+        if (isOllamaAvailable) {
+          this.logger.log('Using Ollama fallback for predictive routine');
+          const weatherSummary = compressWeatherForecast(weatherData.daily);
+          const st = abbrevSkinType(analysisResult.skinType);
+          const issues = analysisResult.detectedIssues.slice(0, 3).join(',') || '-';
+          const prods = products?.slice(0, 5).join(',') || '-';
+          
+          const prompt = compressWhitespace(`
+Dermato/cosmeto expert. Routine prédictive 7j.
+Peau:${st},${analysisResult.condition},${issues}
+Météo7j(jour:uv,pluie,temp):${weatherSummary}
+Cycle:${cyclePhase || '-'}
+Produits:${prods}
+Rép JSON strict:{days:[{day,morning:[],evening:[],tip,warning}],globalAdvice}
+Français, 7 jours.`);
+
+          const ollamaResponse = await this.generateWithOllama(prompt);
+          
+          let jsonText = ollamaResponse.trim();
+          if (jsonText.includes('```json')) {
+            jsonText = jsonText.split('```json')[1].split('```')[0].trim();
+          } else if (jsonText.includes('```')) {
+            jsonText = jsonText.split('```')[1].split('```')[0].trim();
+          }
+          
+          const routine = JSON.parse(jsonText) as GeneratedRoutine;
+          if (routine.days && Array.isArray(routine.days) && routine.days.length > 0) {
+            this.logger.log('Ollama routine generated successfully');
+            return routine;
+          }
+        }
+      } catch (ollamaError) {
+        this.logger.error('Ollama fallback also failed', ollamaError);
+      }
+      
       return this.getFallbackRoutine(analysisResult.skinType);
     }
   }

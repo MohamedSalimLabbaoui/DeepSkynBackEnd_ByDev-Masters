@@ -3,6 +3,11 @@ import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateSkinLogDto, WeatherAlertQueryDto } from './dto';
 import axios from 'axios';
+import {
+  compressWhitespace,
+  buildCompactWeatherContext,
+  buildCompactSkinProfile,
+} from './prompt-compression.util';
 
 export interface WeatherData {
   uvIndex: number;
@@ -39,11 +44,19 @@ export interface AlertResult {
   aiAdvice?: AIAdvice;
 }
 
+interface OllamaGenerateResponse {
+  model: string;
+  response: string;
+  done: boolean;
+}
+
 @Injectable()
 export class ContextualAnalysisService {
   private readonly logger = new Logger(ContextualAnalysisService.name);
   private readonly geminiApiKey: string;
   private readonly geminiApiUrl: string;
+  private readonly ollamaBaseUrl: string;
+  private readonly ollamaTextModel: string;
 
   constructor(
     private readonly prisma: PrismaService,
@@ -51,7 +64,47 @@ export class ContextualAnalysisService {
   ) {
     this.geminiApiKey = this.configService.get<string>('GEMINI_API_KEY') || '';
     this.geminiApiUrl =
-      'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent';
+      'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent';
+    this.ollamaBaseUrl = this.configService.get<string>('OLLAMA_BASE_URL') || 'http://localhost:11434';
+    this.ollamaTextModel = this.configService.get<string>('OLLAMA_TEXT_MODEL') || 'llama3:8b';
+  }
+
+  /**
+   * Check if Ollama is available
+   */
+  private async isOllamaAvailable(): Promise<boolean> {
+    try {
+      const response = await axios.get(`${this.ollamaBaseUrl}/api/tags`, { timeout: 3000 });
+      return response.status === 200;
+    } catch {
+      return false;
+    }
+  }
+
+  /**
+   * Generate with Ollama fallback
+   */
+  private async generateWithOllama(prompt: string): Promise<string> {
+    const response = await axios.post<OllamaGenerateResponse>(
+      `${this.ollamaBaseUrl}/api/generate`,
+      {
+        model: this.ollamaTextModel,
+        prompt,
+        stream: false,
+        options: {
+          temperature: 0.7,
+          top_p: 0.9,
+          num_predict: 1024,
+        },
+      },
+      { timeout: 60000 },
+    );
+
+    if (response.data?.response) {
+      return response.data.response;
+    }
+
+    throw new Error('Empty response from Ollama');
   }
 
   /**
@@ -141,7 +194,7 @@ export class ContextualAnalysisService {
   }
 
   /**
-   * Generate personalized skincare advice using Gemini AI
+   * Generate personalized skincare advice using Gemini AI (compressed prompt)
    */
   private async generateAIAdvice(
     weather: WeatherData,
@@ -152,29 +205,17 @@ export class ContextualAnalysisService {
       return this.getFallbackAdvice(weather);
     }
 
-    const skinInfo = skinProfile
-      ? `Type de peau: ${skinProfile.skinType || 'non défini'}, Préoccupations: ${skinProfile.concerns?.join(', ') || 'aucune'}, Phototype Fitzpatrick: ${skinProfile.fitzpatrickType || 'non défini'}`
-      : 'Profil de peau non disponible';
+    // Compressed context - ~60% token reduction
+    const weatherCtx = buildCompactWeatherContext(weather, city);
+    const skinCtx = buildCompactSkinProfile(skinProfile);
+    const uvLevel = this.getUvLevelText(weather.uvIndex);
 
-    const prompt = `Tu es un expert dermatologue. Génère des conseils skincare personnalisés en français basés sur ces données météo EN TEMPS RÉEL et le profil de peau de l'utilisateur.
-
-DONNÉES MÉTÉO ACTUELLES${city ? ` à ${city}` : ''}:
-- Indice UV: ${weather.uvIndex}/11 (${this.getUvLevelText(weather.uvIndex)})
-- Qualité de l'air (AQI): ${weather.aqi !== null ? weather.aqi : 'non disponible'}
-- Humidité: ${weather.humidity !== null ? weather.humidity + '%' : 'non disponible'}
-- Température: ${weather.temperature !== null ? weather.temperature + '°C' : 'non disponible'}
-
-PROFIL UTILISATEUR:
-${skinInfo}
-
-Réponds UNIQUEMENT en JSON valide avec cette structure exacte:
-{
-  "personalizedMessage": "Message personnalisé de 2-3 phrases max expliquant l'impact de la météo sur la peau aujourd'hui",
-  "skinCareRoutine": ["étape 1", "étape 2", "étape 3"],
-  "productsToUse": ["type de produit 1", "type de produit 2"],
-  "warnings": ["alerte importante si nécessaire"],
-  "protectionLevel": "low|medium|high|extreme"
-}`;
+    const prompt = compressWhitespace(`
+Dermato expert. Conseils peau temps réel.
+Météo:${weatherCtx}(${uvLevel})
+Profil:${skinCtx}
+Rép JSON:{personalizedMessage:string,skinCareRoutine:[],productsToUse:[],warnings:[],protectionLevel:low|medium|high|extreme}
+Court, français.`);
 
     try {
       const response = await axios.post(
@@ -194,7 +235,6 @@ Réponds UNIQUEMENT en JSON valide avec cette structure exacte:
         throw new Error('Empty Gemini response');
       }
 
-      // Extract JSON from response
       const jsonMatch = text.match(/\{[\s\S]*\}/);
       if (!jsonMatch) {
         throw new Error('No JSON found in response');
@@ -203,7 +243,25 @@ Réponds UNIQUEMENT en JSON valide avec cette structure exacte:
       const parsed = JSON.parse(jsonMatch[0]) as AIAdvice;
       return parsed;
     } catch (error) {
-      this.logger.error('Gemini AI advice generation failed', error);
+      this.logger.error('Gemini AI advice generation failed, trying Ollama fallback', error);
+      
+      try {
+        const isOllamaAvailable = await this.isOllamaAvailable();
+        if (isOllamaAvailable) {
+          this.logger.log('Using Ollama fallback for AI advice');
+          const ollamaResponse = await this.generateWithOllama(prompt);
+          
+          const jsonMatch = ollamaResponse.match(/\{[\s\S]*\}/);
+          if (jsonMatch) {
+            const parsed = JSON.parse(jsonMatch[0]) as AIAdvice;
+            this.logger.log('Ollama AI advice generated successfully');
+            return parsed;
+          }
+        }
+      } catch (ollamaError) {
+        this.logger.error('Ollama fallback also failed', ollamaError);
+      }
+      
       return this.getFallbackAdvice(weather);
     }
   }
