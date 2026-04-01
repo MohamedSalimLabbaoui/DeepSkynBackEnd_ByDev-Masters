@@ -3,6 +3,11 @@ import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateSkinLogDto, WeatherAlertQueryDto } from './dto';
 import axios from 'axios';
+import {
+  compressWhitespace,
+  buildCompactWeatherContext,
+  buildCompactSkinProfile,
+} from './prompt-compression.util';
 
 export interface WeatherData {
   uvIndex: number;
@@ -59,7 +64,7 @@ export class ContextualAnalysisService {
   ) {
     this.geminiApiKey = this.configService.get<string>('GEMINI_API_KEY') || '';
     this.geminiApiUrl =
-      'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-pro:generateContent';
+      'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent';
     this.ollamaBaseUrl = this.configService.get<string>('OLLAMA_BASE_URL') || 'http://localhost:11434';
     this.ollamaTextModel = this.configService.get<string>('OLLAMA_TEXT_MODEL') || 'llama3:8b';
   }
@@ -189,7 +194,7 @@ export class ContextualAnalysisService {
   }
 
   /**
-   * Generate personalized skincare advice using Gemini AI
+   * Generate personalized skincare advice using Gemini AI (compressed prompt)
    */
   private async generateAIAdvice(
     weather: WeatherData,
@@ -200,29 +205,17 @@ export class ContextualAnalysisService {
       return this.getFallbackAdvice(weather);
     }
 
-    const skinInfo = skinProfile
-      ? `Type de peau: ${skinProfile.skinType || 'non défini'}, Préoccupations: ${skinProfile.concerns?.join(', ') || 'aucune'}, Phototype Fitzpatrick: ${skinProfile.fitzpatrickType || 'non défini'}`
-      : 'Profil de peau non disponible';
+    // Compressed context - ~60% token reduction
+    const weatherCtx = buildCompactWeatherContext(weather, city);
+    const skinCtx = buildCompactSkinProfile(skinProfile);
+    const uvLevel = this.getUvLevelText(weather.uvIndex);
 
-    const prompt = `Tu es un expert dermatologue. Génère des conseils skincare personnalisés en français basés sur ces données météo EN TEMPS RÉEL et le profil de peau de l'utilisateur.
-
-DONNÉES MÉTÉO ACTUELLES${city ? ` à ${city}` : ''}:
-- Indice UV: ${weather.uvIndex}/11 (${this.getUvLevelText(weather.uvIndex)})
-- Qualité de l'air (AQI): ${weather.aqi !== null ? weather.aqi : 'non disponible'}
-- Humidité: ${weather.humidity !== null ? weather.humidity + '%' : 'non disponible'}
-- Température: ${weather.temperature !== null ? weather.temperature + '°C' : 'non disponible'}
-
-PROFIL UTILISATEUR:
-${skinInfo}
-
-Réponds UNIQUEMENT en JSON valide avec cette structure exacte:
-{
-  "personalizedMessage": "Message personnalisé de 2-3 phrases max expliquant l'impact de la météo sur la peau aujourd'hui",
-  "skinCareRoutine": ["étape 1", "étape 2", "étape 3"],
-  "productsToUse": ["type de produit 1", "type de produit 2"],
-  "warnings": ["alerte importante si nécessaire"],
-  "protectionLevel": "low|medium|high|extreme"
-}`;
+    const prompt = compressWhitespace(`
+Dermato expert. Conseils peau temps réel.
+Météo:${weatherCtx}(${uvLevel})
+Profil:${skinCtx}
+Rép JSON:{personalizedMessage:string,skinCareRoutine:[],productsToUse:[],warnings:[],protectionLevel:low|medium|high|extreme}
+Court, français.`);
 
     try {
       const response = await axios.post(
@@ -231,7 +224,7 @@ Réponds UNIQUEMENT en JSON valide avec cette structure exacte:
           contents: [{ parts: [{ text: prompt }] }],
           generationConfig: {
             temperature: 0.7,
-            maxOutputTokens: 8192,
+            maxOutputTokens: 1024,
           },
         },
         { timeout: 15000 },
@@ -242,7 +235,6 @@ Réponds UNIQUEMENT en JSON valide avec cette structure exacte:
         throw new Error('Empty Gemini response');
       }
 
-      // Extract JSON from response
       const jsonMatch = text.match(/\{[\s\S]*\}/);
       if (!jsonMatch) {
         throw new Error('No JSON found in response');
@@ -253,7 +245,6 @@ Réponds UNIQUEMENT en JSON valide avec cette structure exacte:
     } catch (error) {
       this.logger.error('Gemini AI advice generation failed, trying Ollama fallback', error);
       
-      // Fallback to Ollama
       try {
         const isOllamaAvailable = await this.isOllamaAvailable();
         if (isOllamaAvailable) {

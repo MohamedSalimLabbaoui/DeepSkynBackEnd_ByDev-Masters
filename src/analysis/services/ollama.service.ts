@@ -91,7 +91,7 @@ export class OllamaService {
               num_predict: 2048,
             },
           },
-          { timeout: 120000 },
+          { timeout: 300000 }, // 5 minutes pour laisser le temps à Ollama
         );
 
         if (response.data?.response) {
@@ -142,7 +142,7 @@ export class OllamaService {
               num_predict: 2048,
             },
           },
-          { timeout: 120000 },
+          { timeout: 300000 }, // 5 minutes pour laisser le temps à Ollama
         );
 
         if (response.data?.message?.content) {
@@ -201,7 +201,7 @@ export class OllamaService {
               num_predict: 4096,
             },
           },
-          { timeout: 180000 }, // 3 minutes for image analysis
+          { timeout: 300000 }, // 5 minutes pour l'analyse d'image
         );
 
         if (response.data?.message?.content) {

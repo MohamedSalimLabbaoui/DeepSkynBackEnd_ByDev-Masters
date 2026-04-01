@@ -2,6 +2,11 @@ import { Injectable, Logger, HttpException, HttpStatus } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../prisma/prisma.service';
 import axios, { AxiosError } from 'axios';
+import {
+  compressWhitespace,
+  compressWeatherForecast,
+  abbrevSkinType,
+} from './prompt-compression.util';
 
 interface AnalysisResult {
   condition: string;
@@ -63,7 +68,7 @@ export class PredictiveRoutineService {
   ) {
     this.apiKey = this.config.get<string>('GEMINI_API_KEY');
     this.apiUrl =
-      'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-pro:generateContent';
+      'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent';
     this.ollamaBaseUrl = this.config.get<string>('OLLAMA_BASE_URL') || 'http://localhost:11434';
     this.ollamaTextModel = this.config.get<string>('OLLAMA_TEXT_MODEL') || 'llama3:8b';
   }
@@ -295,34 +300,23 @@ export class PredictiveRoutineService {
     }
 
     try {
-      // Format weather summary
-      const weatherSummary = this.formatWeatherSummary(weatherData);
+      // Compressed weather format: L31:uv,rain,temp|Ma1:uv,rain,temp|...
+      const weatherSummary = compressWeatherForecast(weatherData.daily);
+      const st = abbrevSkinType(analysisResult.skinType);
+      const issues = analysisResult.detectedIssues.slice(0, 3).join(',') || '-';
+      const prods = products?.slice(0, 5).join(',') || '-';
 
-      // Build prompt
-      const prompt = `Tu es un expert dermatologue et cosmétologue. 
-Tu génères des routines de soin cutané personnalisées et prédictives.
-Réponds UNIQUEMENT en JSON valide, aucun texte avant ou après.
-Format exact:
-{
-  "days": [
-    {
-      "day": "Lundi 31 Mars",
-      "morning": ["étape 1", "étape 2"],
-      "evening": ["étape 1", "étape 2"],
-      "tip": "conseil spécifique du jour",
-      "warning": "alerte si UV élevé ou pluie etc (null si rien)"
-    }
-  ],
-  "globalAdvice": "conseil général pour la semaine"
-}
+      // Compressed prompt - ~55% token reduction
+      const prompt = compressWhitespace(`
+Dermato/cosmeto expert. Routine prédictive 7j.
+Peau:${st},${analysisResult.condition},${issues}
+Météo7j(jour:uv,pluie,temp):${weatherSummary}
+Cycle:${cyclePhase || '-'}
+Produits:${prods}
+Rép JSON strict:{days:[{day,morning:[],evening:[],tip,warning}],globalAdvice}
+Français, 7 jours.`);
 
-État de peau actuel: ${analysisResult.condition}, problèmes détectés: ${analysisResult.detectedIssues.join(', ')}, type de peau: ${analysisResult.skinType}.
-Prévisions météo 7 jours: ${weatherSummary}.
-Phase du cycle: ${cyclePhase || 'non renseigné'}.
-Produits disponibles: ${products?.join(', ') || 'non renseignés'}.
-Génère la routine prédictive 7 jours en JSON strict.`;
-
-      this.logger.log('Calling Gemini API...');
+      this.logger.log('Calling Gemini API with compressed prompt...');
 
       const response = await this.makeRequestWithRetry(() =>
         axios.post<GeminiResponse>(
@@ -333,7 +327,7 @@ Génère la routine prédictive 7 jours en JSON strict.`;
               temperature: 0.7,
               topK: 40,
               topP: 0.95,
-              maxOutputTokens: 8192,
+              maxOutputTokens: 4096,
             },
           },
           {
@@ -349,7 +343,6 @@ Génère la routine prédictive 7 jours en JSON strict.`;
         throw new Error('No response from Gemini API');
       }
 
-      // Extract JSON from response (handle markdown code blocks)
       let jsonText = textResponse.trim();
       if (jsonText.includes('```json')) {
         jsonText = jsonText.split('```json')[1].split('```')[0].trim();
@@ -359,7 +352,6 @@ Génère la routine prédictive 7 jours en JSON strict.`;
 
       const routine = JSON.parse(jsonText) as GeneratedRoutine;
 
-      // Validate structure
       if (!routine.days || !Array.isArray(routine.days) || routine.days.length === 0) {
         throw new Error('Invalid routine structure');
       }
@@ -369,38 +361,26 @@ Génère la routine prédictive 7 jours en JSON strict.`;
     } catch (error) {
       this.logger.error(`Gemini API failed: ${error.message}, trying Ollama fallback`, error.stack);
       
-      // Fallback to Ollama
       try {
         const isOllamaAvailable = await this.isOllamaAvailable();
         if (isOllamaAvailable) {
           this.logger.log('Using Ollama fallback for predictive routine');
-          const weatherSummary = this.formatWeatherSummary(weatherData);
-          const prompt = `Tu es un expert dermatologue et cosmétologue. 
-Tu génères des routines de soin cutané personnalisées et prédictives.
-Réponds UNIQUEMENT en JSON valide, aucun texte avant ou après.
-Format exact:
-{
-  "days": [
-    {
-      "day": "Lundi 31 Mars",
-      "morning": ["étape 1", "étape 2"],
-      "evening": ["étape 1", "étape 2"],
-      "tip": "conseil spécifique du jour",
-      "warning": "alerte si UV élevé ou pluie etc (null si rien)"
-    }
-  ],
-  "globalAdvice": "conseil général pour la semaine"
-}
-
-État de peau actuel: ${analysisResult.condition}, problèmes détectés: ${analysisResult.detectedIssues.join(', ')}, type de peau: ${analysisResult.skinType}.
-Prévisions météo 7 jours: ${weatherSummary}.
-Phase du cycle: ${cyclePhase || 'non renseigné'}.
-Produits disponibles: ${products?.join(', ') || 'non renseignés'}.
-Génère la routine prédictive 7 jours en JSON strict.`;
+          const weatherSummary = compressWeatherForecast(weatherData.daily);
+          const st = abbrevSkinType(analysisResult.skinType);
+          const issues = analysisResult.detectedIssues.slice(0, 3).join(',') || '-';
+          const prods = products?.slice(0, 5).join(',') || '-';
+          
+          const prompt = compressWhitespace(`
+Dermato/cosmeto expert. Routine prédictive 7j.
+Peau:${st},${analysisResult.condition},${issues}
+Météo7j(jour:uv,pluie,temp):${weatherSummary}
+Cycle:${cyclePhase || '-'}
+Produits:${prods}
+Rép JSON strict:{days:[{day,morning:[],evening:[],tip,warning}],globalAdvice}
+Français, 7 jours.`);
 
           const ollamaResponse = await this.generateWithOllama(prompt);
           
-          // Extract JSON from Ollama response
           let jsonText = ollamaResponse.trim();
           if (jsonText.includes('```json')) {
             jsonText = jsonText.split('```json')[1].split('```')[0].trim();
