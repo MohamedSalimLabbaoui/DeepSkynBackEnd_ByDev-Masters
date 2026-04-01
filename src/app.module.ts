@@ -20,6 +20,8 @@ import { UsersModule } from './users/users.module';
 import { WeatherModule } from './weather/weather.module';
 import { StoriesModule } from './stories/stories.module';
 import { SignTranslationModule } from './sign-translation/sign-translation.module';
+import { ContextualAnalysisModule } from './contextual-analysis/contextual-analysis.module';
+import { PredictiveRoutineModule } from './predictive-routine/predictive-routine.module';
 
 @Module({
   imports: [
@@ -47,6 +49,8 @@ import { SignTranslationModule } from './sign-translation/sign-translation.modul
     WeatherModule,
     StoriesModule,
     SignTranslationModule,
+    ContextualAnalysisModule,
+    PredictiveRoutineModule,
   ],
   controllers: [],
   providers: [],
