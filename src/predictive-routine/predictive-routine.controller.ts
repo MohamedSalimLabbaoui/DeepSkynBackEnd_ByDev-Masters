@@ -1,4 +1,4 @@
-import { Controller, Post, Body, UseGuards, HttpCode, HttpStatus } from '@nestjs/common';
+import { Controller, Post, Body, UseGuards, HttpCode, HttpStatus, Param } from '@nestjs/common';
 import { IsString, IsNumber, IsArray, ValidateNested, IsObject } from 'class-validator';
 import { Type, Transform } from 'class-transformer';
 import { KeycloakAuthGuard } from '../auth/guards/keycloak-auth.guard';
@@ -53,5 +53,14 @@ export class PredictiveRoutineController {
       dto.latitude,
       dto.longitude,
     );
+  }
+
+  @Post(':id/validate')
+  @HttpCode(HttpStatus.OK)
+  async validateRoutine(
+    @CurrentUser('id') userId: string,
+    @Param('id') routineId: string,
+  ) {
+    return this.service.validateAndActivateRoutine(userId, routineId);
   }
 }

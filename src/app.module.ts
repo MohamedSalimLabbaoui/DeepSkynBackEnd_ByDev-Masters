@@ -22,6 +22,7 @@ import { StoriesModule } from './stories/stories.module';
 import { SignTranslationModule } from './sign-translation/sign-translation.module';
 import { ContextualAnalysisModule } from './contextual-analysis/contextual-analysis.module';
 import { PredictiveRoutineModule } from './predictive-routine/predictive-routine.module';
+import { FaceVerificationModule } from './face-verification/face-verification.module';
 
 @Module({
   imports: [
@@ -51,6 +52,7 @@ import { PredictiveRoutineModule } from './predictive-routine/predictive-routine
     SignTranslationModule,
     ContextualAnalysisModule,
     PredictiveRoutineModule,
+    FaceVerificationModule,
   ],
   controllers: [],
   providers: [],
