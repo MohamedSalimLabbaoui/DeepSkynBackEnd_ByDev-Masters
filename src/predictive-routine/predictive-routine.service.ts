@@ -494,4 +494,243 @@ Français, 7 jours.`);
       globalAdvice: `Cette routine de base est adaptée pour une peau ${skinType}. Ajustez selon vos réactions cutanées et consultez un dermatologue si nécessaire.`,
     };
   }
+
+  /**
+   * Valider et activer une routine prédictive
+   * Convertit une routine prédictive en routine standard active
+   */
+  async validateAndActivateRoutine(
+    userId: string,
+    predictiveRoutineId: string,
+  ): Promise<{ success: boolean; routineId: string; message: string }> {
+    try {
+      // 1. Récupérer la routine prédictive
+      const predictiveRoutine = await this.prisma.predictiveRoutine.findUnique({
+        where: { id: predictiveRoutineId },
+      });
+
+      if (!predictiveRoutine) {
+        throw new HttpException(
+          'Routine prédictive non trouvée',
+          HttpStatus.NOT_FOUND,
+        );
+      }
+
+      if (predictiveRoutine.userId !== userId) {
+        throw new HttpException(
+          'Non autorisé à valider cette routine',
+          HttpStatus.FORBIDDEN,
+        );
+      }
+
+      // 2. Extraire les données de la routine
+      const routineData = predictiveRoutine.routine as any;
+      const generatedRoutine = routineData as GeneratedRoutine;
+
+      if (!generatedRoutine.days || generatedRoutine.days.length === 0) {
+        throw new HttpException(
+          'Routine prédictive invalide',
+          HttpStatus.BAD_REQUEST,
+        );
+      }
+
+      // 3. Désactiver toutes les routines actives de l'utilisateur
+      await this.prisma.routine.updateMany({
+        where: {
+          userId,
+          isActive: true,
+        },
+        data: {
+          isActive: false,
+        },
+      });
+
+      // 4. Mapping des catégories pour chaque type d'étape
+      const categoryMapping: Record<string, { category: string; duration: number }> = {
+        'nettoyage': { category: 'cleanser', duration: 60 },
+        'nettoyant': { category: 'cleanser', duration: 60 },
+        'démaquillage': { category: 'cleanser', duration: 60 },
+        'démaquillant': { category: 'cleanser', duration: 60 },
+        'gel': { category: 'cleanser', duration: 60 },
+        'lait': { category: 'cleanser', duration: 60 },
+        'huile': { category: 'cleanser', duration: 45 },
+        'tonique': { category: 'toner', duration: 30 },
+        'lotion': { category: 'toner', duration: 30 },
+        'sérum': { category: 'serum', duration: 30 },
+        'vitamine': { category: 'serum', duration: 30 },
+        'acide': { category: 'treatment', duration: 30 },
+        'rétinol': { category: 'treatment', duration: 30 },
+        'contour': { category: 'treatment', duration: 20 },
+        'yeux': { category: 'treatment', duration: 20 },
+        'crème': { category: 'moisturizer', duration: 30 },
+        'hydratant': { category: 'moisturizer', duration: 30 },
+        'moisturizer': { category: 'moisturizer', duration: 30 },
+        'spf': { category: 'sunscreen', duration: 30 },
+        'solaire': { category: 'sunscreen', duration: 30 },
+        'protection': { category: 'sunscreen', duration: 30 },
+        'masque': { category: 'mask', duration: 900 },
+        'exfoliant': { category: 'treatment', duration: 60 },
+        'gommage': { category: 'treatment', duration: 60 },
+      };
+
+      // Fonction pour déterminer la catégorie et la durée
+      const getCategoryAndDuration = (stepName: string): { category: string; duration: number } => {
+        const lowerName = stepName.toLowerCase();
+        for (const [key, value] of Object.entries(categoryMapping)) {
+          if (lowerName.includes(key)) {
+            return value;
+          }
+        }
+        return { category: 'treatment', duration: 30 };
+      };
+
+      // Fonction pour créer une étape formatée
+      const createStep = (stepName: string, order: number) => {
+        const { category, duration } = getCategoryAndDuration(stepName);
+        return {
+          order,
+          name: this.extractStepName(stepName),
+          description: stepName,
+          category,
+          duration,
+          isCompleted: false,
+        };
+      };
+
+      // 5. Créer les routines matin et soir séparément
+      const morningStepsOrdered: string[] = [];
+      const eveningStepsOrdered: string[] = [];
+
+      // Utiliser le premier jour comme référence pour l'ordre des étapes
+      if (generatedRoutine.days.length > 0) {
+        const firstDay = generatedRoutine.days[0];
+        firstDay.morning.forEach((step) => {
+          if (!morningStepsOrdered.includes(step)) {
+            morningStepsOrdered.push(step);
+          }
+        });
+        firstDay.evening.forEach((step) => {
+          if (!eveningStepsOrdered.includes(step)) {
+            eveningStepsOrdered.push(step);
+          }
+        });
+      }
+
+      // Créer les étapes formatées pour le matin
+      const morningFormattedSteps = morningStepsOrdered.map((step, index) => 
+        createStep(step, index + 1)
+      );
+
+      // Créer les étapes formatées pour le soir
+      const eveningFormattedSteps = eveningStepsOrdered.map((step, index) => 
+        createStep(step, index + 1)
+      );
+
+      // 6. Créer la routine du matin (AM)
+      const morningRoutine = await this.prisma.routine.create({
+        data: {
+          userId,
+          name: `Routine Matin IA - ${new Date().toLocaleDateString('fr-FR')}`,
+          type: 'AM',
+          steps: morningFormattedSteps as any,
+          notes: `${generatedRoutine.globalAdvice}\n\nRoutine générée automatiquement par l'IA dermatologique.`,
+          isActive: true,
+          isAIGenerated: true,
+        },
+      });
+
+      // 7. Créer la routine du soir (PM)
+      const eveningRoutine = await this.prisma.routine.create({
+        data: {
+          userId,
+          name: `Routine Soir IA - ${new Date().toLocaleDateString('fr-FR')}`,
+          type: 'PM',
+          steps: eveningFormattedSteps as any,
+          notes: `${generatedRoutine.globalAdvice}\n\nRoutine générée automatiquement par l'IA dermatologique.`,
+          isActive: true,
+          isAIGenerated: true,
+        },
+      });
+
+      this.logger.log(
+        `Predictive routine ${predictiveRoutineId} validated. Created AM routine ${morningRoutine.id} and PM routine ${eveningRoutine.id}`,
+      );
+
+      return {
+        success: true,
+        routineId: morningRoutine.id,
+        message: 'Routines matin et soir créées et activées avec succès',
+      };
+    } catch (error) {
+      this.logger.error(
+        `Error validating routine: ${error.message}`,
+        error.stack,
+      );
+
+      if (error instanceof HttpException) {
+        throw error;
+      }
+
+      throw new HttpException(
+        'Erreur lors de la validation de la routine',
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
+  }
+
+  /**
+   * Extrait le nom court d'une étape
+   */
+  private extractStepName(fullStep: string): string {
+    // Mapping des noms courts pour les étapes communes
+    const shortNames: Record<string, string> = {
+      'nettoyage doux': 'Nettoyage',
+      'nettoyage gel': 'Nettoyage',
+      'nettoyant doux': 'Nettoyant',
+      'gel nettoyant': 'Gel nettoyant',
+      'gel moussant': 'Gel moussant',
+      'lait nettoyant': 'Lait nettoyant',
+      'démaquillage': 'Démaquillage',
+      'eau micellaire': 'Eau micellaire',
+      'huile démaquillante': 'Huile démaquillante',
+      'tonique': 'Tonique',
+      'lotion tonique': 'Tonique',
+      'sérum': 'Sérum',
+      'sérum vitamine c': 'Sérum Vitamine C',
+      'acide hyaluronique': 'Acide hyaluronique',
+      'acide salicylique': 'Acide salicylique',
+      'rétinol': 'Rétinol',
+      'contour des yeux': 'Contour des yeux',
+      'crème hydratante': 'Hydratant',
+      'crème de nuit': 'Crème de nuit',
+      'crème légère': 'Hydratant léger',
+      'spf': 'Protection solaire',
+      'protection solaire': 'Protection solaire',
+      'crème solaire': 'Protection solaire',
+      'masque': 'Masque',
+      'exfoliant': 'Exfoliant',
+      'gommage': 'Gommage',
+    };
+    
+    const lowerStep = fullStep.toLowerCase();
+    
+    // Chercher une correspondance exacte ou partielle
+    for (const [key, value] of Object.entries(shortNames)) {
+      if (lowerStep.includes(key)) {
+        return value;
+      }
+    }
+    
+    // Sinon, nettoyer le texte et capitaliser
+    const cleanStep = fullStep
+      .replace(/^(nettoyage|démaquillage|application)\s+(de\s+|d'|du\s+|de la\s+)?/i, '')
+      .replace(/\s+(doux|léger|hydratant|purifiant|matifiant|équilibrant|nourrissant|réparateur)$/i, '')
+      .trim();
+    
+    if (cleanStep.length > 0) {
+      return cleanStep.charAt(0).toUpperCase() + cleanStep.slice(1);
+    }
+    
+    return fullStep.charAt(0).toUpperCase() + fullStep.slice(1);
+  }
 }
