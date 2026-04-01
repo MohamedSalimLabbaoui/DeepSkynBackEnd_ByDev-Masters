@@ -39,11 +39,19 @@ export interface AlertResult {
   aiAdvice?: AIAdvice;
 }
 
+interface OllamaGenerateResponse {
+  model: string;
+  response: string;
+  done: boolean;
+}
+
 @Injectable()
 export class ContextualAnalysisService {
   private readonly logger = new Logger(ContextualAnalysisService.name);
   private readonly geminiApiKey: string;
   private readonly geminiApiUrl: string;
+  private readonly ollamaBaseUrl: string;
+  private readonly ollamaTextModel: string;
 
   constructor(
     private readonly prisma: PrismaService,
@@ -51,7 +59,47 @@ export class ContextualAnalysisService {
   ) {
     this.geminiApiKey = this.configService.get<string>('GEMINI_API_KEY') || '';
     this.geminiApiUrl =
-      'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent';
+      'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-pro:generateContent';
+    this.ollamaBaseUrl = this.configService.get<string>('OLLAMA_BASE_URL') || 'http://localhost:11434';
+    this.ollamaTextModel = this.configService.get<string>('OLLAMA_TEXT_MODEL') || 'llama3:8b';
+  }
+
+  /**
+   * Check if Ollama is available
+   */
+  private async isOllamaAvailable(): Promise<boolean> {
+    try {
+      const response = await axios.get(`${this.ollamaBaseUrl}/api/tags`, { timeout: 3000 });
+      return response.status === 200;
+    } catch {
+      return false;
+    }
+  }
+
+  /**
+   * Generate with Ollama fallback
+   */
+  private async generateWithOllama(prompt: string): Promise<string> {
+    const response = await axios.post<OllamaGenerateResponse>(
+      `${this.ollamaBaseUrl}/api/generate`,
+      {
+        model: this.ollamaTextModel,
+        prompt,
+        stream: false,
+        options: {
+          temperature: 0.7,
+          top_p: 0.9,
+          num_predict: 1024,
+        },
+      },
+      { timeout: 60000 },
+    );
+
+    if (response.data?.response) {
+      return response.data.response;
+    }
+
+    throw new Error('Empty response from Ollama');
   }
 
   /**
@@ -183,7 +231,7 @@ Réponds UNIQUEMENT en JSON valide avec cette structure exacte:
           contents: [{ parts: [{ text: prompt }] }],
           generationConfig: {
             temperature: 0.7,
-            maxOutputTokens: 1024,
+            maxOutputTokens: 8192,
           },
         },
         { timeout: 15000 },
@@ -203,7 +251,26 @@ Réponds UNIQUEMENT en JSON valide avec cette structure exacte:
       const parsed = JSON.parse(jsonMatch[0]) as AIAdvice;
       return parsed;
     } catch (error) {
-      this.logger.error('Gemini AI advice generation failed', error);
+      this.logger.error('Gemini AI advice generation failed, trying Ollama fallback', error);
+      
+      // Fallback to Ollama
+      try {
+        const isOllamaAvailable = await this.isOllamaAvailable();
+        if (isOllamaAvailable) {
+          this.logger.log('Using Ollama fallback for AI advice');
+          const ollamaResponse = await this.generateWithOllama(prompt);
+          
+          const jsonMatch = ollamaResponse.match(/\{[\s\S]*\}/);
+          if (jsonMatch) {
+            const parsed = JSON.parse(jsonMatch[0]) as AIAdvice;
+            this.logger.log('Ollama AI advice generated successfully');
+            return parsed;
+          }
+        }
+      } catch (ollamaError) {
+        this.logger.error('Ollama fallback also failed', ollamaError);
+      }
+      
       return this.getFallbackAdvice(weather);
     }
   }

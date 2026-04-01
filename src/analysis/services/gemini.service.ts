@@ -1,6 +1,7 @@
 import { Injectable, Logger, HttpException, HttpStatus } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import axios, { AxiosError } from 'axios';
+import { OllamaService } from './ollama.service';
 
 export interface GeminiAnalysisResult {
   skinType: string;
@@ -45,11 +46,13 @@ export class GeminiService {
   private readonly apiUrl: string;
   private readonly maxRetries = 3;
   private readonly retryDelay = 2000; // 2 seconds
+  private readonly ollamaService: OllamaService;
 
   constructor(private readonly configService: ConfigService) {
     this.apiKey = this.configService.get<string>('GEMINI_API_KEY');
     this.apiUrl =
-      'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent';
+      'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-pro:generateContent';
+    this.ollamaService = new OllamaService(configService);
   }
 
   /**
@@ -108,7 +111,7 @@ export class GeminiService {
   }
 
   /**
-   * Analyze skin images using Gemini AI
+   * Analyze skin images using Gemini AI with Ollama fallback
    */
   async analyzeSkinImages(
     imageUrls: string[],
@@ -128,7 +131,7 @@ export class GeminiService {
           temperature: 0.4,
           topK: 32,
           topP: 1,
-          maxOutputTokens: 4096,
+          maxOutputTokens: 8192,
         },
         safetySettings: [
           {
@@ -171,13 +174,32 @@ export class GeminiService {
 
       return this.parseAnalysisResponse(textResponse);
     } catch (error) {
-      this.logger.error('Gemini analysis failed', error);
+      this.logger.error('Gemini analysis failed, trying Ollama fallback', error);
+      
+      // Fallback to Ollama with vision model
+      try {
+        const isOllamaAvailable = await this.ollamaService.isAvailable();
+        if (isOllamaAvailable) {
+          this.logger.log('Using Ollama vision fallback for image analysis');
+          const fallbackPrompt = this.buildAnalysisPrompt(questionnaire);
+          const fallbackImageParts = await this.prepareImageParts(imageUrls);
+          
+          if (fallbackImageParts.length > 0) {
+            const base64Image = fallbackImageParts[0].inlineData.data;
+            const ollamaResponse = await this.ollamaService.analyzeImage(base64Image, fallbackPrompt);
+            return this.parseAnalysisResponse(ollamaResponse);
+          }
+        }
+      } catch (ollamaError) {
+        this.logger.error('Ollama fallback also failed', ollamaError);
+      }
+      
       throw error;
     }
   }
 
   /**
-   * Analyze real-time face scan
+   * Analyze real-time face scan with Ollama fallback
    */
   async analyzeRealTimeScan(
     base64Image: string,
@@ -204,7 +226,7 @@ export class GeminiService {
           temperature: 0.4,
           topK: 32,
           topP: 1,
-          maxOutputTokens: 4096,
+          maxOutputTokens: 8192,
         },
       };
 
@@ -229,7 +251,21 @@ export class GeminiService {
 
       return this.parseAnalysisResponse(textResponse);
     } catch (error) {
-      this.logger.error('Real-time scan analysis failed', error);
+      this.logger.error('Real-time scan analysis failed, trying Ollama fallback', error);
+      
+      // Fallback to Ollama with vision model
+      try {
+        const isOllamaAvailable = await this.ollamaService.isAvailable();
+        if (isOllamaAvailable) {
+          this.logger.log('Using Ollama vision fallback for real-time scan');
+          const prompt = this.buildRealTimeScanPrompt();
+          const ollamaResponse = await this.ollamaService.analyzeImage(base64Image, prompt);
+          return this.parseAnalysisResponse(ollamaResponse);
+        }
+      } catch (ollamaError) {
+        this.logger.error('Ollama fallback also failed', ollamaError);
+      }
+      
       throw error;
     }
   }
@@ -410,7 +446,7 @@ Provide your assessment in the following JSON format ONLY:
   }
 
   /**
-   * Get skincare advice based on conditions
+   * Get skincare advice based on conditions with Ollama fallback
    */
   async getSkincareAdvice(
     conditions: string[],
@@ -436,7 +472,7 @@ Provide your assessment in the following JSON format ONLY:
             contents: [{ parts: [{ text: prompt }] }],
             generationConfig: {
               temperature: 0.7,
-              maxOutputTokens: 256,
+              maxOutputTokens: 8192,
             },
           },
           { headers: { 'Content-Type': 'application/json' }, timeout: 30000 },
@@ -448,13 +484,25 @@ Provide your assessment in the following JSON format ONLY:
         'Unable to generate advice.'
       );
     } catch (error) {
-      this.logger.error('Failed to get skincare advice', error);
+      this.logger.error('Failed to get skincare advice from Gemini, trying Ollama', error);
+      
+      // Fallback to Ollama
+      try {
+        const isOllamaAvailable = await this.ollamaService.isAvailable();
+        if (isOllamaAvailable) {
+          this.logger.log('Using Ollama fallback for skincare advice');
+          return await this.ollamaService.getSkincareAdvice(conditions, concerns);
+        }
+      } catch (ollamaError) {
+        this.logger.error('Ollama fallback also failed', ollamaError);
+      }
+      
       return 'Unable to generate advice at this time. Please try again later.';
     }
   }
 
   /**
-   * Chat with AI - Conversational skincare assistant
+   * Chat with AI - Conversational skincare assistant with Ollama fallback
    */
   async chat(
     systemPrompt: string,
@@ -480,7 +528,7 @@ Réponds de manière utile, personnalisée et professionnelle en français:`;
               temperature: 0.7,
               topK: 40,
               topP: 0.95,
-              maxOutputTokens: 1024,
+              maxOutputTokens: 8192,
             },
           },
           { headers: { 'Content-Type': 'application/json' }, timeout: 30000 },
@@ -492,7 +540,19 @@ Réponds de manière utile, personnalisée et professionnelle en français:`;
         "Je suis désolé, je n'ai pas pu générer une réponse."
       );
     } catch (error) {
-      this.logger.error('Failed to generate chat response', error);
+      this.logger.error('Failed to generate chat response from Gemini, trying Ollama', error);
+      
+      // Fallback to Ollama
+      try {
+        const isOllamaAvailable = await this.ollamaService.isAvailable();
+        if (isOllamaAvailable) {
+          this.logger.log('Using Ollama fallback for chat');
+          return await this.ollamaService.chatSkincare(systemPrompt, conversationHistory, userMessage);
+        }
+      } catch (ollamaError) {
+        this.logger.error('Ollama fallback also failed', ollamaError);
+      }
+      
       throw error;
     }
   }

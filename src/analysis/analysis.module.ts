@@ -4,6 +4,7 @@ import { AnalysisService } from './analysis.service';
 import { AnalysisController } from './analysis.controller';
 import { AnalysisTestController } from './analysis-test.controller';
 import { GeminiService } from './services/gemini.service';
+import { OllamaService } from './services/ollama.service';
 import { SupabaseService } from './services/supabase.service';
 import { PrismaModule } from '../prisma/prisma.module';
 import { SkinProfileModule } from '../skin-profile/skin-profile.module';
@@ -19,7 +20,7 @@ import { SubscriptionModule } from '../subscription/subscription.module';
     SubscriptionModule,
   ],
   controllers: [AnalysisController, AnalysisTestController],
-  providers: [AnalysisService, GeminiService, SupabaseService],
-  exports: [AnalysisService, GeminiService, SupabaseService],
+  providers: [AnalysisService, GeminiService, OllamaService, SupabaseService],
+  exports: [AnalysisService, GeminiService, OllamaService, SupabaseService],
 })
 export class AnalysisModule {}
