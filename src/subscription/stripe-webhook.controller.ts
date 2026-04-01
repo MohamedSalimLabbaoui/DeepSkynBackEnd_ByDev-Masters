@@ -12,6 +12,7 @@ import { SubscriptionService } from './subscription.service';
 import { SubscriptionStatus } from './dto/create-subscription.dto';
 import { PrismaService } from '../prisma/prisma.service';
 import { NotificationService } from '../notification/notification.service';
+import { CouponsService } from '../coupons/coupons.service';
 
 @ApiTags('Subscriptions')
 @Controller()
@@ -22,6 +23,7 @@ export class StripeWebhookController {
     private readonly subscriptionService: SubscriptionService,
     private readonly prisma: PrismaService,
     private readonly notificationService: NotificationService,
+    private readonly couponsService: CouponsService,
   ) {}
 
   private stripeClient(): Stripe {
@@ -76,6 +78,7 @@ export class StripeWebhookController {
         const planCodeRaw =
           (session.metadata?.planCode as string | undefined) ||
           (session.metadata?.plan as string | undefined);
+        const couponCode = (session.metadata?.couponCode as string | undefined) || '';
         const planCode = String(planCodeRaw || '').trim().toLowerCase();
 
         if (!userId) {
@@ -108,18 +111,28 @@ export class StripeWebhookController {
         const stripeSubscriptionId =
           typeof session.subscription === 'string' ? session.subscription : null;
 
+        // Stripe sends amount_total in the smallest currency unit (e.g. cents).
+        const chargedAmount =
+          typeof session.amount_total === 'number'
+            ? Number((session.amount_total / 100).toFixed(2))
+            : undefined;
+        const chargedCurrency = session.currency
+          ? session.currency.toUpperCase()
+          : undefined;
+
         const planRow = await this.prisma.subscriptionPlan.findUnique({
           where: { code: planCode },
           select: { id: true },
         });
 
-        await this.prisma.subscription.update({
+        const updatedSubscription = await this.prisma.subscription.update({
           where: { userId },
           data: {
             plan: planCode,
+            lastPaidPlan: planCode,
             status: SubscriptionStatus.ACTIVE,
-            amount: planInfo?.price ?? undefined,
-            currency: planInfo?.currency ?? undefined,
+            amount: chargedAmount ?? planInfo?.price ?? undefined,
+            currency: chargedCurrency ?? planInfo?.currency ?? undefined,
             startDate,
             endDate,
             cancelledAt: null,
@@ -127,6 +140,15 @@ export class StripeWebhookController {
             subscriptionPlanId: planRow?.id ?? null,
           },
         });
+
+        if (couponCode.trim()) {
+          await this.couponsService.markCouponRedeemed({
+            userId,
+            couponCode,
+            subscriptionId: updatedSubscription.id,
+            stripeCheckoutSessionId: session.id,
+          });
+        }
 
         await this.notificationService.create({
           userId,

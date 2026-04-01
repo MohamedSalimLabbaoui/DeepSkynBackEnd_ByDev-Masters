@@ -425,6 +425,8 @@ export class SubscriptionService {
       data: {
         userId,
         plan: planCode,
+        lastPaidPlan:
+          planCode !== SubscriptionService.FREE_PLAN_CODE ? planCode : null,
         subscriptionPlanId,
         status: createSubscriptionDto.status || SubscriptionStatus.ACTIVE,
         amount: createSubscriptionDto.amount ?? planInfo.price,
@@ -488,6 +490,9 @@ export class SubscriptionService {
       const planCode = this.normalizePlanCode(incomingPlan);
       const { subscriptionPlanId } = await this.getPlanDetails(planCode);
       updateData.plan = planCode;
+      if (planCode !== SubscriptionService.FREE_PLAN_CODE) {
+        updateData.lastPaidPlan = planCode;
+      }
       updateData.subscriptionPlanId = subscriptionPlanId ?? null;
     }
     if (updateSubscriptionDto.status) {
@@ -560,6 +565,7 @@ export class SubscriptionService {
       where: { id: currentSub.id },
       data: {
         plan: newPlanCode,
+        lastPaidPlan: newPlanCode,
         subscriptionPlanId: subscriptionPlanId ?? null,
         status: SubscriptionStatus.ACTIVE,
         amount: planInfo.price,
@@ -792,6 +798,7 @@ export class SubscriptionService {
       where: { id: subscription.id },
       data: {
         status: SubscriptionStatus.ACTIVE,
+        lastPaidPlan: subscription.plan,
         startDate,
         endDate,
         cancelledAt: null,

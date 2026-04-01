@@ -10,6 +10,7 @@ import {
   Param,
   HttpCode,
   HttpStatus,
+  BadRequestException,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -33,11 +34,15 @@ import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import Stripe from 'stripe';
+import { CouponsService } from '../coupons/coupons.service';
 
 @ApiTags('Subscriptions')
 @Controller('subscriptions')
 export class SubscriptionController {
-  constructor(private readonly subscriptionService: SubscriptionService) {}
+  constructor(
+    private readonly subscriptionService: SubscriptionService,
+    private readonly couponsService: CouponsService,
+  ) {}
 
   private stripeClient(): Stripe {
     const secretKey = process.env.STRIPE_SECRET_KEY;
@@ -51,6 +56,203 @@ export class SubscriptionController {
 
   private async getStripePriceId(planCode: string): Promise<string> {
     return this.subscriptionService.getStripePriceIdForPlan(planCode);
+  }
+
+  private async createCheckoutSessionForPlan(
+    userId: string,
+    dto: CreateStripeCheckoutDto,
+  ) {
+    const stripe = this.stripeClient();
+    const planCode = dto.plan || dto.planCode;
+    const priceId = await this.getStripePriceId(planCode);
+    const couponCode = String(dto.couponCode || '').trim();
+
+    let stripePromotionCodeId: string | undefined;
+    if (couponCode) {
+      const couponValidation = await this.couponsService.validateCouponForCheckout(
+        userId,
+        couponCode,
+        planCode,
+      );
+
+      if (!couponValidation.stripePromotionCodeId) {
+        throw new BadRequestException(
+          'Coupon is valid but not configured for Stripe checkout (missing stripePromotionCodeId).',
+        );
+      }
+      stripePromotionCodeId = couponValidation.stripePromotionCodeId;
+    }
+
+    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
+    const successUrl = `${frontendUrl}/payment/success?session_id={CHECKOUT_SESSION_ID}`;
+    const cancelUrl = `${frontendUrl}/payment/cancel`;
+
+    const discounts = stripePromotionCodeId
+      ? ([{ promotion_code: stripePromotionCodeId }] as Stripe.Checkout.SessionCreateParams.Discount[])
+      : undefined;
+
+    const session = await stripe.checkout.sessions.create({
+      mode: 'subscription',
+      line_items: [{ price: priceId, quantity: 1 }],
+      discounts,
+      success_url: successUrl,
+      cancel_url: cancelUrl,
+      client_reference_id: userId,
+      metadata: {
+        userId,
+        planCode,
+        plan: planCode,
+        couponCode: couponCode || '',
+      },
+    });
+
+    return { url: session.url, id: session.id };
+  }
+
+  @Get('payments/history')
+  @UseGuards(KeycloakAuthGuard)
+  async getMyPaymentHistory(@CurrentUser('userId') userId: string) {
+    const subscription = await this.subscriptionService.findOrCreateByUserId(userId);
+
+    // planId stores Stripe subscription id in current implementation.
+    if (!subscription.planId) {
+      return { payments: [] };
+    }
+
+    const stripe = this.stripeClient();
+    const invoices = await stripe.invoices.list({
+      subscription: subscription.planId,
+      limit: 50,
+    });
+
+    const payments = invoices.data.map((invoice) => ({
+      invoiceId: invoice.id,
+      invoiceNumber: invoice.number,
+      createdAt: new Date(invoice.created * 1000),
+      status: invoice.status,
+      amountPaid:
+        typeof invoice.amount_paid === 'number'
+          ? Number((invoice.amount_paid / 100).toFixed(2))
+          : 0,
+      amountDue:
+        typeof invoice.amount_due === 'number'
+          ? Number((invoice.amount_due / 100).toFixed(2))
+          : 0,
+      currency: (invoice.currency || '').toUpperCase(),
+      hostedInvoiceUrl: invoice.hosted_invoice_url,
+      invoicePdfUrl: invoice.invoice_pdf,
+    }));
+
+    return { payments };
+  }
+
+  @Get('payments/:invoiceId/invoice')
+  @UseGuards(KeycloakAuthGuard)
+  async getMyInvoice(
+    @CurrentUser('userId') userId: string,
+    @Param('invoiceId') invoiceId: string,
+  ) {
+    const subscription = await this.subscriptionService.findOrCreateByUserId(userId);
+    if (!subscription.planId) {
+      throw new BadRequestException('No paid subscription found for this user');
+    }
+
+    const stripe = this.stripeClient();
+    const invoices = await stripe.invoices.list({
+      subscription: subscription.planId,
+      limit: 100,
+    });
+    const invoice = invoices.data.find((x) => x.id === invoiceId);
+
+    if (!invoice) {
+      throw new BadRequestException('Invoice does not belong to current user');
+    }
+
+    return {
+      invoiceId: invoice.id,
+      invoiceNumber: invoice.number,
+      status: invoice.status,
+      amountPaid:
+        typeof invoice.amount_paid === 'number'
+          ? Number((invoice.amount_paid / 100).toFixed(2))
+          : 0,
+      currency: (invoice.currency || '').toUpperCase(),
+      hostedInvoiceUrl: invoice.hosted_invoice_url,
+      invoicePdfUrl: invoice.invoice_pdf,
+    };
+  }
+
+  @Get('admin/payments/history')
+  @UseGuards(KeycloakAuthGuard, RolesGuard)
+  @Roles('admin')
+  async getAdminPaymentsHistory(
+    @Query('subscriptionsLimit') subscriptionsLimit?: string,
+    @Query('invoicesPerSubscription') invoicesPerSubscription?: string,
+  ) {
+    const stripe = this.stripeClient();
+
+    const subscriptionsCap = subscriptionsLimit
+      ? Math.min(Math.max(parseInt(subscriptionsLimit, 10) || 100, 1), 1000)
+      : 100;
+    const invoicesCap = invoicesPerSubscription
+      ? Math.min(Math.max(parseInt(invoicesPerSubscription, 10) || 20, 1), 100)
+      : 20;
+
+    const { subscriptions } = await this.subscriptionService.findAll({
+      limit: subscriptionsCap,
+      offset: 0,
+    });
+
+    const paidSubscriptions = subscriptions.filter(
+      (sub: any) => !!sub.planId && sub.plan !== 'free',
+    );
+
+    const grouped = await Promise.all(
+      paidSubscriptions.map(async (sub: any) => {
+        try {
+          const invoices = await stripe.invoices.list({
+            subscription: sub.planId,
+            limit: invoicesCap,
+          });
+
+          return invoices.data.map((invoice) => ({
+            userId: sub.userId,
+            userEmail: sub.user?.email || null,
+            userName: sub.user?.name || null,
+            subscriptionId: sub.id,
+            planCode: sub.plan,
+            stripeSubscriptionId: sub.planId,
+            invoiceId: invoice.id,
+            invoiceNumber: invoice.number,
+            createdAt: new Date(invoice.created * 1000),
+            status: invoice.status,
+            amountPaid:
+              typeof invoice.amount_paid === 'number'
+                ? Number((invoice.amount_paid / 100).toFixed(2))
+                : 0,
+            amountDue:
+              typeof invoice.amount_due === 'number'
+                ? Number((invoice.amount_due / 100).toFixed(2))
+                : 0,
+            currency: (invoice.currency || '').toUpperCase(),
+            hostedInvoiceUrl: invoice.hosted_invoice_url,
+            invoicePdfUrl: invoice.invoice_pdf,
+          }));
+        } catch {
+          return [];
+        }
+      }),
+    );
+
+    const payments = grouped.flat().sort((a, b) => {
+      return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+    });
+
+    return {
+      total: payments.length,
+      subscriptionsScanned: paidSubscriptions.length,
+      payments,
+    };
   }
 
   @Get('me')
@@ -106,28 +308,7 @@ export class SubscriptionController {
     @CurrentUser('userId') userId: string,
     @Body() dto: CreateStripeCheckoutDto,
   ) {
-    const stripe = this.stripeClient();
-    const planCode = dto.plan || dto.planCode;
-    const priceId = await this.getStripePriceId(planCode);
-
-    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
-    const successUrl = `${frontendUrl}/payment/success?session_id={CHECKOUT_SESSION_ID}`;
-    const cancelUrl = `${frontendUrl}/payment/cancel`;
-
-    const session = await stripe.checkout.sessions.create({
-      mode: 'subscription',
-      line_items: [{ price: priceId, quantity: 1 }],
-      success_url: successUrl,
-      cancel_url: cancelUrl,
-      client_reference_id: userId,
-      metadata: {
-        userId,
-        planCode,
-        plan: planCode,
-      },
-    });
-
-    return { url: session.url, id: session.id };
+    return this.createCheckoutSessionForPlan(userId, dto);
   }
 
   /**
@@ -144,33 +325,16 @@ export class SubscriptionController {
   }
 
   /**
-   * Annuler mon abonnement
-   */
-  @Post('cancel')
-  @HttpCode(HttpStatus.OK)
-  @UseGuards(KeycloakAuthGuard)
-  async cancel(@CurrentUser('userId') userId: string) {
-    return this.subscriptionService.cancel(userId);
-  }
-
-  /**
-   * Réactiver mon abonnement annulé
-   */
-  @Post('reactivate')
-  @HttpCode(HttpStatus.OK)
-  @UseGuards(KeycloakAuthGuard)
-  async reactivate(@CurrentUser('userId') userId: string) {
-    return this.subscriptionService.reactivate(userId);
-  }
-
-  /**
-   * Renouveler mon abonnement expiré
+   * Renouveler mon abonnement via Stripe Checkout
    */
   @Post('renew')
   @HttpCode(HttpStatus.OK)
   @UseGuards(KeycloakAuthGuard)
-  async renew(@CurrentUser('userId') userId: string) {
-    return this.subscriptionService.renew(userId);
+  async renew(
+    @CurrentUser('userId') userId: string,
+    @Body() dto: CreateStripeCheckoutDto,
+  ) {
+    return this.createCheckoutSessionForPlan(userId, dto);
   }
 
   /**

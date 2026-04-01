@@ -62,6 +62,7 @@ model User {
   storyLikes             StoryLike[]
   storyComments          StoryComment[]
   subscription           Subscription?
+  couponRedemptions      CouponRedemption[]
 
   @@map("users")
 }
@@ -170,6 +171,7 @@ model Subscription {
   planId        String?
   subscriptionPlanId String?
   plan          String    @default("free")
+  lastPaidPlan  String?
   status        String    @default("active")
   amount        Float?
   currency      String?   @default("TND")
@@ -182,6 +184,7 @@ model Subscription {
   updatedAt     DateTime  @updatedAt
   user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   subscriptionPlan SubscriptionPlan? @relation(fields: [subscriptionPlanId], references: [id], onDelete: SetNull)
+  couponRedemptions CouponRedemption[]
 
   @@map("subscriptions")
 }
@@ -201,6 +204,42 @@ model SubscriptionPlan {
   subscriptions Subscription[]
 
   @@map("subscription_plans")
+}
+
+model Coupon {
+  id                    String             @id @default(uuid())
+  code                  String             @unique
+  discountType          String
+  discountValue         Float
+  currency              String?
+  isActive              Boolean            @default(true)
+  startsAt              DateTime?
+  expiresAt             DateTime?
+  maxRedemptions        Int?
+  maxPerUser            Int?
+  allowedPlans          String[]
+  stripePromotionCodeId String?
+  createdAt             DateTime           @default(now())
+  updatedAt             DateTime           @updatedAt
+  redemptions           CouponRedemption[]
+
+  @@map("coupons")
+}
+
+model CouponRedemption {
+  id                    String        @id @default(uuid())
+  couponId              String
+  userId                String
+  subscriptionId        String?
+  stripeCheckoutSessionId String?
+  createdAt             DateTime      @default(now())
+  coupon                Coupon        @relation(fields: [couponId], references: [id], onDelete: Cascade)
+  user                  User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  subscription          Subscription? @relation(fields: [subscriptionId], references: [id], onDelete: SetNull)
+
+  @@index([couponId])
+  @@index([userId])
+  @@map("coupon_redemptions")
 }
 
 model Post {

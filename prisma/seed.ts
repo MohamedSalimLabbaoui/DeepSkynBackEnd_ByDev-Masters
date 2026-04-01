@@ -197,10 +197,12 @@ async function main() {
       console.log(`   🧴 Skin profile created`);
 
       // Create subscription
+      const seededPlan = Math.random() > 0.7 ? 'premium' : 'free';
       await prisma.subscription.create({
         data: {
           userId: user.id,
-          plan: Math.random() > 0.7 ? 'premium' : 'free',
+          plan: seededPlan,
+          lastPaidPlan: seededPlan !== 'free' ? seededPlan : null,
           status: 'active',
           currency: 'TND',
           autoRenew: true,

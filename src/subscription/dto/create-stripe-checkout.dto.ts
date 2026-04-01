@@ -1,5 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsString } from 'class-validator';
+import { IsOptional, IsString } from 'class-validator';
 
 export class CreateStripeCheckoutDto {
   @ApiProperty({
@@ -13,6 +13,15 @@ export class CreateStripeCheckoutDto {
     description: 'Alias rétro-compatible (préférer plan)',
     example: 'premium',
   })
+  @IsOptional()
   @IsString()
   planCode?: string;
+
+  @ApiPropertyOptional({
+    description: 'Code coupon à appliquer avant checkout',
+    example: 'WELCOME20',
+  })
+  @IsOptional()
+  @IsString()
+  couponCode?: string;
 }
