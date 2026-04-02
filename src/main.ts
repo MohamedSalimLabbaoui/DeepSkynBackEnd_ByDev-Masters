@@ -22,7 +22,12 @@ async function bootstrap() {
   app.use(urlencoded({ extended: true, limit: '50mb' }));
 
   app.enableCors({
-    origin: process.env.FRONTEND_URL || 'http://localhost:5173',
+    origin: [
+      process.env.FRONTEND_URL || 'http://localhost:5173',
+      'http://localhost:8081',
+      'http://localhost:19006',
+      'http://localhost:4200',
+    ],
     credentials: true,
   });
   // Ajouter les pipes de validation globalement
