@@ -63,6 +63,14 @@ model User {
   storyComments          StoryComment[]
   subscription           Subscription?
   couponRedemptions      CouponRedemption[]
+  faceReference          FaceReference?
+  // Contextual Analysis relations
+  weatherLogs            WeatherLog[]
+  skinAlerts             SkinAlert[]
+  skinSeasonalPatterns   SkinSeasonalPattern[]
+  skinDailyLogs          SkinDailyLog[]
+  // Predictive Routine relation
+  predictiveRoutines     PredictiveRoutine[]
 
   @@map("users")
 }
@@ -381,4 +389,102 @@ model SignTranslation {
   post        Post     @relation(fields: [postId], references: [id], onDelete: Cascade)
 
   @@map("sign_translations")
+}
+
+// ==================== CONTEXTUAL ANALYSIS MODELS ====================
+
+model WeatherLog {
+  id          String   @id @default(uuid())
+  userId      String
+  latitude    Float
+  longitude   Float
+  city        String?
+  country     String?
+  uvIndex     Float
+  aqi         Int?
+  humidity    Float?
+  temperature Float?
+  date        DateTime @default(now())
+  createdAt   DateTime @default(now())
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, date])
+  @@map("weather_logs")
+}
+
+model SkinAlert {
+  id        String   @id @default(uuid())
+  userId    String
+  type      String   // 'uv' | 'pollution' | 'seasonal' | 'humidity'
+  message   String
+  severity  String   // 'low' | 'medium' | 'high'
+  isRead    Boolean  @default(false)
+  metadata  Json?
+  date      DateTime @default(now())
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, isRead])
+  @@map("skin_alerts")
+}
+
+model SkinSeasonalPattern {
+  id                 String   @id @default(uuid())
+  userId             String
+  month              Int      // 1-12
+  year               Int
+  avgConditionScore  Float
+  dominantIssue      String?
+  totalLogs          Int      @default(0)
+  notes              String?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+  user               User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, month, year])
+  @@map("skin_seasonal_patterns")
+}
+
+model SkinDailyLog {
+  id             String   @id @default(uuid())
+  userId         String
+  conditionScore Int      // 1-10
+  notes          String?
+  concerns       String[] // e.g., ['acne', 'dryness', 'redness']
+  weather        Json?    // snapshot of weather at log time
+  date           DateTime @default(now())
+  createdAt      DateTime @default(now())
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, date])
+  @@map("skin_daily_logs")
+}
+
+model PredictiveRoutine {
+  id          String   @id @default(cuid())
+  userId      String
+  analysisId  String   // links to existing analysis result
+  generatedAt DateTime @default(now())
+  routine     Json     // array of 7 days with morning/evening steps
+  weatherData Json     // snapshot of weather forecast used
+  expiresAt   DateTime // generatedAt + 7 days
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, analysisId])
+  @@index([expiresAt])
+  @@map("predictive_routines")
+}
+
+// ==================== FACE VERIFICATION MODEL ====================
+
+model FaceReference {
+  id           String   @id @default(uuid())
+  userId       String   @unique
+  imageUrl     String   // URL de l'image de référence
+  descriptor   Json     // Face descriptor (128-dimensional vector from face-api.js)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("face_references")
 }

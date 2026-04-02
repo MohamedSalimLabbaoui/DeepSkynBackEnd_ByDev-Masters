@@ -1,4 +1,4 @@
-// Service backend pour générer des conseils météo via Gemini API (HTTP direct)
+// Service backend pour générer des conseils météo via Gemini API (HTTP direct) avec fallback Ollama
 import { Injectable, Logger, HttpException, HttpStatus } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import axios, { AxiosError } from 'axios';
@@ -23,21 +23,69 @@ interface GeminiResponse {
   }[];
 }
 
+interface OllamaGenerateResponse {
+  model: string;
+  response: string;
+  done: boolean;
+}
+
 @Injectable()
 export class WeatherService {
   private readonly logger = new Logger(WeatherService.name);
   private readonly apiKey: string;
   private readonly apiUrl: string;
+  private readonly ollamaBaseUrl: string;
+  private readonly ollamaTextModel: string;
   private readonly maxRetries = 3;
   private readonly retryDelay = 2000;
 
   constructor(private readonly configService: ConfigService) {
     this.apiKey = this.configService.get<string>('GEMINI_API_KEY');
     if (!this.apiKey) {
-      throw new Error('GEMINI_API_KEY is not defined in environment variables');
+      this.logger.warn('GEMINI_API_KEY is not defined, will use Ollama fallback');
     }
     this.apiUrl =
-      'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent';
+      'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-pro:generateContent';
+    this.ollamaBaseUrl = this.configService.get<string>('OLLAMA_BASE_URL') || 'http://localhost:11434';
+    this.ollamaTextModel = this.configService.get<string>('OLLAMA_TEXT_MODEL') || 'llama3:8b';
+  }
+
+  /**
+   * Check if Ollama is available
+   */
+  private async isOllamaAvailable(): Promise<boolean> {
+    try {
+      const response = await axios.get(`${this.ollamaBaseUrl}/api/tags`, { timeout: 3000 });
+      return response.status === 200;
+    } catch {
+      return false;
+    }
+  }
+
+  /**
+   * Generate with Ollama fallback
+   */
+  private async generateWithOllama(prompt: string): Promise<string> {
+    const response = await axios.post<OllamaGenerateResponse>(
+      `${this.ollamaBaseUrl}/api/generate`,
+      {
+        model: this.ollamaTextModel,
+        prompt,
+        stream: false,
+        options: {
+          temperature: 0.7,
+          top_p: 0.95,
+          num_predict: 512,
+        },
+      },
+      { timeout: 60000 },
+    );
+
+    if (response.data?.response) {
+      return response.data.response;
+    }
+
+    throw new Error('Empty response from Ollama');
   }
 
   /**
@@ -130,85 +178,107 @@ export class WeatherService {
   }
 
   /**
-   * Générer un conseil météo personnalisé via Gemini
+   * Générer un conseil météo personnalisé via Gemini avec fallback Ollama
    */
   async generateWeatherAdvice(data: WeatherAdviceInput): Promise<{
     advice: string;
     emoji: string;
     urgency: 'low' | 'medium' | 'high';
   }> {
-    try {
-      const prompt = this.buildWeatherPrompt(data);
-      const urgencyLevel = this.calculateUrgency(data);
+    const prompt = this.buildWeatherPrompt(data);
+    const urgencyLevel = this.calculateUrgency(data);
 
-      const requestBody = {
-        contents: [
-          {
-            parts: [{ text: prompt }],
-          },
-        ],
-        generationConfig: {
-          temperature: 0.7,
-          topK: 40,
-          topP: 0.95,
-          maxOutputTokens: 512,
-        },
-        safetySettings: [
-          {
-            category: 'HARM_CATEGORY_HARASSMENT',
-            threshold: 'BLOCK_NONE',
-          },
-          {
-            category: 'HARM_CATEGORY_HATE_SPEECH',
-            threshold: 'BLOCK_NONE',
-          },
-          {
-            category: 'HARM_CATEGORY_SEXUALLY_EXPLICIT',
-            threshold: 'BLOCK_NONE',
-          },
-          {
-            category: 'HARM_CATEGORY_DANGEROUS_CONTENT',
-            threshold: 'BLOCK_NONE',
-          },
-        ],
-      };
-
-      const response = await this.makeRequestWithRetry(() =>
-        axios.post<GeminiResponse>(
-          `${this.apiUrl}?key=${this.apiKey}`,
-          requestBody,
-          {
-            headers: {
-              'Content-Type': 'application/json',
+    // Try Gemini first if API key is available
+    if (this.apiKey) {
+      try {
+        const requestBody = {
+          contents: [
+            {
+              parts: [{ text: prompt }],
             },
-            timeout: 30000,
+          ],
+          generationConfig: {
+            temperature: 0.7,
+            topK: 40,
+            topP: 0.95,
+            maxOutputTokens: 8192,
           },
-        ),
-      );
+          safetySettings: [
+            {
+              category: 'HARM_CATEGORY_HARASSMENT',
+              threshold: 'BLOCK_NONE',
+            },
+            {
+              category: 'HARM_CATEGORY_HATE_SPEECH',
+              threshold: 'BLOCK_NONE',
+            },
+            {
+              category: 'HARM_CATEGORY_SEXUALLY_EXPLICIT',
+              threshold: 'BLOCK_NONE',
+            },
+            {
+              category: 'HARM_CATEGORY_DANGEROUS_CONTENT',
+              threshold: 'BLOCK_NONE',
+            },
+          ],
+        };
 
-      const textResponse =
-        response.data.candidates[0]?.content?.parts[0]?.text;
+        const response = await this.makeRequestWithRetry(() =>
+          axios.post<GeminiResponse>(
+            `${this.apiUrl}?key=${this.apiKey}`,
+            requestBody,
+            {
+              headers: {
+                'Content-Type': 'application/json',
+              },
+              timeout: 30000,
+            },
+          ),
+        );
 
-      if (!textResponse) {
-        throw new Error('No response from Gemini API');
+        const textResponse =
+          response.data.candidates[0]?.content?.parts[0]?.text;
+
+        if (!textResponse) {
+          throw new Error('No response from Gemini API');
+        }
+
+        const parsed = this.parseAdviceResponse(textResponse);
+
+        return {
+          advice: parsed.advice,
+          emoji: parsed.emoji,
+          urgency: urgencyLevel,
+        };
+      } catch (error) {
+        this.logger.error('Gemini weather advice failed, trying Ollama fallback', error);
       }
-
-      const parsed = this.parseAdviceResponse(textResponse);
-
-      return {
-        advice: parsed.advice,
-        emoji: parsed.emoji,
-        urgency: urgencyLevel,
-      };
-    } catch (error) {
-      this.logger.error('Gemini weather advice failed', error);
-      // Fallback advice si Gemini échoue
-      return {
-        advice: this.generateFallbackAdvice(data),
-        emoji: '🌍',
-        urgency: 'low',
-      };
     }
+
+    // Fallback to Ollama
+    try {
+      const isOllamaAvailable = await this.isOllamaAvailable();
+      if (isOllamaAvailable) {
+        this.logger.log('Using Ollama fallback for weather advice');
+        const ollamaResponse = await this.generateWithOllama(prompt);
+        const parsed = this.parseAdviceResponse(ollamaResponse);
+        
+        return {
+          advice: parsed.advice,
+          emoji: parsed.emoji,
+          urgency: urgencyLevel,
+        };
+      }
+    } catch (ollamaError) {
+      this.logger.error('Ollama fallback also failed', ollamaError);
+    }
+
+    // Final fallback
+    return {
+      advice: this.generateFallbackAdvice(data),
+      emoji: '🌍',
+      urgency: urgencyLevel,
+    };
   }
 
   /**
