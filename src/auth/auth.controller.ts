@@ -888,12 +888,34 @@ export class AuthController {
   @Post('face-login')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Connexion via FaceID' })
-  async faceLogin(@Body() body: { email: string }) {
+  async faceLogin(@Body() body: { email: string; imageBase64?: string }) {
+    if (!body.imageBase64) {
+      throw new BadRequestException('Image faciale requise');
+    }
+
     const user = await this.prisma.user.findUnique({
-      where: { email: body.email }
+      where: { email: body.email },
     });
     if (!user) throw new UnauthorizedException('Utilisateur non trouvé');
     if (!user.isActive) throw new UnauthorizedException('Compte désactivé');
+    if (!user.avatar) {
+      throw new UnauthorizedException('Aucun avatar trouvé pour ce compte');
+    }
+
+    let faceMatch: { match: boolean; confidence: number };
+    try {
+      faceMatch = await this.compareSelfieWithAvatar(body.imageBase64, user.avatar);
+    } catch (error: any) {
+      if (error instanceof BadRequestException || error instanceof UnauthorizedException) {
+        throw error;
+      }
+      this.logger.error(`FaceID verification failed for ${body.email}: ${error?.message || 'unknown error'}`);
+      throw new UnauthorizedException('Service FaceID temporairement indisponible');
+    }
+
+    if (!faceMatch.match || faceMatch.confidence < 0.7) {
+      throw new UnauthorizedException('Vérification faciale échouée');
+    }
 
     const accessToken = this.googleAuthService.generateToken(user);
 
@@ -909,6 +931,104 @@ export class AuthController {
         name: user.name,
       },
     };
+  }
+
+  private async compareSelfieWithAvatar(selfieBase64: string, avatarUrl: string): Promise<{ match: boolean; confidence: number }> {
+    const geminiApiKey = process.env.GEMINI_API_KEY;
+    if (!geminiApiKey) {
+      throw new UnauthorizedException('FaceID indisponible: GEMINI_API_KEY manquante');
+    }
+
+    const avatarBase64 = await this.resolveImageToBase64(avatarUrl);
+
+    const prompt = `You are a strict biometric verifier.
+Compare whether the two photos represent the same person.
+Return ONLY valid JSON in this exact shape:
+{"match": boolean, "confidence": number}
+Rules:
+- confidence must be between 0 and 1.
+- If uncertain, set match to false.
+- No extra keys, no markdown.`;
+
+    const payload = {
+      contents: [
+        {
+          role: 'user',
+          parts: [
+            { text: prompt },
+            {
+              inlineData: {
+                mimeType: 'image/jpeg',
+                data: selfieBase64,
+              },
+            },
+            {
+              inlineData: {
+                mimeType: 'image/jpeg',
+                data: avatarBase64,
+              },
+            },
+          ],
+        },
+      ],
+      generationConfig: {
+        temperature: 0,
+        responseMimeType: 'application/json',
+      },
+    };
+
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${geminiApiKey}`;
+    let response: any;
+    try {
+      response = await axios.post(url, payload, {
+        headers: { 'Content-Type': 'application/json' },
+        timeout: 20000,
+      });
+    } catch (error: any) {
+      this.logger.error(`Gemini FaceID request failed: ${error?.message || 'unknown error'}`);
+      throw new UnauthorizedException('FaceID indisponible pour le moment');
+    }
+
+    const rawText = response.data?.candidates?.[0]?.content?.parts?.[0]?.text;
+    if (!rawText) {
+      throw new UnauthorizedException('Réponse FaceID invalide');
+    }
+
+    try {
+      const parsed = JSON.parse(rawText);
+      return {
+        match: Boolean(parsed.match),
+        confidence: Number(parsed.confidence || 0),
+      };
+    } catch {
+      throw new UnauthorizedException('Réponse FaceID non exploitable');
+    }
+  }
+
+  private async resolveImageToBase64(url: string): Promise<string> {
+    if (url.startsWith('data:')) {
+      const matches = url.match(/^data:([^;]+);base64,(.+)$/);
+      if (!matches) {
+        throw new BadRequestException('Format avatar base64 invalide');
+      }
+      return matches[2];
+    }
+
+    let response: any;
+    try {
+      response = await axios.get(url, {
+        responseType: 'arraybuffer',
+        timeout: 8000,
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)',
+        },
+      });
+    } catch (error: any) {
+      this.logger.error(`Unable to fetch avatar for FaceID: ${error?.message || 'unknown error'}`);
+      throw new UnauthorizedException('Impossible de récupérer la photo de profil');
+    }
+
+    return Buffer.from(response.data).toString('base64');
   }
 
   private extractTokenFromRequest(req: any): string {

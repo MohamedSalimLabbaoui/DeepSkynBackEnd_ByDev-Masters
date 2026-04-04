@@ -3,7 +3,7 @@
 /node_modules
 /build
 
-
+public/
 ml/data/
 ml/models/
 # Logs
