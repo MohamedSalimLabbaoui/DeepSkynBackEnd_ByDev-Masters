@@ -3,6 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateSkinLogDto, WeatherAlertQueryDto } from './dto';
 import axios from 'axios';
+import { GrokService } from '../analysis/services/grok.service';
 import {
   compressWhitespace,
   buildCompactWeatherContext,
@@ -44,19 +45,12 @@ export interface AlertResult {
   aiAdvice?: AIAdvice;
 }
 
-interface OllamaGenerateResponse {
-  model: string;
-  response: string;
-  done: boolean;
-}
-
 @Injectable()
 export class ContextualAnalysisService {
   private readonly logger = new Logger(ContextualAnalysisService.name);
   private readonly geminiApiKey: string;
   private readonly geminiApiUrl: string;
-  private readonly ollamaBaseUrl: string;
-  private readonly ollamaTextModel: string;
+  private readonly grokService: GrokService;
 
   constructor(
     private readonly prisma: PrismaService,
@@ -65,46 +59,7 @@ export class ContextualAnalysisService {
     this.geminiApiKey = this.configService.get<string>('GEMINI_API_KEY') || '';
     this.geminiApiUrl =
       'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent';
-    this.ollamaBaseUrl = this.configService.get<string>('OLLAMA_BASE_URL') || 'http://localhost:11434';
-    this.ollamaTextModel = this.configService.get<string>('OLLAMA_TEXT_MODEL') || 'llama3:8b';
-  }
-
-  /**
-   * Check if Ollama is available
-   */
-  private async isOllamaAvailable(): Promise<boolean> {
-    try {
-      const response = await axios.get(`${this.ollamaBaseUrl}/api/tags`, { timeout: 3000 });
-      return response.status === 200;
-    } catch {
-      return false;
-    }
-  }
-
-  /**
-   * Generate with Ollama fallback
-   */
-  private async generateWithOllama(prompt: string): Promise<string> {
-    const response = await axios.post<OllamaGenerateResponse>(
-      `${this.ollamaBaseUrl}/api/generate`,
-      {
-        model: this.ollamaTextModel,
-        prompt,
-        stream: false,
-        options: {
-          temperature: 0.7,
-          top_p: 0.9,
-          num_predict: 1024,
-        },
-      },
-      { timeout: 60000 },
-    );
-
-    if (response.data?.response) {
-      return response.data.response;
-    }
-
-    throw new Error('Empty response from Ollama');
+    this.grokService = new GrokService(configService);
   }
 
   /**
@@ -243,23 +198,23 @@ Court, français.`);
       const parsed = JSON.parse(jsonMatch[0]) as AIAdvice;
       return parsed;
     } catch (error) {
-      this.logger.error('Gemini AI advice generation failed, trying Ollama fallback', error);
+      this.logger.error('Gemini AI advice generation failed, trying OpenRouter fallback', error);
       
       try {
-        const isOllamaAvailable = await this.isOllamaAvailable();
-        if (isOllamaAvailable) {
-          this.logger.log('Using Ollama fallback for AI advice');
-          const ollamaResponse = await this.generateWithOllama(prompt);
+        const isGrokAvailable = await this.grokService.isAvailable();
+        if (isGrokAvailable) {
+          this.logger.log('Using OpenRouter fallback for AI advice');
+          const grokResponse = await this.grokService.generate(prompt);
           
-          const jsonMatch = ollamaResponse.match(/\{[\s\S]*\}/);
+          const jsonMatch = grokResponse.match(/\{[\s\S]*\}/);
           if (jsonMatch) {
             const parsed = JSON.parse(jsonMatch[0]) as AIAdvice;
-            this.logger.log('Ollama AI advice generated successfully');
+            this.logger.log('OpenRouter AI advice generated successfully');
             return parsed;
           }
         }
-      } catch (ollamaError) {
-        this.logger.error('Ollama fallback also failed', ollamaError);
+      } catch (grokError) {
+        this.logger.error('OpenRouter fallback also failed', grokError);
       }
       
       return this.getFallbackAdvice(weather);

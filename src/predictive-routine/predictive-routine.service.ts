@@ -2,6 +2,7 @@ import { Injectable, Logger, HttpException, HttpStatus } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../prisma/prisma.service';
 import axios, { AxiosError } from 'axios';
+import { GrokService } from '../analysis/services/grok.service';
 import {
   compressWhitespace,
   compressWeatherForecast,
@@ -46,19 +47,12 @@ interface GeminiResponse {
   }[];
 }
 
-interface OllamaGenerateResponse {
-  model: string;
-  response: string;
-  done: boolean;
-}
-
 @Injectable()
 export class PredictiveRoutineService {
   private readonly logger = new Logger(PredictiveRoutineService.name);
   private readonly apiKey: string;
   private readonly apiUrl: string;
-  private readonly ollamaBaseUrl: string;
-  private readonly ollamaTextModel: string;
+  private readonly grokService: GrokService;
   private readonly maxRetries = 3;
   private readonly retryDelay = 2000;
 
@@ -69,46 +63,7 @@ export class PredictiveRoutineService {
     this.apiKey = this.config.get<string>('GEMINI_API_KEY');
     this.apiUrl =
       'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent';
-    this.ollamaBaseUrl = this.config.get<string>('OLLAMA_BASE_URL') || 'http://localhost:11434';
-    this.ollamaTextModel = this.config.get<string>('OLLAMA_TEXT_MODEL') || 'llama3:8b';
-  }
-
-  /**
-   * Check if Ollama is available
-   */
-  private async isOllamaAvailable(): Promise<boolean> {
-    try {
-      const response = await axios.get(`${this.ollamaBaseUrl}/api/tags`, { timeout: 3000 });
-      return response.status === 200;
-    } catch {
-      return false;
-    }
-  }
-
-  /**
-   * Generate with Ollama fallback
-   */
-  private async generateWithOllama(prompt: string): Promise<string> {
-    const response = await axios.post<OllamaGenerateResponse>(
-      `${this.ollamaBaseUrl}/api/generate`,
-      {
-        model: this.ollamaTextModel,
-        prompt,
-        stream: false,
-        options: {
-          temperature: 0.7,
-          top_p: 0.9,
-          num_predict: 2048,
-        },
-      },
-      { timeout: 120000 },
-    );
-
-    if (response.data?.response) {
-      return response.data.response;
-    }
-
-    throw new Error('Empty response from Ollama');
+    this.grokService = new GrokService(config);
   }
 
   /**
@@ -359,12 +314,12 @@ Français, 7 jours.`);
       this.logger.log('Gemini AI routine generated successfully');
       return routine;
     } catch (error) {
-      this.logger.error(`Gemini API failed: ${error.message}, trying Ollama fallback`, error.stack);
+      this.logger.error(`Gemini API failed: ${error.message}, trying OpenRouter fallback`, error.stack);
       
       try {
-        const isOllamaAvailable = await this.isOllamaAvailable();
-        if (isOllamaAvailable) {
-          this.logger.log('Using Ollama fallback for predictive routine');
+        const isGrokAvailable = await this.grokService.isAvailable();
+        if (isGrokAvailable) {
+          this.logger.log('Using OpenRouter fallback for predictive routine');
           const weatherSummary = compressWeatherForecast(weatherData.daily);
           const st = abbrevSkinType(analysisResult.skinType);
           const issues = analysisResult.detectedIssues.slice(0, 3).join(',') || '-';
@@ -379,9 +334,9 @@ Produits:${prods}
 Rép JSON strict:{days:[{day,morning:[],evening:[],tip,warning}],globalAdvice}
 Français, 7 jours.`);
 
-          const ollamaResponse = await this.generateWithOllama(prompt);
+          const grokResponse = await this.grokService.generate(prompt);
           
-          let jsonText = ollamaResponse.trim();
+          let jsonText = grokResponse.trim();
           if (jsonText.includes('```json')) {
             jsonText = jsonText.split('```json')[1].split('```')[0].trim();
           } else if (jsonText.includes('```')) {
@@ -390,12 +345,12 @@ Français, 7 jours.`);
           
           const routine = JSON.parse(jsonText) as GeneratedRoutine;
           if (routine.days && Array.isArray(routine.days) && routine.days.length > 0) {
-            this.logger.log('Ollama routine generated successfully');
+            this.logger.log('OpenRouter routine generated successfully');
             return routine;
           }
         }
-      } catch (ollamaError) {
-        this.logger.error('Ollama fallback also failed', ollamaError);
+      } catch (grokError) {
+        this.logger.error('OpenRouter fallback also failed', grokError);
       }
       
       return this.getFallbackRoutine(analysisResult.skinType);

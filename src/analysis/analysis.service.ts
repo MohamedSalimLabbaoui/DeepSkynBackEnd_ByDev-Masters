@@ -44,6 +44,38 @@ export class AnalysisService {
     private readonly subscriptionService: SubscriptionService,
   ) {}
 
+  private toSafeInt(
+    value: unknown,
+    fallback: number,
+    options?: { min?: number; max?: number; treat0to10AsPercent?: boolean },
+  ): number {
+    let num: number;
+
+    if (typeof value === 'number' && Number.isFinite(value)) {
+      num = value;
+    } else if (typeof value === 'string') {
+      const parsed = Number(value.trim().replace(',', '.'));
+      num = Number.isFinite(parsed) ? parsed : fallback;
+    } else {
+      num = fallback;
+    }
+
+    if (options?.treat0to10AsPercent && num <= 10) {
+      num *= 10;
+    }
+
+    num = Math.round(num);
+
+    if (options?.min !== undefined) {
+      num = Math.max(options.min, num);
+    }
+    if (options?.max !== undefined) {
+      num = Math.min(options.max, num);
+    }
+
+    return num;
+  }
+
   private async enforceAnalysisAccess(userId: string): Promise<void> {
     const isPremium = await this.subscriptionService.isPremium(userId);
     if (isPremium) return;
@@ -181,6 +213,15 @@ export class AnalysisService {
       );
 
       const processingTime = Date.now() - startTime;
+      const normalizedHealthScore = this.toSafeInt(result.healthScore, 70, {
+        min: 0,
+        max: 100,
+        treat0to10AsPercent: true,
+      });
+      const normalizedSkinAge = this.toSafeInt(result.skinAge, 25, {
+        min: 10,
+        max: 100,
+      });
 
       // Create analysis record if requested
       if (realTimeScanDto.saveAnalysis) {
@@ -189,8 +230,8 @@ export class AnalysisService {
             userId,
             images: imageUrl ? [imageUrl] : [],
             results: result as any,
-            healthScore: result.healthScore,
-            skinAge: result.skinAge,
+            healthScore: normalizedHealthScore,
+            skinAge: normalizedSkinAge,
             conditions: result.conditions,
             recommendations: result.recommendations as any,
             status: 'completed',
@@ -227,14 +268,23 @@ export class AnalysisService {
       );
 
       const processingTime = Date.now() - startTime;
+      const normalizedHealthScore = this.toSafeInt(result.healthScore, 70, {
+        min: 0,
+        max: 100,
+        treat0to10AsPercent: true,
+      });
+      const normalizedSkinAge = this.toSafeInt(result.skinAge, 25, {
+        min: 10,
+        max: 100,
+      });
 
       // Update analysis with results
       await this.prisma.analysis.update({
         where: { id: analysisId },
         data: {
           results: result as any,
-          healthScore: result.healthScore,
-          skinAge: result.skinAge,
+          healthScore: normalizedHealthScore,
+          skinAge: normalizedSkinAge,
           conditions: result.conditions,
           recommendations: result.recommendations as any,
           status: 'completed',

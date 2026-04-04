@@ -57,11 +57,17 @@ import { PasswordResetService } from './services/password-reset.service';
 import { SignupVerificationService } from './services/signup-verification.service';
 import { PrismaService } from '../prisma/prisma.service';
 import axios from 'axios';
+import * as path from 'path';
+import * as faceapi from 'face-api.js';
+import * as tf from '@tensorflow/tfjs';
+import * as jpeg from 'jpeg-js';
+import { PNG } from 'pngjs';
 
 @ApiTags('Auth')
 @Controller('auth')
 export class AuthController {
   private readonly logger = new Logger(AuthController.name);
+  private static faceModelsLoadPromise: Promise<void> | null = null;
 
   constructor(
     private readonly authService: AuthService,
@@ -861,7 +867,7 @@ export class AuthController {
         res.set('Content-Type', contentType);
         res.set('Access-Control-Allow-Origin', '*');
         return res.send(buffer);
-      } catch (error) {
+      } catch (error: any) {
         this.logger.error(`Error processing data URL: ${error.message}`);
         return res.status(500).send('Error processing data URL');
       }
@@ -879,7 +885,7 @@ export class AuthController {
       res.set('Content-Type', response.headers['content-type'] || 'image/jpeg');
       res.set('Access-Control-Allow-Origin', '*');
       response.data.pipe(res);
-    } catch (error) {
+    } catch (error: any) {
       this.logger.error(`Error fetching image from ${url}: ${error.message}`);
       res.status(500).send('Error fetching image');
     }
@@ -888,9 +894,14 @@ export class AuthController {
   @Post('face-login')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Connexion via FaceID' })
-  async faceLogin(@Body() body: { email: string; imageBase64?: string }) {
-    if (!body.imageBase64) {
-      throw new BadRequestException('Image faciale requise');
+  async faceLogin(
+    @Body() body: { email: string; descriptor?: number[]; imageBase64?: string },
+  ) {
+    if (
+      (!Array.isArray(body.descriptor) || body.descriptor.length === 0) &&
+      !body.imageBase64
+    ) {
+      throw new BadRequestException('Image faciale ou descripteur requis');
     }
 
     const user = await this.prisma.user.findUnique({
@@ -898,22 +909,26 @@ export class AuthController {
     });
     if (!user) throw new UnauthorizedException('Utilisateur non trouvé');
     if (!user.isActive) throw new UnauthorizedException('Compte désactivé');
-    if (!user.avatar) {
-      throw new UnauthorizedException('Aucun avatar trouvé pour ce compte');
+    const faceReference = await this.prisma.faceReference.findUnique({
+      where: { userId: user.id },
+      select: { descriptor: true },
+    });
+
+    if (!faceReference?.descriptor || !Array.isArray(faceReference.descriptor)) {
+      throw new UnauthorizedException('Aucune reference faciale enregistree pour ce compte');
     }
 
-    let faceMatch: { match: boolean; confidence: number };
-    try {
-      faceMatch = await this.compareSelfieWithAvatar(body.imageBase64, user.avatar);
-    } catch (error: any) {
-      if (error instanceof BadRequestException || error instanceof UnauthorizedException) {
-        throw error;
-      }
-      this.logger.error(`FaceID verification failed for ${body.email}: ${error?.message || 'unknown error'}`);
-      throw new UnauthorizedException('Service FaceID temporairement indisponible');
-    }
+    const liveDescriptor =
+      Array.isArray(body.descriptor) && body.descriptor.length > 0
+        ? body.descriptor
+        : await this.extractDescriptorFromImageBase64(body.imageBase64 as string);
 
-    if (!faceMatch.match || faceMatch.confidence < 0.7) {
+    const confidence = this.calculateDescriptorSimilarity(
+      liveDescriptor,
+      faceReference.descriptor as number[],
+    );
+
+    if (confidence < 0.5) {
       throw new UnauthorizedException('Vérification faciale échouée');
     }
 
@@ -933,102 +948,130 @@ export class AuthController {
     };
   }
 
-  private async compareSelfieWithAvatar(selfieBase64: string, avatarUrl: string): Promise<{ match: boolean; confidence: number }> {
-    const geminiApiKey = process.env.GEMINI_API_KEY;
-    if (!geminiApiKey) {
-      throw new UnauthorizedException('FaceID indisponible: GEMINI_API_KEY manquante');
+  private calculateDescriptorSimilarity(desc1: number[], desc2: number[]): number {
+    if (desc1.length !== desc2.length) {
+      throw new BadRequestException('Descripteurs faciaux incompatibles');
     }
 
-    const avatarBase64 = await this.resolveImageToBase64(avatarUrl);
+    let sumSquares = 0;
+    for (let i = 0; i < desc1.length; i++) {
+      const diff = desc1[i] - desc2[i];
+      sumSquares += diff * diff;
+    }
 
-    const prompt = `You are a strict biometric verifier.
-Compare whether the two photos represent the same person.
-Return ONLY valid JSON in this exact shape:
-{"match": boolean, "confidence": number}
-Rules:
-- confidence must be between 0 and 1.
-- If uncertain, set match to false.
-- No extra keys, no markdown.`;
+    const euclideanDistance = Math.sqrt(sumSquares);
+    const maxExpectedDistance = 1.2;
+    return Math.max(0, 1 - euclideanDistance / maxExpectedDistance);
+  }
 
-    const payload = {
-      contents: [
-        {
-          role: 'user',
-          parts: [
-            { text: prompt },
-            {
-              inlineData: {
-                mimeType: 'image/jpeg',
-                data: selfieBase64,
-              },
-            },
-            {
-              inlineData: {
-                mimeType: 'image/jpeg',
-                data: avatarBase64,
-              },
-            },
-          ],
-        },
-      ],
-      generationConfig: {
-        temperature: 0,
-        responseMimeType: 'application/json',
-      },
-    };
+  private async ensureFaceModelsLoaded(): Promise<void> {
+    if (!AuthController.faceModelsLoadPromise) {
+      const modelPath = path.join(process.cwd(), 'public', 'models');
+      AuthController.faceModelsLoadPromise = Promise.all([
+        faceapi.nets.ssdMobilenetv1.loadFromDisk(modelPath),
+        faceapi.nets.faceLandmark68Net.loadFromDisk(modelPath),
+        faceapi.nets.faceRecognitionNet.loadFromDisk(modelPath),
+      ]).then(() => undefined);
+    }
 
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${geminiApiKey}`;
-    let response: any;
     try {
-      response = await axios.post(url, payload, {
-        headers: { 'Content-Type': 'application/json' },
-        timeout: 20000,
-      });
+      await AuthController.faceModelsLoadPromise;
     } catch (error: any) {
-      this.logger.error(`Gemini FaceID request failed: ${error?.message || 'unknown error'}`);
-      throw new UnauthorizedException('FaceID indisponible pour le moment');
-    }
-
-    const rawText = response.data?.candidates?.[0]?.content?.parts?.[0]?.text;
-    if (!rawText) {
-      throw new UnauthorizedException('Réponse FaceID invalide');
-    }
-
-    try {
-      const parsed = JSON.parse(rawText);
-      return {
-        match: Boolean(parsed.match),
-        confidence: Number(parsed.confidence || 0),
-      };
-    } catch {
-      throw new UnauthorizedException('Réponse FaceID non exploitable');
+      this.logger.error(`FaceID model loading failed: ${error?.message || 'unknown error'}`);
+      AuthController.faceModelsLoadPromise = null;
+      throw new UnauthorizedException('Modeles FaceID indisponibles');
     }
   }
 
-  private async resolveImageToBase64(url: string): Promise<string> {
-    if (url.startsWith('data:')) {
-      const matches = url.match(/^data:([^;]+);base64,(.+)$/);
-      if (!matches) {
-        throw new BadRequestException('Format avatar base64 invalide');
+  private normalizeBase64(input: string): string {
+    if (input.startsWith('data:')) {
+      const match = input.match(/^data:[^;]+;base64,(.+)$/);
+      if (!match) {
+        throw new BadRequestException('Format image base64 invalide');
       }
-      return matches[2];
+      return match[1];
     }
 
-    let response: any;
+    return input;
+  }
+
+  private decodeImageToTensor(imageBuffer: Buffer): tf.Tensor3D {
+    const isPng =
+      imageBuffer.length >= 8 &&
+      imageBuffer[0] === 0x89 &&
+      imageBuffer[1] === 0x50 &&
+      imageBuffer[2] === 0x4e &&
+      imageBuffer[3] === 0x47;
+
+    const isJpeg =
+      imageBuffer.length >= 3 &&
+      imageBuffer[0] === 0xff &&
+      imageBuffer[1] === 0xd8 &&
+      imageBuffer[2] === 0xff;
+
+    let width = 0;
+    let height = 0;
+    let rgbaData: Uint8Array;
+
+    if (isPng) {
+      const decoded = PNG.sync.read(imageBuffer);
+      width = decoded.width;
+      height = decoded.height;
+      rgbaData = decoded.data;
+    } else if (isJpeg) {
+      const decoded = jpeg.decode(imageBuffer, { useTArray: true });
+      width = decoded.width;
+      height = decoded.height;
+      rgbaData = decoded.data;
+    } else {
+      throw new BadRequestException('Format image non supporte (PNG/JPEG attendu)');
+    }
+
+    const rgbData = new Uint8Array(width * height * 3);
+    for (let i = 0, j = 0; i < rgbaData.length; i += 4, j += 3) {
+      rgbData[j] = rgbaData[i];
+      rgbData[j + 1] = rgbaData[i + 1];
+      rgbData[j + 2] = rgbaData[i + 2];
+    }
+
+    return tf.tensor3d(rgbData, [height, width, 3], 'int32');
+  }
+
+  private async extractDescriptorFromImageBase64(imageBase64: string): Promise<number[]> {
+    await this.ensureFaceModelsLoaded();
+
+    let imageBuffer: Buffer;
     try {
-      response = await axios.get(url, {
-        responseType: 'arraybuffer',
-        timeout: 8000,
-        headers: {
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)',
-        },
-      });
-    } catch (error: any) {
-      this.logger.error(`Unable to fetch avatar for FaceID: ${error?.message || 'unknown error'}`);
-      throw new UnauthorizedException('Impossible de récupérer la photo de profil');
+      imageBuffer = Buffer.from(this.normalizeBase64(imageBase64), 'base64');
+    } catch {
+      throw new BadRequestException('Image base64 invalide');
     }
 
-    return Buffer.from(response.data).toString('base64');
+    let tensor: tf.Tensor3D;
+    try {
+      tensor = this.decodeImageToTensor(imageBuffer);
+    } catch (error) {
+      if (error instanceof BadRequestException) {
+        throw error;
+      }
+      throw new BadRequestException('Image faciale illisible');
+    }
+
+    let detection: any;
+    try {
+      detection = await faceapi
+        .detectSingleFace(tensor as any, new faceapi.SsdMobilenetv1Options({ minConfidence: 0.3 }))
+        .withFaceLandmarks()
+        .withFaceDescriptor();
+    } finally {
+      tensor.dispose();
+    }
+
+    if (!detection) {
+      throw new UnauthorizedException('Aucun visage detecte dans la capture');
+    }
+
+    return Array.from(detection.descriptor);
   }
 
   private extractTokenFromRequest(req: any): string {

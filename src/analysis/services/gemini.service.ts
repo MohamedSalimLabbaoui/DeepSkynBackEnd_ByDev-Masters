@@ -1,7 +1,7 @@
 import { Injectable, Logger, HttpException, HttpStatus } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import axios, { AxiosError } from 'axios';
-import { OllamaService } from './ollama.service';
+import { GrokService } from './grok.service';
 import {
   compressWhitespace,
   buildCompactAnalysisPrompt,
@@ -49,15 +49,15 @@ export class GeminiService {
   private readonly logger = new Logger(GeminiService.name);
   private readonly apiKey: string;
   private readonly apiUrl: string;
-  private readonly maxRetries = 3;
+  private readonly maxRetries = 1;
   private readonly retryDelay = 2000; // 2 seconds
-  private readonly ollamaService: OllamaService;
+  private readonly grokService: GrokService;
 
   constructor(private readonly configService: ConfigService) {
     this.apiKey = this.configService.get<string>('GEMINI_API_KEY');
     this.apiUrl =
       'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent';
-    this.ollamaService = new OllamaService(configService);
+    this.grokService = new GrokService(configService);
   }
 
   /**
@@ -116,7 +116,7 @@ export class GeminiService {
   }
 
   /**
-   * Analyze skin images using Gemini AI with Ollama fallback
+   * Analyze skin images using Gemini AI with OpenRouter fallback
    */
   async analyzeSkinImages(
     imageUrls: string[],
@@ -179,24 +179,24 @@ export class GeminiService {
 
       return this.parseAnalysisResponse(textResponse);
     } catch (error) {
-      this.logger.error('Gemini analysis failed, trying Ollama fallback', error);
+      this.logger.error('Gemini analysis failed, trying OpenRouter fallback', error);
       
-      // Fallback to Ollama with vision model
+      // Fallback to OpenRouter with vision model
       try {
-        const isOllamaAvailable = await this.ollamaService.isAvailable();
-        if (isOllamaAvailable) {
-          this.logger.log('Using Ollama vision fallback for image analysis');
+        const isGrokAvailable = await this.grokService.isAvailable();
+        if (isGrokAvailable) {
+          this.logger.log('Using OpenRouter vision fallback for image analysis');
           const fallbackPrompt = this.buildAnalysisPrompt(questionnaire);
           const fallbackImageParts = await this.prepareImageParts(imageUrls);
           
           if (fallbackImageParts.length > 0) {
             const base64Image = fallbackImageParts[0].inlineData.data;
-            const ollamaResponse = await this.ollamaService.analyzeImage(base64Image, fallbackPrompt);
-            return this.parseAnalysisResponse(ollamaResponse);
+            const grokResponse = await this.grokService.analyzeImage(base64Image, fallbackPrompt);
+            return this.parseAnalysisResponse(grokResponse);
           }
         }
-      } catch (ollamaError) {
-        this.logger.error('Ollama fallback also failed', ollamaError);
+      } catch (grokError) {
+        this.logger.error('OpenRouter fallback also failed', grokError);
       }
       
       throw error;
@@ -204,7 +204,7 @@ export class GeminiService {
   }
 
   /**
-   * Analyze real-time face scan with Ollama fallback
+   * Analyze real-time face scan with OpenRouter fallback
    */
   async analyzeRealTimeScan(
     base64Image: string,
@@ -256,19 +256,19 @@ export class GeminiService {
 
       return this.parseAnalysisResponse(textResponse);
     } catch (error) {
-      this.logger.error('Real-time scan analysis failed, trying Ollama fallback', error);
+      this.logger.error('Real-time scan analysis failed, trying OpenRouter fallback', error);
       
-      // Fallback to Ollama with vision model
+      // Fallback to OpenRouter with vision model
       try {
-        const isOllamaAvailable = await this.ollamaService.isAvailable();
-        if (isOllamaAvailable) {
-          this.logger.log('Using Ollama vision fallback for real-time scan');
+        const isGrokAvailable = await this.grokService.isAvailable();
+        if (isGrokAvailable) {
+          this.logger.log('Using OpenRouter vision fallback for real-time scan');
           const prompt = this.buildRealTimeScanPrompt();
-          const ollamaResponse = await this.ollamaService.analyzeImage(base64Image, prompt);
-          return this.parseAnalysisResponse(ollamaResponse);
+          const grokResponse = await this.grokService.analyzeImage(base64Image, prompt);
+          return this.parseAnalysisResponse(grokResponse);
         }
-      } catch (ollamaError) {
-        this.logger.error('Ollama fallback also failed', ollamaError);
+      } catch (grokError) {
+        this.logger.error('OpenRouter fallback also failed', grokError);
       }
       
       throw error;
@@ -322,6 +322,81 @@ export class GeminiService {
   /**
    * Parse the Gemini response into structured data
    */
+  private toNumber(value: unknown): number | null {
+    if (typeof value === 'number' && Number.isFinite(value)) {
+      return value;
+    }
+    if (typeof value === 'string') {
+      const trimmed = value.trim();
+      if (!trimmed) return null;
+      const normalized = trimmed.replace(',', '.');
+      const parsed = Number(normalized);
+      return Number.isFinite(parsed) ? parsed : null;
+    }
+    return null;
+  }
+
+  private normalizeSkinAge(value: unknown): number {
+    const direct = this.toNumber(value);
+    if (direct !== null) {
+      return Math.max(10, Math.min(100, Math.round(direct)));
+    }
+
+    if (typeof value === 'string') {
+      const matches = value.match(/\d+(?:[.,]\d+)?/g);
+      if (matches?.length) {
+        const nums = matches
+          .map((v) => this.toNumber(v))
+          .filter((n): n is number => n !== null);
+        if (nums.length === 1) {
+          return Math.max(10, Math.min(100, Math.round(nums[0])));
+        }
+        if (nums.length >= 2) {
+          const avg = (nums[0] + nums[1]) / 2;
+          return Math.max(10, Math.min(100, Math.round(avg)));
+        }
+      }
+    }
+
+    return 25;
+  }
+
+  private normalizeHealthScore(value: unknown): number {
+    const num = this.toNumber(value);
+    if (num === null) return 70;
+
+    // Some model responses return score on a 0-10 scale.
+    const normalized = num <= 10 ? num * 10 : num;
+    return Math.max(0, Math.min(100, Math.round(normalized)));
+  }
+
+  private normalizeMetric(
+    value: unknown,
+    fallbackDescription: string,
+  ): { score: number; description: string } {
+    if (value && typeof value === 'object') {
+      const maybeScore = this.toNumber((value as any).score);
+      const maybeDescription =
+        typeof (value as any).description === 'string'
+          ? (value as any).description
+          : fallbackDescription;
+
+      return {
+        score:
+          maybeScore === null
+            ? 70
+            : Math.max(0, Math.min(100, Math.round(maybeScore <= 10 ? maybeScore * 10 : maybeScore))),
+        description: maybeDescription,
+      };
+    }
+
+    if (typeof value === 'string' && value.trim()) {
+      return { score: 70, description: value.trim() };
+    }
+
+    return { score: 70, description: fallbackDescription };
+  }
+
   private parseAnalysisResponse(textResponse: string): GeminiAnalysisResult {
     try {
       // Extract JSON from the response
@@ -335,8 +410,8 @@ export class GeminiService {
       // Validate and provide defaults
       return {
         skinType: parsed.skinType || 'normal',
-        skinAge: parsed.skinAge || 25,
-        healthScore: Math.min(100, Math.max(0, parsed.healthScore || 70)),
+        skinAge: this.normalizeSkinAge(parsed.skinAge),
+        healthScore: this.normalizeHealthScore(parsed.healthScore),
         conditions: parsed.conditions || [],
         concerns: parsed.concerns || [],
         recommendations: {
@@ -346,38 +421,38 @@ export class GeminiService {
           warnings: parsed.recommendations?.warnings || [],
         },
         detailedAnalysis: {
-          hydration: parsed.detailedAnalysis?.hydration || {
-            score: 70,
-            description: 'Normal hydration',
-          },
-          texture: parsed.detailedAnalysis?.texture || {
-            score: 70,
-            description: 'Normal texture',
-          },
-          pores: parsed.detailedAnalysis?.pores || {
-            score: 70,
-            description: 'Normal pore size',
-          },
-          pigmentation: parsed.detailedAnalysis?.pigmentation || {
-            score: 70,
-            description: 'Even tone',
-          },
-          wrinkles: parsed.detailedAnalysis?.wrinkles || {
-            score: 70,
-            description: 'Minimal wrinkles',
-          },
-          acne: parsed.detailedAnalysis?.acne || {
-            score: 70,
-            description: 'Clear skin',
-          },
-          redness: parsed.detailedAnalysis?.redness || {
-            score: 70,
-            description: 'No redness',
-          },
-          elasticity: parsed.detailedAnalysis?.elasticity || {
-            score: 70,
-            description: 'Good elasticity',
-          },
+          hydration: this.normalizeMetric(
+            parsed.detailedAnalysis?.hydration,
+            'Normal hydration',
+          ),
+          texture: this.normalizeMetric(
+            parsed.detailedAnalysis?.texture,
+            'Normal texture',
+          ),
+          pores: this.normalizeMetric(
+            parsed.detailedAnalysis?.pores,
+            'Normal pore size',
+          ),
+          pigmentation: this.normalizeMetric(
+            parsed.detailedAnalysis?.pigmentation,
+            'Even tone',
+          ),
+          wrinkles: this.normalizeMetric(
+            parsed.detailedAnalysis?.wrinkles,
+            'Minimal wrinkles',
+          ),
+          acne: this.normalizeMetric(
+            parsed.detailedAnalysis?.acne,
+            'Clear skin',
+          ),
+          redness: this.normalizeMetric(
+            parsed.detailedAnalysis?.redness,
+            'No redness',
+          ),
+          elasticity: this.normalizeMetric(
+            parsed.detailedAnalysis?.elasticity,
+            'Good elasticity',
+          ),
         },
         fitzpatrickType: Math.min(6, Math.max(1, parsed.fitzpatrickType || 3)),
         summary: parsed.summary || 'Analysis completed successfully.',
@@ -389,7 +464,7 @@ export class GeminiService {
   }
 
   /**
-   * Get skincare advice based on conditions with Ollama fallback
+   * Get skincare advice based on conditions with OpenRouter fallback
    */
   async getSkincareAdvice(
     conditions: string[],
@@ -428,16 +503,16 @@ Concerns:${concernsList}
         'Unable to generate advice.'
       );
     } catch (error) {
-      this.logger.error('Failed to get skincare advice from Gemini, trying Ollama', error);
+      this.logger.error('Failed to get skincare advice from Gemini, trying OpenRouter', error);
       
       try {
-        const isOllamaAvailable = await this.ollamaService.isAvailable();
-        if (isOllamaAvailable) {
-          this.logger.log('Using Ollama fallback for skincare advice');
-          return await this.ollamaService.getSkincareAdvice(conditions, concerns);
+        const isGrokAvailable = await this.grokService.isAvailable();
+        if (isGrokAvailable) {
+          this.logger.log('Using OpenRouter fallback for skincare advice');
+          return await this.grokService.getSkincareAdvice(conditions, concerns);
         }
-      } catch (ollamaError) {
-        this.logger.error('Ollama fallback also failed', ollamaError);
+      } catch (grokError) {
+        this.logger.error('OpenRouter fallback also failed', grokError);
       }
       
       return 'Unable to generate advice at this time. Please try again later.';
@@ -485,16 +560,16 @@ Rép:français,utile,pro.`);
         "Je suis désolé, je n'ai pas pu générer une réponse."
       );
     } catch (error) {
-      this.logger.error('Failed to generate chat response from Gemini, trying Ollama', error);
+      this.logger.error('Failed to generate chat response from Gemini, trying OpenRouter', error);
       
       try {
-        const isOllamaAvailable = await this.ollamaService.isAvailable();
-        if (isOllamaAvailable) {
-          this.logger.log('Using Ollama fallback for chat');
-          return await this.ollamaService.chatSkincare(systemPrompt, conversationHistory, userMessage);
+        const isGrokAvailable = await this.grokService.isAvailable();
+        if (isGrokAvailable) {
+          this.logger.log('Using OpenRouter fallback for chat');
+          return await this.grokService.chatSkincare(systemPrompt, conversationHistory, userMessage);
         }
-      } catch (ollamaError) {
-        this.logger.error('Ollama fallback also failed', ollamaError);
+      } catch (grokError) {
+        this.logger.error('OpenRouter fallback also failed', grokError);
       }
       
       throw error;
