@@ -1,14 +1,11 @@
 import { Injectable, Logger, HttpException, HttpStatus } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import axios, { AxiosError } from 'axios';
-import { OllamaService } from './ollama.service';
-import { RateLimiterService } from '../../shared/services/rate-limiter.service';
-import { CacheService } from '../../shared/services/cache.service';
+import { GrokService } from './grok.service';
 import {
   compressWhitespace,
   buildCompactAnalysisPrompt,
-  buildUltraCompactScanPrompt,
-  buildMinimalScanPrompt,
+  buildCompactScanPrompt,
 } from './prompt-compression.util';
 
 export interface GeminiAnalysisResult {
@@ -52,23 +49,15 @@ export class GeminiService {
   private readonly logger = new Logger(GeminiService.name);
   private readonly apiKey: string;
   private readonly apiUrl: string;
-  private readonly maxRetries = 5;
-  private readonly retryDelay = 5000; // 5 seconds base delay
-  private readonly rateLimit429Delay = 60000; // 60 seconds for quota exceeded
-  private readonly backoffMultiplier = 2; // Progressive backoff
-  private failureCount = 0; // Track consecutive failures
-  private lastFailureTime = 0; // Track when last failure occurred
-  private readonly ollamaService: OllamaService;
+  private readonly maxRetries = 1;
+  private readonly retryDelay = 2000; // 2 seconds
+  private readonly grokService: GrokService;
 
-  constructor(
-    private readonly configService: ConfigService,
-    private readonly rateLimiter: RateLimiterService,
-    private readonly cache: CacheService,
-  ) {
+  constructor(private readonly configService: ConfigService) {
     this.apiKey = this.configService.get<string>('GEMINI_API_KEY');
     this.apiUrl =
       'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent';
-    this.ollamaService = new OllamaService(configService);
+    this.grokService = new GrokService(configService);
   }
 
   /**
@@ -87,30 +76,21 @@ export class GeminiService {
   ): Promise<T> {
     for (let attempt = 1; attempt <= retries; attempt++) {
       try {
-        const result = await requestFn();
-        // Reset failure count on successful request
-        this.failureCount = Math.max(0, this.failureCount - 1);
-        return result;
+        return await requestFn();
       } catch (error) {
         const axiosError = error as AxiosError;
 
         if (axiosError.response?.status === 429) {
-          this.failureCount++; // Track rate limit failures
-          this.lastFailureTime = Date.now(); // Track when failure occurred
           if (attempt < retries) {
-            // Exponential backoff for rate limits with longer delay
-            const delay = axiosError.response?.status === 429 
-              ? this.rateLimit429Delay 
-              : this.retryDelay * Math.pow(this.backoffMultiplier, attempt);
-            
+            const delay = this.retryDelay * attempt; // Exponential backoff
             this.logger.warn(
-              `Rate limited (429). Failure count: ${this.failureCount}. Retrying in ${delay}ms... (attempt ${attempt}/${retries})`,
+              `Rate limited (429). Retrying in ${delay}ms... (attempt ${attempt}/${retries})`,
             );
             await this.sleep(delay);
             continue;
           }
           throw new HttpException(
-            `API rate limit exceeded. Please try again later. (Failed ${this.failureCount} times)`,
+            'API rate limit exceeded. Please try again later.',
             HttpStatus.TOO_MANY_REQUESTS,
           );
         }
@@ -136,7 +116,7 @@ export class GeminiService {
   }
 
   /**
-   * Analyze skin images using Gemini AI with Ollama fallback
+   * Analyze skin images using Gemini AI with OpenRouter fallback
    */
   async analyzeSkinImages(
     imageUrls: string[],
@@ -199,24 +179,24 @@ export class GeminiService {
 
       return this.parseAnalysisResponse(textResponse);
     } catch (error) {
-      this.logger.error('Gemini analysis failed, trying Ollama fallback', error);
+      this.logger.error('Gemini analysis failed, trying OpenRouter fallback', error);
       
-      // Fallback to Ollama with vision model
+      // Fallback to OpenRouter with vision model
       try {
-        const isOllamaAvailable = await this.ollamaService.isAvailable();
-        if (isOllamaAvailable) {
-          this.logger.log('Using Ollama vision fallback for image analysis');
+        const isGrokAvailable = await this.grokService.isAvailable();
+        if (isGrokAvailable) {
+          this.logger.log('Using OpenRouter vision fallback for image analysis');
           const fallbackPrompt = this.buildAnalysisPrompt(questionnaire);
           const fallbackImageParts = await this.prepareImageParts(imageUrls);
           
           if (fallbackImageParts.length > 0) {
             const base64Image = fallbackImageParts[0].inlineData.data;
-            const ollamaResponse = await this.ollamaService.analyzeImage(base64Image, fallbackPrompt);
-            return this.parseAnalysisResponse(ollamaResponse);
+            const grokResponse = await this.grokService.analyzeImage(base64Image, fallbackPrompt);
+            return this.parseAnalysisResponse(grokResponse);
           }
         }
-      } catch (ollamaError) {
-        this.logger.error('Ollama fallback also failed', ollamaError);
+      } catch (grokError) {
+        this.logger.error('OpenRouter fallback also failed', grokError);
       }
       
       throw error;
@@ -224,152 +204,75 @@ export class GeminiService {
   }
 
   /**
-   * Analyze real-time face scan with progressive prompt optimization and global rate limiting
+   * Analyze real-time face scan with OpenRouter fallback
    */
   async analyzeRealTimeScan(
     base64Image: string,
     mimeType: string = 'image/jpeg',
   ): Promise<GeminiAnalysisResult> {
-    
-    // Create cache key
-    const imageHash = Buffer.from(base64Image.substring(0, 100)).toString('base64');
-    const cacheKey = `scan:${imageHash}:${mimeType}`;
-    
-    // Check cache first
-    const cachedResult = this.cache.get<GeminiAnalysisResult>(cacheKey);
-    if (cachedResult) {
-      this.logger.debug('Using cached analysis result');
-      return cachedResult;
-    }
-    
-    // Check if Gemini quota is likely exhausted (high failure count)
-    if (this.failureCount >= 5) {
-      this.logger.warn('High failure count detected, trying Ollama first to avoid quota waste');
-      try {
-        const isOllamaAvailable = await this.ollamaService.isAvailable();
-        if (isOllamaAvailable) {
-          this.logger.log('Using Ollama as primary due to Gemini quota concerns');
-          const prompt = this.buildRealTimeScanPrompt(0);
-          const ollamaResponse = await this.ollamaService.analyzeImage(base64Image, prompt);
-          const result = this.parseAnalysisResponse(ollamaResponse);
-          
-          // Cache Ollama result
-          this.cache.set(cacheKey, result, 5 * 60 * 1000);
-          
-          return result;
-        }
-      } catch (ollamaError) {
-        this.logger.warn('Ollama priority attempt failed, falling back to Gemini', ollamaError);
-      }
-    }
-    
-    for (let promptAttempt = 0; promptAttempt < 3; promptAttempt++) {
-      try {
-        const prompt = this.buildRealTimeScanPrompt(promptAttempt);
-        
-        // Reduce generation config for faster processing on higher attempts
-        const maxTokens = promptAttempt >= 2 ? 4096 : promptAttempt >= 1 ? 6144 : 8192;
-        const temperature = promptAttempt >= 2 ? 0.2 : 0.4;
+    try {
+      const prompt = this.buildRealTimeScanPrompt();
 
-        const requestBody = {
-          contents: [
-            {
-              parts: [
-                { text: prompt },
-                {
-                  inlineData: {
-                    mimeType,
-                    data: base64Image,
-                  },
-                },
-              ],
-            },
-          ],
-          generationConfig: {
-            temperature,
-            topK: 32,
-            topP: 1,
-            maxOutputTokens: maxTokens,
-          },
-        };
-
-        // Queue the request through the global rate limiter
-        const response = await this.rateLimiter.queueRequest(
-          'gemini-scan',
-          () =>
-            axios.post<GeminiResponse>(
-              `${this.apiUrl}?key=${this.apiKey}`,
-              requestBody,
+      const requestBody = {
+        contents: [
+          {
+            parts: [
+              { text: prompt },
               {
-                headers: {
-                  'Content-Type': 'application/json',
+                inlineData: {
+                  mimeType,
+                  data: base64Image,
                 },
-                timeout: 30000,
               },
-            ),
-          'high', // High priority for real-time scans
-        );
+            ],
+          },
+        ],
+        generationConfig: {
+          temperature: 0.4,
+          topK: 32,
+          topP: 1,
+          maxOutputTokens: 8192,
+        },
+      };
 
-        const textResponse = response.data.candidates[0]?.content?.parts[0]?.text;
+      const response = await this.makeRequestWithRetry(() =>
+        axios.post<GeminiResponse>(
+          `${this.apiUrl}?key=${this.apiKey}`,
+          requestBody,
+          {
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            timeout: 30000,
+          },
+        ),
+      );
 
-        if (!textResponse) {
-          throw new Error('No response from Gemini API');
-        }
+      const textResponse = response.data.candidates[0]?.content?.parts[0]?.text;
 
-        // Reset failure count on success
-        this.failureCount = Math.max(0, this.failureCount - 1);
-        
-        const result = this.parseAnalysisResponse(textResponse);
-        
-        // Cache the successful result for 10 minutes (extended for quota conservation)
-        this.cache.set(cacheKey, result, 10 * 60 * 1000);
-        
-        return result;
-        
-      } catch (error) {
-        const axiosError = error as AxiosError;
-        
-        // If it's a rate limit error and we have more attempts, try with smaller prompt
-        if (axiosError.response?.status === 429 && promptAttempt < 2) {
-          this.logger.warn(
-            `Rate limit hit on attempt ${promptAttempt + 1}. Trying with more compact prompt...`,
-          );
-          this.failureCount++;
-          await this.sleep(5000); // Short delay before trying smaller prompt
-          continue;
-        }
-        
-        // If it's the last attempt or non-rate-limit error, try fallbacks
-        if (promptAttempt === 2 || axiosError.response?.status !== 429) {
-          if (axiosError.response) {
-            this.logger.error(`Gemini API error ${axiosError.response.status}: ${JSON.stringify(axiosError.response.data)}`);
-          }
-          this.logger.error('Real-time scan analysis failed, trying Ollama fallback');
-          
-          // Fallback to Ollama with vision model
-          try {
-            const isOllamaAvailable = await this.ollamaService.isAvailable();
-            if (isOllamaAvailable) {
-              this.logger.log('Using Ollama vision fallback for real-time scan');
-              const prompt = this.buildRealTimeScanPrompt(0); // Use standard prompt for Ollama
-              const ollamaResponse = await this.ollamaService.analyzeImage(base64Image, prompt);
-              const result = this.parseAnalysisResponse(ollamaResponse);
-              
-              // Cache Ollama result with shorter TTL
-              this.cache.set(cacheKey, result, 1 * 60 * 1000);
-              
-              return result;
-            }
-          } catch (ollamaError) {
-            this.logger.error('Ollama fallback also failed', ollamaError);
-          }
-          
-          throw error;
-        }
+      if (!textResponse) {
+        throw new Error('No response from Gemini API');
       }
+
+      return this.parseAnalysisResponse(textResponse);
+    } catch (error) {
+      this.logger.error('Real-time scan analysis failed, trying OpenRouter fallback', error);
+      
+      // Fallback to OpenRouter with vision model
+      try {
+        const isGrokAvailable = await this.grokService.isAvailable();
+        if (isGrokAvailable) {
+          this.logger.log('Using OpenRouter vision fallback for real-time scan');
+          const prompt = this.buildRealTimeScanPrompt();
+          const grokResponse = await this.grokService.analyzeImage(base64Image, prompt);
+          return this.parseAnalysisResponse(grokResponse);
+        }
+      } catch (grokError) {
+        this.logger.error('OpenRouter fallback also failed', grokError);
+      }
+      
+      throw error;
     }
-    
-    throw new Error('All real-time scan attempts failed');
   }
 
   /**
@@ -380,26 +283,10 @@ export class GeminiService {
   }
 
   /**
-   * Build compressed prompt for real-time scan with progressive optimization
+   * Build compressed prompt for real-time scan (~60% token reduction)
    */
-  private buildRealTimeScanPrompt(attemptNumber: number = 0): string {
-    // Reset failure count if it's been more than 10 minutes since last failure
-    const now = Date.now();
-    if (this.lastFailureTime && now - this.lastFailureTime > 10 * 60 * 1000) {
-      this.failureCount = 0;
-      this.lastFailureTime = 0;
-    }
-    
-    // Progressive prompt reduction based on failure count and attempts
-    if (this.failureCount >= 3 || attemptNumber >= 2) {
-      this.logger.debug('Using minimal scan prompt due to repeated failures');
-      return buildMinimalScanPrompt();
-    } else if (this.failureCount >= 1 || attemptNumber >= 1) {
-      this.logger.debug('Using ultra-compact scan prompt');
-      return buildUltraCompactScanPrompt();
-    } else {
-      return buildUltraCompactScanPrompt(); // Use ultra-compact as default
-    }
+  private buildRealTimeScanPrompt(): string {
+    return buildCompactScanPrompt();
   }
 
   /**
@@ -435,6 +322,81 @@ export class GeminiService {
   /**
    * Parse the Gemini response into structured data
    */
+  private toNumber(value: unknown): number | null {
+    if (typeof value === 'number' && Number.isFinite(value)) {
+      return value;
+    }
+    if (typeof value === 'string') {
+      const trimmed = value.trim();
+      if (!trimmed) return null;
+      const normalized = trimmed.replace(',', '.');
+      const parsed = Number(normalized);
+      return Number.isFinite(parsed) ? parsed : null;
+    }
+    return null;
+  }
+
+  private normalizeSkinAge(value: unknown): number {
+    const direct = this.toNumber(value);
+    if (direct !== null) {
+      return Math.max(10, Math.min(100, Math.round(direct)));
+    }
+
+    if (typeof value === 'string') {
+      const matches = value.match(/\d+(?:[.,]\d+)?/g);
+      if (matches?.length) {
+        const nums = matches
+          .map((v) => this.toNumber(v))
+          .filter((n): n is number => n !== null);
+        if (nums.length === 1) {
+          return Math.max(10, Math.min(100, Math.round(nums[0])));
+        }
+        if (nums.length >= 2) {
+          const avg = (nums[0] + nums[1]) / 2;
+          return Math.max(10, Math.min(100, Math.round(avg)));
+        }
+      }
+    }
+
+    return 25;
+  }
+
+  private normalizeHealthScore(value: unknown): number {
+    const num = this.toNumber(value);
+    if (num === null) return 70;
+
+    // Some model responses return score on a 0-10 scale.
+    const normalized = num <= 10 ? num * 10 : num;
+    return Math.max(0, Math.min(100, Math.round(normalized)));
+  }
+
+  private normalizeMetric(
+    value: unknown,
+    fallbackDescription: string,
+  ): { score: number; description: string } {
+    if (value && typeof value === 'object') {
+      const maybeScore = this.toNumber((value as any).score);
+      const maybeDescription =
+        typeof (value as any).description === 'string'
+          ? (value as any).description
+          : fallbackDescription;
+
+      return {
+        score:
+          maybeScore === null
+            ? 70
+            : Math.max(0, Math.min(100, Math.round(maybeScore <= 10 ? maybeScore * 10 : maybeScore))),
+        description: maybeDescription,
+      };
+    }
+
+    if (typeof value === 'string' && value.trim()) {
+      return { score: 70, description: value.trim() };
+    }
+
+    return { score: 70, description: fallbackDescription };
+  }
+
   private parseAnalysisResponse(textResponse: string): GeminiAnalysisResult {
     try {
       // Extract JSON from the response
@@ -448,8 +410,8 @@ export class GeminiService {
       // Validate and provide defaults
       return {
         skinType: parsed.skinType || 'normal',
-        skinAge: parsed.skinAge || 25,
-        healthScore: Math.min(100, Math.max(0, parsed.healthScore || 70)),
+        skinAge: this.normalizeSkinAge(parsed.skinAge),
+        healthScore: this.normalizeHealthScore(parsed.healthScore),
         conditions: parsed.conditions || [],
         concerns: parsed.concerns || [],
         recommendations: {
@@ -459,38 +421,38 @@ export class GeminiService {
           warnings: parsed.recommendations?.warnings || [],
         },
         detailedAnalysis: {
-          hydration: parsed.detailedAnalysis?.hydration || {
-            score: 70,
-            description: 'Normal hydration',
-          },
-          texture: parsed.detailedAnalysis?.texture || {
-            score: 70,
-            description: 'Normal texture',
-          },
-          pores: parsed.detailedAnalysis?.pores || {
-            score: 70,
-            description: 'Normal pore size',
-          },
-          pigmentation: parsed.detailedAnalysis?.pigmentation || {
-            score: 70,
-            description: 'Even tone',
-          },
-          wrinkles: parsed.detailedAnalysis?.wrinkles || {
-            score: 70,
-            description: 'Minimal wrinkles',
-          },
-          acne: parsed.detailedAnalysis?.acne || {
-            score: 70,
-            description: 'Clear skin',
-          },
-          redness: parsed.detailedAnalysis?.redness || {
-            score: 70,
-            description: 'No redness',
-          },
-          elasticity: parsed.detailedAnalysis?.elasticity || {
-            score: 70,
-            description: 'Good elasticity',
-          },
+          hydration: this.normalizeMetric(
+            parsed.detailedAnalysis?.hydration,
+            'Normal hydration',
+          ),
+          texture: this.normalizeMetric(
+            parsed.detailedAnalysis?.texture,
+            'Normal texture',
+          ),
+          pores: this.normalizeMetric(
+            parsed.detailedAnalysis?.pores,
+            'Normal pore size',
+          ),
+          pigmentation: this.normalizeMetric(
+            parsed.detailedAnalysis?.pigmentation,
+            'Even tone',
+          ),
+          wrinkles: this.normalizeMetric(
+            parsed.detailedAnalysis?.wrinkles,
+            'Minimal wrinkles',
+          ),
+          acne: this.normalizeMetric(
+            parsed.detailedAnalysis?.acne,
+            'Clear skin',
+          ),
+          redness: this.normalizeMetric(
+            parsed.detailedAnalysis?.redness,
+            'No redness',
+          ),
+          elasticity: this.normalizeMetric(
+            parsed.detailedAnalysis?.elasticity,
+            'Good elasticity',
+          ),
         },
         fitzpatrickType: Math.min(6, Math.max(1, parsed.fitzpatrickType || 3)),
         summary: parsed.summary || 'Analysis completed successfully.',
@@ -502,7 +464,7 @@ export class GeminiService {
   }
 
   /**
-   * Get skincare advice based on conditions with Ollama fallback
+   * Get skincare advice based on conditions with OpenRouter fallback
    */
   async getSkincareAdvice(
     conditions: string[],
@@ -541,16 +503,16 @@ Concerns:${concernsList}
         'Unable to generate advice.'
       );
     } catch (error) {
-      this.logger.error('Failed to get skincare advice from Gemini, trying Ollama', error);
+      this.logger.error('Failed to get skincare advice from Gemini, trying OpenRouter', error);
       
       try {
-        const isOllamaAvailable = await this.ollamaService.isAvailable();
-        if (isOllamaAvailable) {
-          this.logger.log('Using Ollama fallback for skincare advice');
-          return await this.ollamaService.getSkincareAdvice(conditions, concerns);
+        const isGrokAvailable = await this.grokService.isAvailable();
+        if (isGrokAvailable) {
+          this.logger.log('Using OpenRouter fallback for skincare advice');
+          return await this.grokService.getSkincareAdvice(conditions, concerns);
         }
-      } catch (ollamaError) {
-        this.logger.error('Ollama fallback also failed', ollamaError);
+      } catch (grokError) {
+        this.logger.error('OpenRouter fallback also failed', grokError);
       }
       
       return 'Unable to generate advice at this time. Please try again later.';
@@ -598,16 +560,16 @@ Rép:français,utile,pro.`);
         "Je suis désolé, je n'ai pas pu générer une réponse."
       );
     } catch (error) {
-      this.logger.error('Failed to generate chat response from Gemini, trying Ollama', error);
+      this.logger.error('Failed to generate chat response from Gemini, trying OpenRouter', error);
       
       try {
-        const isOllamaAvailable = await this.ollamaService.isAvailable();
-        if (isOllamaAvailable) {
-          this.logger.log('Using Ollama fallback for chat');
-          return await this.ollamaService.chatSkincare(systemPrompt, conversationHistory, userMessage);
+        const isGrokAvailable = await this.grokService.isAvailable();
+        if (isGrokAvailable) {
+          this.logger.log('Using OpenRouter fallback for chat');
+          return await this.grokService.chatSkincare(systemPrompt, conversationHistory, userMessage);
         }
-      } catch (ollamaError) {
-        this.logger.error('Ollama fallback also failed', ollamaError);
+      } catch (grokError) {
+        this.logger.error('OpenRouter fallback also failed', grokError);
       }
       
       throw error;
