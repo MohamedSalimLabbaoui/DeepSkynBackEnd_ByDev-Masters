@@ -5,7 +5,8 @@ import { GrokService } from './grok.service';
 import {
   compressWhitespace,
   buildCompactAnalysisPrompt,
-  buildCompactScanPrompt,
+  buildUltraCompactScanPrompt,
+  buildMinimalScanPrompt,
 } from './prompt-compression.util';
 
 export interface GeminiAnalysisResult {
@@ -286,7 +287,7 @@ export class GeminiService {
    * Build compressed prompt for real-time scan (~60% token reduction)
    */
   private buildRealTimeScanPrompt(): string {
-    return buildCompactScanPrompt();
+    return buildUltraCompactScanPrompt();
   }
 
   /**
