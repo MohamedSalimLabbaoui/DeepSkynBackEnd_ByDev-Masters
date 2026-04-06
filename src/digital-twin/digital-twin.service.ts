@@ -227,7 +227,7 @@ export class DigitalTwinService {
       async () => {
         const twin = await this.getOrCreateTwin(userId);
 
-        if (twin.confidence < 0.3) {
+        if (twin.confidence < 0.1) { // Lowered from 0.3 to 0.1 (10%)
           throw new NotFoundException('Not enough data to make reliable predictions. Please add more snapshots.');
         }
 
@@ -361,7 +361,7 @@ Prédit l'état de la peau dans ${daysAhead} jours. Retourne UNIQUEMENT un JSON 
   async simulateProduct(userId: string, dto: SimulateProductDto) {
     const twin = await this.getOrCreateTwin(userId);
 
-    if (twin.confidence < 0.3) {
+    if (twin.confidence < 0.1) { // Lowered from 0.3 to 0.1 (10%)
       throw new NotFoundException('Not enough skin data for reliable product simulation.');
     }
 
@@ -379,7 +379,11 @@ Prédit l'état de la peau dans ${daysAhead} jours. Retourne UNIQUEMENT un JSON 
         simulationPeriod,
         startState: twin.currentState,
         predictedState: simulationData.predictedState,
-        expectedChanges: simulationData.expectedChanges,
+        expectedChanges: {
+          ...simulationData.expectedChanges,
+          visualFilters: simulationData.visualFilters, // Include visual filters for frontend
+          reasoning: simulationData.reasoning,
+        },
         riskFactors: simulationData.riskFactors,
         successProbability: simulationData.successProbability,
         validUntil: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000), // 30 jours
@@ -420,8 +424,19 @@ Simule l'effet probable de ce produit après ${days} jours. Retourne UNIQUEMENT 
   },
   "riskFactors": ["risque 1 si applicable"],
   "successProbability": number (0-1),
-  "reasoning": "explication courte"
-}`;
+  "reasoning": "explication courte",
+  "visualFilters": {
+    "smoothness": number (20-80, augmente pour peau plus lisse - SOIS GÉNÉREUX, vise 40-60 pour effets visibles),
+    "brightness": number (-20 à +40, éclat du teint - vise 20-35 pour bons résultats),
+    "redness": number (-80 à 0, réduction des rougeurs - vise -30 à -50 si anti-rougeur),
+    "saturation": number (-20 à +20, vitalité de la peau),
+    "acneReduction": number (20-70, réduction visuelle de l'acné - sois généreux si anti-acné),
+    "hydration": number (30-70, aspect hydraté/rebondi - vise 50+ pour hydratants),
+    "evenness": number (25-60, uniformité du teint - vise 40+ pour produits éclaircissants)
+  }
+}
+
+IMPORTANT: Les valeurs visualFilters doivent être ÉLEVÉES (40-60 en moyenne) pour des résultats visuels clairs. Ne sois pas timide avec les valeurs!`;
 
     try {
       const response: GeminiResponse = await this.rateLimiter.queueRequest(
@@ -457,6 +472,16 @@ Simule l'effet probable de ce produit après ${days} jours. Retourne UNIQUEMENT 
         expectedChanges: parsed.expectedChanges || {},
         riskFactors: parsed.riskFactors || [],
         successProbability: parsed.successProbability || 0.5,
+        visualFilters: parsed.visualFilters || {
+          smoothness: 40,      // Valeurs par défaut plus élevées
+          brightness: 25,
+          redness: -35,
+          saturation: 8,
+          acneReduction: 35,
+          hydration: 45,
+          evenness: 35,
+        },
+        reasoning: parsed.reasoning || '',
       };
     } catch (error) {
       this.logger.warn(`AI simulation failed, using rule-based: ${error.message}`);
@@ -468,13 +493,100 @@ Simule l'effet probable de ce produit après ${days} jours. Retourne UNIQUEMENT 
   private ruleBasedSimulation(twin: any, product: SimulateProductDto) {
     const current = twin.currentState?.healthScore || 50;
     
-    // Estimation basique selon catégorie
+    // Estimation basique selon catégorie - VALEURS AMPLIFIÉES pour effets très visibles
     let healthChange = 0;
     const risks: string[] = [];
+    const visualFilters = {
+      smoothness: 25,      // Base plus élevée
+      brightness: 15,      // Base plus élevée
+      redness: -25,        // Réduction plus forte
+      saturation: 5,       // Légère amélioration de saturation
+      acneReduction: 25,   // Base plus élevée
+      hydration: 30,       // Base plus élevée
+      evenness: 25,        // Base plus élevée
+    };
 
-    if (product.productCategory === 'serum') healthChange = 5;
-    if (product.productCategory === 'moisturizer') healthChange = 3;
-    if (product.productCategory === 'cleanser') healthChange = 2;
+    if (product.productCategory === 'serum') {
+      healthChange = 8;
+      visualFilters.brightness = 35;        // Très lumineux
+      visualFilters.smoothness = 50;        // Très lisse
+      visualFilters.hydration = 45;
+      visualFilters.evenness = 40;
+    }
+    if (product.productCategory === 'moisturizer') {
+      healthChange = 6;
+      visualFilters.hydration = 60;         // Très hydraté
+      visualFilters.smoothness = 45;
+      visualFilters.brightness = 20;
+      visualFilters.evenness = 35;
+    }
+    if (product.productCategory === 'cleanser') {
+      healthChange = 4;
+      visualFilters.evenness = 45;          // Très uniforme
+      visualFilters.acneReduction = 40;     // Forte réduction
+      visualFilters.brightness = 25;
+      visualFilters.redness = -35;
+    }
+    if (product.productCategory === 'sunscreen') {
+      healthChange = 5;
+      visualFilters.evenness = 40;
+      visualFilters.brightness = 30;
+      visualFilters.hydration = 35;
+    }
+    if (product.productCategory === 'exfoliant') {
+      healthChange = 7;
+      visualFilters.smoothness = 65;        // Très très lisse
+      visualFilters.evenness = 55;
+      visualFilters.acneReduction = 50;
+      visualFilters.brightness = 30;
+    }
+
+    // Check ingredients effects - BONUS TRÈS MARQUÉS
+    const ingredientLower = product.productIngredients.map(i => i.toLowerCase()).join(' ');
+    
+    if (ingredientLower.includes('vitamin c') || ingredientLower.includes('vitamine c')) {
+      visualFilters.brightness = Math.max(visualFilters.brightness, 45);
+      visualFilters.evenness = Math.max(visualFilters.evenness, 50);
+      visualFilters.hydration = Math.max(visualFilters.hydration, 40);
+      healthChange += 3;
+    }
+    if (ingredientLower.includes('hyaluronic') || ingredientLower.includes('hyaluronique')) {
+      visualFilters.hydration = Math.max(visualFilters.hydration, 70);
+      visualFilters.smoothness = Math.max(visualFilters.smoothness, 45);
+      visualFilters.brightness = Math.max(visualFilters.brightness, 25);
+      healthChange += 2;
+    }
+    if (ingredientLower.includes('retinol') || ingredientLower.includes('rétinol')) {
+      visualFilters.smoothness = Math.max(visualFilters.smoothness, 60);
+      visualFilters.acneReduction = Math.max(visualFilters.acneReduction, 55);
+      visualFilters.evenness = Math.max(visualFilters.evenness, 45);
+      risks.push('Possible irritation initiale avec le rétinol - normalisation après 2 semaines');
+      healthChange += 4;
+    }
+    if (ingredientLower.includes('niacinamide')) {
+      visualFilters.redness = Math.min(visualFilters.redness, -50);
+      visualFilters.evenness = Math.max(visualFilters.evenness, 50);
+      visualFilters.brightness = Math.max(visualFilters.brightness, 30);
+      healthChange += 3;
+    }
+    if (ingredientLower.includes('salicylic') || ingredientLower.includes('salicylique')) {
+      visualFilters.acneReduction = Math.max(visualFilters.acneReduction, 60);
+      visualFilters.smoothness = Math.max(visualFilters.smoothness, 40);
+      visualFilters.redness = Math.min(visualFilters.redness, -40);
+      healthChange += 3;
+    }
+    if (ingredientLower.includes('peptide')) {
+      visualFilters.smoothness = Math.max(visualFilters.smoothness, 50);
+      visualFilters.evenness = Math.max(visualFilters.evenness, 45);
+      healthChange += 3;
+    }
+    if (ingredientLower.includes('glycolic') || ingredientLower.includes('lactic')) {
+      visualFilters.smoothness = Math.max(visualFilters.smoothness, 55);
+      visualFilters.brightness = Math.max(visualFilters.brightness, 40);
+      visualFilters.acneReduction = Math.max(visualFilters.acneReduction, 45);
+      risks.push('Exfoliation chimique - utiliser progressivement');
+      healthChange += 4;
+    }
 
     // Check ingredients à risque
     const sensitiveIngredients = ['retinol', 'aha', 'bha', 'vitamin c'];
@@ -495,12 +607,14 @@ Simule l'effet probable de ce produit après ${days} jours. Retourne UNIQUEMENT 
         conditions: twin.currentState?.conditions || {},
       },
       expectedChanges: {
-        positive: healthChange > 0 ? ['Potential skin improvement'] : [],
+        positive: healthChange > 0 ? ['Amélioration potentielle de la peau'] : [],
         negative: risks,
         neutral: [],
       },
       riskFactors: risks,
       successProbability: 0.6,
+      visualFilters,
+      reasoning: 'Simulation basée sur les ingrédients et la catégorie du produit',
     };
   }
 

@@ -76,7 +76,7 @@ export class UserJourneyController {
     // Calculate Digital Twin status
     const snapshotCount = snapshots.length;
     const twinEnabled = snapshotCount >= 3;
-    const predictionsUnlocked = twin.confidence >= 0.3;
+    const predictionsUnlocked = twin.confidence >= 0.1; // Lowered from 0.3 to 0.1 (10%)
 
     // Calculate system state
     const systemState = this.calculateSystemState(snapshotCount, twin.confidence);
