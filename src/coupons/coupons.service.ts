@@ -11,13 +11,31 @@ import Stripe from 'stripe';
 export class CouponsService {
   constructor(private readonly prisma: PrismaService) {}
 
+  private throwStripeError(action: string, error: unknown): never {
+    if (error instanceof BadRequestException) {
+      throw error;
+    }
+
+    if (error instanceof Stripe.errors.StripeAuthenticationError) {
+      throw new BadRequestException(
+        'Stripe API key is invalid or expired. Please update STRIPE_SECRET_KEY.',
+      );
+    }
+
+    const message = error instanceof Error ? error.message : 'unknown error';
+    throw new BadRequestException(`${action}: ${message}`);
+  }
+
   private stripeClient(): Stripe {
-    const secretKey = process.env.STRIPE_SECRET_KEY;
+    const secretKey = process.env.STRIPE_SECRET_KEY?.trim();
     if (!secretKey) {
       throw new BadRequestException('Missing STRIPE_SECRET_KEY in environment');
     }
+
+    const apiVersion = process.env.STRIPE_API_VERSION?.trim();
+
     return new Stripe(secretKey, {
-      apiVersion: (process.env.STRIPE_API_VERSION as any) || undefined,
+      apiVersion: (apiVersion as any) || undefined,
     });
   }
 
@@ -112,10 +130,8 @@ export class CouponsService {
           maxRedemptions,
           expiresAt,
         });
-      } catch (error: any) {
-        throw new BadRequestException(
-          `Failed to create Stripe promotion code: ${error?.message || 'unknown error'}`,
-        );
+      } catch (error) {
+        this.throwStripeError('Failed to create Stripe promotion code', error);
       }
     }
 

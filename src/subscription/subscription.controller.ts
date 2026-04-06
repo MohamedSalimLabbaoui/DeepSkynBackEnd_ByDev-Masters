@@ -44,13 +44,39 @@ export class SubscriptionController {
     private readonly couponsService: CouponsService,
   ) {}
 
-  private stripeClient(): Stripe {
-    const secretKey = process.env.STRIPE_SECRET_KEY;
-    if (!secretKey) {
-      throw new Error('Missing STRIPE_SECRET_KEY in environment');
+  private isStripeAuthenticationError(error: unknown): boolean {
+    return error instanceof Stripe.errors.StripeAuthenticationError;
+  }
+
+  private handleStripeError(error: unknown): never {
+    if (error instanceof BadRequestException) {
+      throw error;
     }
+
+    if (this.isStripeAuthenticationError(error)) {
+      throw new BadRequestException(
+        'Stripe API key is invalid or expired. Please update STRIPE_SECRET_KEY.',
+      );
+    }
+
+    if (error instanceof Stripe.errors.StripeInvalidRequestError) {
+      throw new BadRequestException(error.message);
+    }
+
+    const message = error instanceof Error ? error.message : 'Stripe request failed';
+    throw new BadRequestException(message);
+  }
+
+  private stripeClient(): Stripe {
+    const secretKey = process.env.STRIPE_SECRET_KEY?.trim();
+    if (!secretKey) {
+      throw new BadRequestException('Missing STRIPE_SECRET_KEY in environment');
+    }
+
+    const apiVersion = process.env.STRIPE_API_VERSION?.trim();
+
     return new Stripe(secretKey, {
-      apiVersion: (process.env.STRIPE_API_VERSION as any) || undefined,
+      apiVersion: (apiVersion as any) || undefined,
     });
   }
 
@@ -91,20 +117,25 @@ export class SubscriptionController {
       ? ([{ promotion_code: stripePromotionCodeId }] as Stripe.Checkout.SessionCreateParams.Discount[])
       : undefined;
 
-    const session = await stripe.checkout.sessions.create({
-      mode: 'subscription',
-      line_items: [{ price: priceId, quantity: 1 }],
-      discounts,
-      success_url: successUrl,
-      cancel_url: cancelUrl,
-      client_reference_id: userId,
-      metadata: {
-        userId,
-        planCode,
-        plan: planCode,
-        couponCode: couponCode || '',
-      },
-    });
+    let session: Stripe.Checkout.Session;
+    try {
+      session = await stripe.checkout.sessions.create({
+        mode: 'subscription',
+        line_items: [{ price: priceId, quantity: 1 }],
+        discounts,
+        success_url: successUrl,
+        cancel_url: cancelUrl,
+        client_reference_id: userId,
+        metadata: {
+          userId,
+          planCode,
+          plan: planCode,
+          couponCode: couponCode || '',
+        },
+      });
+    } catch (error) {
+      this.handleStripeError(error);
+    }
 
     return { url: session.url, id: session.id };
   }
@@ -120,10 +151,15 @@ export class SubscriptionController {
     }
 
     const stripe = this.stripeClient();
-    const invoices = await stripe.invoices.list({
-      subscription: subscription.planId,
-      limit: 50,
-    });
+    let invoices: Stripe.ApiList<Stripe.Invoice>;
+    try {
+      invoices = await stripe.invoices.list({
+        subscription: subscription.planId,
+        limit: 50,
+      });
+    } catch (error) {
+      this.handleStripeError(error);
+    }
 
     const payments = invoices.data.map((invoice) => ({
       invoiceId: invoice.id,
@@ -158,10 +194,15 @@ export class SubscriptionController {
     }
 
     const stripe = this.stripeClient();
-    const invoices = await stripe.invoices.list({
-      subscription: subscription.planId,
-      limit: 100,
-    });
+    let invoices: Stripe.ApiList<Stripe.Invoice>;
+    try {
+      invoices = await stripe.invoices.list({
+        subscription: subscription.planId,
+        limit: 100,
+      });
+    } catch (error) {
+      this.handleStripeError(error);
+    }
     const invoice = invoices.data.find((x) => x.id === invoiceId);
 
     if (!invoice) {
@@ -238,7 +279,10 @@ export class SubscriptionController {
             hostedInvoiceUrl: invoice.hosted_invoice_url,
             invoicePdfUrl: invoice.invoice_pdf,
           }));
-        } catch {
+        } catch (error) {
+          if (this.isStripeAuthenticationError(error)) {
+            this.handleStripeError(error);
+          }
           return [];
         }
       }),

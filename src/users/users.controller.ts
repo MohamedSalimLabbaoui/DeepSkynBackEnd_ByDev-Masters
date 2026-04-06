@@ -81,6 +81,21 @@ export class UsersController {
         return this.usersService.findSuggestions(userId);
     }
 
+    @Get('search')
+    async searchCommunityProfiles(
+        @CurrentUser('sub') viewerId: string,
+        @Query('q') q?: string,
+        @Query('page') page?: number,
+        @Query('limit') limit?: number,
+    ) {
+        return this.usersService.searchCommunityProfiles(
+            viewerId,
+            q || '',
+            Number(page) || 1,
+            Number(limit) || 20,
+        );
+    }
+
     @Post('follow/:id')
     async toggleFollow(
         @CurrentUser('sub') followerId: string,
