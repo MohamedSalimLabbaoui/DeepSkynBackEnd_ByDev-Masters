@@ -1,6 +1,8 @@
-import { Injectable, Logger, HttpException, HttpStatus } from '@nestjs/common';
+import { Injectable, Logger, HttpException, HttpStatus, NotFoundException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../prisma/prisma.service';
+import { DigitalTwinService } from '../digital-twin/digital-twin.service';
+import { UpdateRoutineStatusDto, PredictiveRoutineStatus } from './dto/routine-status.dto';
 import axios, { AxiosError } from 'axios';
 import {
   compressWhitespace,
@@ -65,6 +67,7 @@ export class PredictiveRoutineService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly config: ConfigService,
+    private readonly digitalTwinService: DigitalTwinService,
   ) {
     this.apiKey = this.config.get<string>('GEMINI_API_KEY');
     this.apiUrl =
@@ -182,19 +185,23 @@ export class PredictiveRoutineService {
       // 2. Get user profile (optional: cycle phase, products)
       const userProfile = await this.getUserProfile(userId);
       
-      // 3. Generate routine with Gemini AI
+      // 3. 🆕 Get Digital Twin data for enhanced routine
+      const twinData = await this.getDigitalTwinData(userId);
+      
+      // 4. Generate routine with Gemini AI (enriched with twin data)
       const routine = await this.generateWithGemini(
         analysisResult,
         weatherData,
         userProfile.cyclePhase,
         userProfile.products,
+        twinData, // 🆕 Pass twin data to AI
       );
 
-      // 4. Calculate expiration date (7 days from now)
+      // 5. Calculate expiration date (7 days from now)
       const expiresAt = new Date();
       expiresAt.setDate(expiresAt.getDate() + 7);
 
-      // 5. Save to database
+      // 6. Save to database
       const savedRoutine = await this.prisma.predictiveRoutine.create({
         data: {
           userId,
@@ -205,13 +212,15 @@ export class PredictiveRoutineService {
         },
       });
 
-      this.logger.log(`Predictive routine saved with ID ${savedRoutine.id}`);
+      this.logger.log(`Predictive routine saved with ID ${savedRoutine.id} (Twin-enhanced: ${twinData.enabled})`);
 
       return {
         id: savedRoutine.id,
         routine,
         generatedAt: savedRoutine.generatedAt,
         expiresAt: savedRoutine.expiresAt,
+        twinEnhanced: twinData.enabled, // 🆕 Indicate if twin was used
+        confidence: twinData.confidence, // 🆕 Include confidence
       };
     } catch (error) {
       this.logger.error(`Error generating predictive routine: ${error.message}`, error.stack);
@@ -224,6 +233,43 @@ export class PredictiveRoutineService {
         routine: fallbackRoutine,
         generatedAt: new Date(),
         expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+        twinEnhanced: false,
+        confidence: 0,
+      };
+    }
+  }
+
+  /**
+   * 🆕 Get Digital Twin data for enhanced routine generation
+   */
+  private async getDigitalTwinData(userId: string) {
+    try {
+      const twin = await this.digitalTwinService.getOrCreateTwin(userId);
+      
+      // Get recent snapshots for trends
+      const snapshots = await this.digitalTwinService.getSnapshots(userId, 5);
+      
+      return {
+        enabled: snapshots.length >= 3, // Twin usable with 3+ snapshots
+        confidence: twin.confidence,
+        currentState: twin.currentState,
+        trendAnalysis: twin.trendAnalysis,
+        seasonalPatterns: twin.seasonalPatterns,
+        productSensitivity: twin.productSensitivity,
+        improvementRate: twin.improvementRate,
+        recentSnapshots: snapshots.slice(0, 3), // Last 3 snapshots
+      };
+    } catch (error) {
+      this.logger.warn(`Could not fetch Digital Twin data: ${error.message}`);
+      return {
+        enabled: false,
+        confidence: 0,
+        currentState: null,
+        trendAnalysis: null,
+        seasonalPatterns: null,
+        productSensitivity: null,
+        improvementRate: null,
+        recentSnapshots: [],
       };
     }
   }
@@ -293,6 +339,7 @@ export class PredictiveRoutineService {
     weatherData: WeatherForecast,
     cyclePhase: string | null,
     products: string[] | null,
+    twinData?: any, // 🆕 Digital Twin data
   ): Promise<GeneratedRoutine> {
     if (!this.apiKey) {
       this.logger.warn('Gemini API not configured, using fallback');
@@ -306,17 +353,36 @@ export class PredictiveRoutineService {
       const issues = analysisResult.detectedIssues.slice(0, 3).join(',') || '-';
       const prods = products?.slice(0, 5).join(',') || '-';
 
-      // Compressed prompt - ~55% token reduction
+      // 🆕 Add twin data summary if available
+      let twinSummary = '';
+      if (twinData?.enabled) {
+        const trend = twinData.trendAnalysis?.healthScoreTrend || 'stable';
+        const rate = twinData.improvementRate ? `${twinData.improvementRate.toFixed(1)}%` : '0%';
+        const conf = `${Math.round(twinData.confidence * 100)}%`;
+        twinSummary = `\nTwin:${trend},imp:${rate},conf:${conf}`;
+        
+        // Add trending conditions
+        if (twinData.trendAnalysis?.conditionTrends) {
+          const topTrends = Object.entries(twinData.trendAnalysis.conditionTrends)
+            .slice(0, 2)
+            .map(([cond, data]: [string, any]) => `${cond}:${data.direction}`)
+            .join(',');
+          if (topTrends) twinSummary += `,trends:${topTrends}`;
+        }
+      }
+
+      // Compressed prompt - ~55% token reduction + twin enrichment
       const prompt = compressWhitespace(`
 Dermato/cosmeto expert. Routine prédictive 7j.
 Peau:${st},${analysisResult.condition},${issues}
 Météo7j(jour:uv,pluie,temp):${weatherSummary}
 Cycle:${cyclePhase || '-'}
-Produits:${prods}
+Produits:${prods}${twinSummary}
 Rép JSON strict:{days:[{day,morning:[],evening:[],tip,warning}],globalAdvice}
-Français, 7 jours.`);
+Français, 7 jours.
+${twinData?.enabled ? 'Utilise données Twin pour routine optimisée.' : ''}`);
 
-      this.logger.log('Calling Gemini API with compressed prompt...');
+      this.logger.log(`Calling Gemini API with compressed prompt (Twin: ${twinData?.enabled || false})...`);
 
       const response = await this.makeRequestWithRetry(() =>
         axios.post<GeminiResponse>(
@@ -344,11 +410,23 @@ Français, 7 jours.`);
       }
 
       let jsonText = textResponse.trim();
+      
+      // Remove markdown code blocks if present
       if (jsonText.includes('```json')) {
         jsonText = jsonText.split('```json')[1].split('```')[0].trim();
       } else if (jsonText.includes('```')) {
         jsonText = jsonText.split('```')[1].split('```')[0].trim();
       }
+
+      // Find JSON object boundaries more safely
+      const startIndex = jsonText.indexOf('{');
+      const lastIndex = jsonText.lastIndexOf('}');
+      
+      if (startIndex === -1 || lastIndex === -1 || lastIndex <= startIndex) {
+        throw new Error('No valid JSON object found in response');
+      }
+      
+      jsonText = jsonText.substring(startIndex, lastIndex + 1);
 
       const routine = JSON.parse(jsonText) as GeneratedRoutine;
 
@@ -732,5 +810,188 @@ Français, 7 jours.`);
     }
     
     return fullStep.charAt(0).toUpperCase() + fullStep.slice(1);
+  }
+
+  /**
+   * 🎯 UX WORKFLOW METHODS - Professional routine management
+   */
+
+  /**
+   * Get pending routines for user (those that need attention)
+   */
+  async getPendingRoutines(userId: string) {
+    return this.prisma.predictiveRoutine.findMany({
+      where: {
+        userId,
+        status: PredictiveRoutineStatus.PENDING,
+        expiresAt: {
+          gt: new Date(), // Only non-expired
+        },
+      },
+      orderBy: {
+        generatedAt: 'desc',
+      },
+      select: {
+        id: true,
+        routine: true,
+        generatedAt: true,
+        expiresAt: true,
+        status: true,
+        weatherData: true,
+      },
+    });
+  }
+
+  /**
+   * Get user's routine history with status filtering
+   */
+  async getUserRoutines(userId: string, status?: PredictiveRoutineStatus, includeExpired = false) {
+    const where: any = { userId };
+    
+    if (status) {
+      where.status = status;
+    }
+    
+    if (!includeExpired) {
+      where.expiresAt = { gt: new Date() };
+    }
+
+    return this.prisma.predictiveRoutine.findMany({
+      where,
+      orderBy: {
+        generatedAt: 'desc',
+      },
+      select: {
+        id: true,
+        routine: true,
+        generatedAt: true,
+        expiresAt: true,
+        status: true,
+        actionedAt: true,
+        feedback: true,
+        weatherData: true,
+      },
+    });
+  }
+
+  /**
+   * Update routine status (key for UX flow)
+   */
+  async updateRoutineStatus(
+    userId: string,
+    routineId: string,
+    updateDto: UpdateRoutineStatusDto,
+  ) {
+    // Verify ownership
+    const routine = await this.prisma.predictiveRoutine.findFirst({
+      where: { id: routineId, userId },
+    });
+
+    if (!routine) {
+      throw new NotFoundException('Routine not found or access denied');
+    }
+
+    // Prepare update data
+    const updateData: any = {
+      status: updateDto.status,
+      actionedAt: new Date(),
+    };
+
+    // Set specific timestamps based on status
+    switch (updateDto.status) {
+      case PredictiveRoutineStatus.ACCEPTED:
+        updateData.implementedAt = new Date();
+        break;
+      case PredictiveRoutineStatus.DISMISSED:
+        updateData.dismissedAt = new Date();
+        break;
+      case PredictiveRoutineStatus.IMPLEMENTED:
+        updateData.implementedAt = new Date();
+        if (updateDto.feedback) {
+          updateData.feedback = updateDto.feedback;
+        }
+        break;
+    }
+
+    const updatedRoutine = await this.prisma.predictiveRoutine.update({
+      where: { id: routineId },
+      data: updateData,
+    });
+
+    this.logger.log(`Routine ${routineId} status updated to ${updateDto.status} for user ${userId}`);
+
+    return {
+      id: updatedRoutine.id,
+      status: updatedRoutine.status,
+      actionedAt: updatedRoutine.actionedAt,
+      message: this.getStatusMessage(updateDto.status),
+    };
+  }
+
+  /**
+   * Get UX-friendly status message
+   */
+  private getStatusMessage(status: PredictiveRoutineStatus): string {
+    switch (status) {
+      case PredictiveRoutineStatus.VIEWED:
+        return 'Routine consultée';
+      case PredictiveRoutineStatus.ACCEPTED:
+        return 'Routine acceptée! Vous pouvez maintenant la suivre.';
+      case PredictiveRoutineStatus.DISMISSED:
+        return 'Routine supprimée de vos recommandations.';
+      case PredictiveRoutineStatus.IMPLEMENTED:
+        return 'Merci pour votre retour! Cela nous aide à améliorer nos recommandations.';
+      default:
+        return 'Statut mis à jour';
+    }
+  }
+
+  /**
+   * Mark routine as viewed (important for UX)
+   */
+  async markAsViewed(userId: string, routineId: string) {
+    return this.updateRoutineStatus(userId, routineId, {
+      status: PredictiveRoutineStatus.VIEWED,
+    });
+  }
+
+  /**
+   * Accept and optionally implement routine
+   */
+  async acceptRoutine(userId: string, routineId: string, implement = false) {
+    const status = implement 
+      ? PredictiveRoutineStatus.IMPLEMENTED 
+      : PredictiveRoutineStatus.ACCEPTED;
+      
+    return this.updateRoutineStatus(userId, routineId, { status });
+  }
+
+  /**
+   * Dismiss routine (never show again)
+   */
+  async dismissRoutine(userId: string, routineId: string) {
+    return this.updateRoutineStatus(userId, routineId, {
+      status: PredictiveRoutineStatus.DISMISSED,
+    });
+  }
+
+  /**
+   * Auto-expire old routines (should be called via cron)
+   */
+  async expireOldRoutines() {
+    const result = await this.prisma.predictiveRoutine.updateMany({
+      where: {
+        expiresAt: { lt: new Date() },
+        status: {
+          in: [PredictiveRoutineStatus.PENDING, PredictiveRoutineStatus.VIEWED],
+        },
+      },
+      data: {
+        status: PredictiveRoutineStatus.EXPIRED,
+      },
+    });
+
+    this.logger.log(`Expired ${result.count} old routines`);
+    return result;
   }
 }

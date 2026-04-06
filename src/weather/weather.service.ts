@@ -2,6 +2,8 @@
 import { Injectable, Logger, HttpException, HttpStatus } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import axios, { AxiosError } from 'axios';
+import { RateLimiterService } from '../shared/services/rate-limiter.service';
+import { CacheService } from '../shared/services/cache.service';
 
 export interface WeatherAdviceInput {
   temperature: number;
@@ -39,7 +41,11 @@ export class WeatherService {
   private readonly maxRetries = 3;
   private readonly retryDelay = 2000;
 
-  constructor(private readonly configService: ConfigService) {
+  constructor(
+    private readonly configService: ConfigService,
+    private readonly rateLimiter: RateLimiterService,
+    private readonly cache: CacheService,
+  ) {
     this.apiKey = this.configService.get<string>('GEMINI_API_KEY');
     if (!this.apiKey) {
       this.logger.warn('GEMINI_API_KEY is not defined, will use Ollama fallback');
@@ -185,6 +191,16 @@ export class WeatherService {
     emoji: string;
     urgency: 'low' | 'medium' | 'high';
   }> {
+    // Create cache key based on weather conditions
+    const cacheKey = `weather:${data.temperature}:${data.condition}:${data.humidity}:${data.uvIndex}`;
+    
+    // Check cache first
+    const cached = this.cache.get<{ advice: string; emoji: string; urgency: 'low' | 'medium' | 'high' }>(cacheKey);
+    if (cached) {
+      this.logger.debug('Using cached weather advice');
+      return cached;
+    }
+
     const prompt = this.buildWeatherPrompt(data);
     const urgencyLevel = this.calculateUrgency(data);
 
@@ -201,7 +217,7 @@ export class WeatherService {
             temperature: 0.7,
             topK: 40,
             topP: 0.95,
-            maxOutputTokens: 8192,
+            maxOutputTokens: 4096, // Reduced for faster processing
           },
           safetySettings: [
             {
@@ -223,17 +239,21 @@ export class WeatherService {
           ],
         };
 
-        const response = await this.makeRequestWithRetry(() =>
-          axios.post<GeminiResponse>(
-            `${this.apiUrl}?key=${this.apiKey}`,
-            requestBody,
-            {
-              headers: {
-                'Content-Type': 'application/json',
+        // Use global rate limiter
+        const response = await this.rateLimiter.queueRequest(
+          'gemini-weather',
+          () =>
+            axios.post<GeminiResponse>(
+              `${this.apiUrl}?key=${this.apiKey}`,
+              requestBody,
+              {
+                headers: {
+                  'Content-Type': 'application/json',
+                },
+                timeout: 30000,
               },
-              timeout: 30000,
-            },
-          ),
+            ),
+          'normal', // Normal priority for weather advice
         );
 
         const textResponse =
@@ -245,11 +265,16 @@ export class WeatherService {
 
         const parsed = this.parseAdviceResponse(textResponse);
 
-        return {
+        const result = {
           advice: parsed.advice,
           emoji: parsed.emoji,
           urgency: urgencyLevel,
         };
+
+        // Cache the result for 10 minutes
+        this.cache.set(cacheKey, result, 10 * 60 * 1000);
+
+        return result;
       } catch (error) {
         this.logger.error('Gemini weather advice failed, trying Ollama fallback', error);
       }
@@ -263,22 +288,32 @@ export class WeatherService {
         const ollamaResponse = await this.generateWithOllama(prompt);
         const parsed = this.parseAdviceResponse(ollamaResponse);
         
-        return {
+        const result = {
           advice: parsed.advice,
           emoji: parsed.emoji,
           urgency: urgencyLevel,
         };
+
+        // Cache Ollama result with shorter TTL
+        this.cache.set(cacheKey, result, 5 * 60 * 1000);
+        
+        return result;
       }
     } catch (ollamaError) {
       this.logger.error('Ollama fallback also failed', ollamaError);
     }
 
     // Final fallback
-    return {
+    const fallbackResult = {
       advice: this.generateFallbackAdvice(data),
       emoji: '🌍',
       urgency: urgencyLevel,
     };
+
+    // Cache fallback result with very short TTL
+    this.cache.set(cacheKey, fallbackResult, 2 * 60 * 1000);
+
+    return fallbackResult;
   }
 
   /**

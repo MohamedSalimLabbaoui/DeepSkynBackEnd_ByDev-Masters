@@ -11,6 +11,7 @@ import { SupabaseService, UploadResult } from './services/supabase.service';
 import { SkinProfileService } from '../skin-profile/skin-profile.service';
 import { NotificationService } from '../notification/notification.service';
 import { SubscriptionService } from '../subscription/subscription.service';
+import { DigitalTwinService } from '../digital-twin/digital-twin.service';
 import { CreateAnalysisDto } from './dto/create-analysis.dto';
 import { RealTimeScanDto } from './dto/real-time-scan.dto';
 import { Analysis } from '@prisma/client';
@@ -42,6 +43,7 @@ export class AnalysisService {
     private readonly skinProfileService: SkinProfileService,
     private readonly notificationService: NotificationService,
     private readonly subscriptionService: SubscriptionService,
+    private readonly digitalTwinService: DigitalTwinService,
   ) {}
 
   private async enforceAnalysisAccess(userId: string): Promise<void> {
@@ -200,12 +202,24 @@ export class AnalysisService {
 
         // Update skin profile
         await this.updateSkinProfile(userId, result);
+        
+        // 📸 AUTO-CAPTURE SNAPSHOT for Digital Twin
+        try {
+          await this.captureDigitalTwinSnapshot(userId, result, imageUrl);
+        } catch (error) {
+          this.logger.warn(`Failed to capture Digital Twin snapshot: ${error.message}`);
+          // Don't fail the analysis if snapshot capture fails
+        }
       }
 
       return result;
     } catch (error) {
       this.logger.error('Real-time scan failed', error);
-      throw new BadRequestException('Failed to process scan');
+      if (error instanceof BadRequestException) {
+        throw error;
+      }
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      throw new BadRequestException(`Failed to process scan: ${errorMessage}`);
     }
   }
 
@@ -244,6 +258,16 @@ export class AnalysisService {
 
       // Update user's skin profile
       await this.updateSkinProfile(userId, result);
+      
+      // 📸 AUTO-CAPTURE SNAPSHOT for Digital Twin
+      try {
+        // Get first image URL from analysis
+        const imageUrl = imageUrls.length > 0 ? imageUrls[0] : null;
+        await this.captureDigitalTwinSnapshot(userId, result, imageUrl);
+      } catch (error) {
+        this.logger.warn(`Failed to capture Digital Twin snapshot: ${error.message}`);
+        // Don't fail the analysis if snapshot capture fails
+      }
 
       // Send notification
       await this.notificationService.create({
@@ -307,6 +331,52 @@ export class AnalysisService {
       }
     } catch (error) {
       this.logger.error('Failed to update skin profile', error);
+    }
+  }
+
+  /**
+   * 📸 Capture a snapshot for Digital Twin after analysis
+   */
+  private async captureDigitalTwinSnapshot(
+    userId: string,
+    result: GeminiAnalysisResult,
+    imageUrl: string | null,
+  ): Promise<void> {
+    try {
+      // Construct conditions object from detailed analysis
+      const conditions: Record<string, any> = {};
+      Object.entries(result.detailedAnalysis || {}).forEach(([key, value]) => {
+        if (value && typeof value === 'object' && 'score' in value) {
+          const severity = 
+            value.score >= 70 ? 'low' : 
+            value.score >= 40 ? 'medium' : 
+            'high';
+          conditions[key] = { severity, score: value.score };
+        }
+      });
+
+      // Construct metrics object
+      const metrics = {
+        hydration: result.detailedAnalysis?.hydration?.score || 50,
+        texture: result.detailedAnalysis?.texture?.score || 50,
+        pores: result.detailedAnalysis?.pores?.score || 50,
+        pigmentation: result.detailedAnalysis?.pigmentation?.score || 50,
+      };
+
+      // Capture snapshot
+      await this.digitalTwinService.captureSnapshot(userId, {
+        imageUrl,
+        healthScore: result.healthScore,
+        skinAge: result.skinAge,
+        conditions,
+        metrics,
+        notes: `Auto-captured from analysis`,
+      });
+
+      this.logger.log(`Digital Twin snapshot captured for user ${userId}`);
+    } catch (error) {
+      this.logger.error(`Failed to capture Digital Twin snapshot: ${error.message}`, error);
+      throw error;
     }
   }
 

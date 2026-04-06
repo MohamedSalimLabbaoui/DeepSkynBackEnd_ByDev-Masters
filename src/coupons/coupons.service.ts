@@ -252,6 +252,7 @@ export class CouponsService {
         userId: params.userId,
         subscriptionId: params.subscriptionId || null,
         stripeCheckoutSessionId: params.stripeCheckoutSessionId || null,
+        discountAmount: coupon.discountValue,
       },
     });
   }

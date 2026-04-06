@@ -3,6 +3,8 @@ import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateSkinLogDto, WeatherAlertQueryDto } from './dto';
 import axios from 'axios';
+import { RateLimiterService } from '../shared/services/rate-limiter.service';
+import { CacheService } from '../shared/services/cache.service';
 import {
   compressWhitespace,
   buildCompactWeatherContext,
@@ -61,6 +63,8 @@ export class ContextualAnalysisService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly configService: ConfigService,
+    private readonly rateLimiter: RateLimiterService,
+    private readonly cache: CacheService,
   ) {
     this.geminiApiKey = this.configService.get<string>('GEMINI_API_KEY') || '';
     this.geminiApiUrl =
@@ -205,6 +209,16 @@ export class ContextualAnalysisService {
       return this.getFallbackAdvice(weather);
     }
 
+    // Create cache key based on weather and skin profile
+    const cacheKey = `advice:${weather.uvIndex}:${weather.aqi}:${weather.humidity}:${weather.temperature}:${skinProfile?.skinType || 'unknown'}:${skinProfile?.fitzpatrickType || 0}`;
+    
+    // Check cache first
+    const cached = this.cache.get<AIAdvice>(cacheKey);
+    if (cached) {
+      this.logger.debug('Using cached AI advice');
+      return cached;
+    }
+
     // Compressed context - ~60% token reduction
     const weatherCtx = buildCompactWeatherContext(weather, city);
     const skinCtx = buildCompactSkinProfile(skinProfile);
@@ -218,16 +232,25 @@ Rép JSON:{personalizedMessage:string,skinCareRoutine:[],productsToUse:[],warnin
 Court, français.`);
 
     try {
-      const response = await axios.post(
-        `${this.geminiApiUrl}?key=${this.geminiApiKey}`,
-        {
-          contents: [{ parts: [{ text: prompt }] }],
-          generationConfig: {
-            temperature: 0.7,
-            maxOutputTokens: 1024,
-          },
-        },
-        { timeout: 15000 },
+      // Use global rate limiter
+      const response = await this.rateLimiter.queueRequest(
+        'gemini-contextual',
+        () =>
+          axios.post(
+            `${this.geminiApiUrl}?key=${this.geminiApiKey}`,
+            {
+              contents: [{ parts: [{ text: prompt }] }],
+              generationConfig: {
+                temperature: 0.7,
+                maxOutputTokens: 1024,
+              },
+            },
+            {
+              headers: { 'Content-Type': 'application/json' },
+              timeout: 30000,
+            },
+          ),
+        'low', // Low priority for contextual analysis
       );
 
       const text = response.data?.candidates?.[0]?.content?.parts?.[0]?.text;
@@ -241,6 +264,10 @@ Court, français.`);
       }
 
       const parsed = JSON.parse(jsonMatch[0]) as AIAdvice;
+      
+      // Cache the successful result for 15 minutes
+      this.cache.set(cacheKey, parsed, 15 * 60 * 1000);
+      
       return parsed;
     } catch (error) {
       this.logger.error('Gemini AI advice generation failed, trying Ollama fallback', error);
@@ -255,6 +282,10 @@ Court, français.`);
           if (jsonMatch) {
             const parsed = JSON.parse(jsonMatch[0]) as AIAdvice;
             this.logger.log('Ollama AI advice generated successfully');
+            
+            // Cache Ollama result with shorter TTL
+            this.cache.set(cacheKey, parsed, 8 * 60 * 1000);
+            
             return parsed;
           }
         }
@@ -262,7 +293,12 @@ Court, français.`);
         this.logger.error('Ollama fallback also failed', ollamaError);
       }
       
-      return this.getFallbackAdvice(weather);
+      const fallbackResult = this.getFallbackAdvice(weather);
+      
+      // Cache fallback result with very short TTL
+      this.cache.set(cacheKey, fallbackResult, 3 * 60 * 1000);
+      
+      return fallbackResult;
     }
   }
 

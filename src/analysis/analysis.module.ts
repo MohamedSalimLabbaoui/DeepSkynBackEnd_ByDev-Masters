@@ -10,6 +10,7 @@ import { PrismaModule } from '../prisma/prisma.module';
 import { SkinProfileModule } from '../skin-profile/skin-profile.module';
 import { NotificationModule } from '../notification/notification.module';
 import { SubscriptionModule } from '../subscription/subscription.module';
+import { DigitalTwinModule } from '../digital-twin/digital-twin.module';
 
 @Module({
   imports: [
@@ -18,6 +19,7 @@ import { SubscriptionModule } from '../subscription/subscription.module';
     SkinProfileModule,
     NotificationModule,
     SubscriptionModule,
+    DigitalTwinModule,
   ],
   controllers: [AnalysisController, AnalysisTestController],
   providers: [AnalysisService, GeminiService, OllamaService, SupabaseService],
