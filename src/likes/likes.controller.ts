@@ -92,6 +92,22 @@ export class LikesController {
     return this.likesService.findByPost(postId, page || 1, limit || 50);
   }
 
+  @Get('post/:postId/reactions')
+  @ApiOperation({
+    summary: "Réactions d'un post (legacy)",
+    description: "Alias rétrocompatible vers /likes/post/:postId",
+  })
+  @ApiParam({ name: 'postId', description: 'ID du post' })
+  @ApiQuery({ name: 'page', required: false, type: Number })
+  @ApiQuery({ name: 'limit', required: false, type: Number })
+  async findReactionsLegacy(
+    @Param('postId') postId: string,
+    @Query('page') page?: number,
+    @Query('limit') limit?: number,
+  ) {
+    return this.likesService.findByPost(postId, page || 1, limit || 50);
+  }
+
   @Get('check/:postId')
   @ApiOperation({
     summary: 'Vérifier le like',

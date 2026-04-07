@@ -62,6 +62,22 @@ export class PostsController {
     return this.postsService.findAll(page || 1, limit || 20, userId);
   }
 
+  @Get('feed/all')
+  @ApiOperation({
+    summary: 'Récupérer le feed (legacy)',
+    description: 'Alias rétrocompatible vers /posts',
+  })
+  @ApiResponse({ status: 200, description: 'Liste des posts' })
+  @ApiQuery({ name: 'page', required: false, type: Number })
+  @ApiQuery({ name: 'limit', required: false, type: Number })
+  async findAllLegacy(
+    @CurrentUser('sub') userId: string,
+    @Query('page') page?: number,
+    @Query('limit') limit?: number,
+  ) {
+    return this.postsService.findAll(page || 1, limit || 20, userId);
+  }
+
   @Get('user/:userId')
   @ApiOperation({
     summary: "Posts d'un utilisateur",

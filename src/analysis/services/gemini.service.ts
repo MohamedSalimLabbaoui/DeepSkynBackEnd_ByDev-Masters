@@ -48,17 +48,38 @@ export interface GeminiResponse {
 @Injectable()
 export class GeminiService {
   private readonly logger = new Logger(GeminiService.name);
-  private readonly apiKey: string;
-  private readonly apiUrl: string;
-  private readonly maxRetries = 1;
+  private readonly geminiApiKeys: string[];
+  private readonly geminiModels: string[];
+  private readonly geminiBaseUrl =
+    'https://generativelanguage.googleapis.com/v1beta/models';
+  private readonly maxRetries = 2;
   private readonly retryDelay = 2000; // 2 seconds
   private readonly grokService: GrokService;
 
   constructor(private readonly configService: ConfigService) {
-    this.apiKey = this.configService.get<string>('GEMINI_API_KEY');
-    this.apiUrl =
-      'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent';
+    this.geminiApiKeys = this.loadApiKeys('GEMINI_API_KEY');
+    this.geminiModels = [
+      this.configService.get<string>('GEMINI_PRIMARY_MODEL') || 'gemini-2.5-flash',
+      this.configService.get<string>('GEMINI_FALLBACK_MODEL') || 'gemini-1.5-flash',
+    ].filter((value, index, arr) => !!value && arr.indexOf(value) === index);
+
+    if (this.geminiApiKeys.length < 2) {
+      this.logger.warn(
+        'Gemini fallback resilience is limited. Configure at least GEMINI_API_KEY and GEMINI_API_KEY_2.',
+      );
+    }
+
     this.grokService = new GrokService(configService);
+  }
+
+  private loadApiKeys(baseName: string): string[] {
+    const keys = [
+      this.configService.get<string>(baseName),
+      this.configService.get<string>(`${baseName}_2`),
+      this.configService.get<string>(`${baseName}_3`),
+    ].filter((key): key is string => !!key && key.trim().length > 0);
+
+    return Array.from(new Set(keys));
   }
 
   /**
@@ -66,6 +87,64 @@ export class GeminiService {
    */
   private sleep(ms: number): Promise<void> {
     return new Promise((resolve) => setTimeout(resolve, ms));
+  }
+
+  private isRetryableStatus(status?: number): boolean {
+    return status === 429 || status === 500 || status === 503;
+  }
+
+  private async requestGeminiWithFallback(
+    requestBody: Record<string, any>,
+    options?: { timeout?: number },
+  ): Promise<GeminiResponse> {
+    if (this.geminiApiKeys.length === 0) {
+      throw new Error('No Gemini API key configured');
+    }
+
+    const timeout = options?.timeout ?? 30000;
+    const errors: string[] = [];
+
+    for (const model of this.geminiModels) {
+      for (let keyIndex = 0; keyIndex < this.geminiApiKeys.length; keyIndex++) {
+        const apiKey = this.geminiApiKeys[keyIndex];
+        const url = `${this.geminiBaseUrl}/${model}:generateContent?key=${apiKey}`;
+
+        for (let attempt = 1; attempt <= this.maxRetries; attempt++) {
+          try {
+            this.logger.debug(
+              `Gemini request with model=${model}, key#${keyIndex + 1}, attempt=${attempt}`,
+            );
+
+            const response = await axios.post<GeminiResponse>(url, requestBody, {
+              headers: { 'Content-Type': 'application/json' },
+              timeout,
+            });
+
+            return response.data;
+          } catch (error) {
+            const axiosError = error as AxiosError;
+            const status = axiosError.response?.status;
+            const canRetry = this.isRetryableStatus(status);
+
+            this.logger.warn(
+              `Gemini failed (model=${model}, key#${keyIndex + 1}, status=${status ?? 'n/a'}, attempt=${attempt}/${this.maxRetries})`,
+            );
+
+            if (canRetry && attempt < this.maxRetries) {
+              await this.sleep(this.retryDelay * attempt);
+              continue;
+            }
+
+            errors.push(
+              `model=${model}, key#${keyIndex + 1}, status=${status ?? 'n/a'}`,
+            );
+            break;
+          }
+        }
+      }
+    }
+
+    throw new Error(`All Gemini candidates failed: ${errors.join(' | ')}`);
   }
 
   /**
@@ -159,20 +238,11 @@ export class GeminiService {
         ],
       };
 
-      const response = await this.makeRequestWithRetry(() =>
-        axios.post<GeminiResponse>(
-          `${this.apiUrl}?key=${this.apiKey}`,
-          requestBody,
-          {
-            headers: {
-              'Content-Type': 'application/json',
-            },
-            timeout: 60000,
-          },
-        ),
-      );
+      const response = await this.requestGeminiWithFallback(requestBody, {
+        timeout: 60000,
+      });
 
-      const textResponse = response.data.candidates[0]?.content?.parts[0]?.text;
+      const textResponse = response.candidates[0]?.content?.parts[0]?.text;
 
       if (!textResponse) {
         throw new Error('No response from Gemini API');
@@ -236,20 +306,11 @@ export class GeminiService {
         },
       };
 
-      const response = await this.makeRequestWithRetry(() =>
-        axios.post<GeminiResponse>(
-          `${this.apiUrl}?key=${this.apiKey}`,
-          requestBody,
-          {
-            headers: {
-              'Content-Type': 'application/json',
-            },
-            timeout: 30000,
-          },
-        ),
-      );
+      const response = await this.requestGeminiWithFallback(requestBody, {
+        timeout: 30000,
+      });
 
-      const textResponse = response.data.candidates[0]?.content?.parts[0]?.text;
+      const textResponse = response.candidates[0]?.content?.parts[0]?.text;
 
       if (!textResponse) {
         throw new Error('No response from Gemini API');
@@ -485,22 +546,19 @@ Concerns:${concernsList}
 3-4 sentences, actionable.`);
 
     try {
-      const response = await this.makeRequestWithRetry(() =>
-        axios.post<GeminiResponse>(
-          `${this.apiUrl}?key=${this.apiKey}`,
-          {
-            contents: [{ parts: [{ text: prompt }] }],
-            generationConfig: {
-              temperature: 0.7,
-              maxOutputTokens: 1024,
-            },
+      const response = await this.requestGeminiWithFallback(
+        {
+          contents: [{ parts: [{ text: prompt }] }],
+          generationConfig: {
+            temperature: 0.7,
+            maxOutputTokens: 1024,
           },
-          { headers: { 'Content-Type': 'application/json' }, timeout: 30000 },
-        ),
+        },
+        { timeout: 30000 },
       );
 
       return (
-        response.data.candidates[0]?.content?.parts[0]?.text ||
+        response.candidates[0]?.content?.parts[0]?.text ||
         'Unable to generate advice.'
       );
     } catch (error) {
@@ -540,24 +598,21 @@ User:${userMessage}
 Rép:français,utile,pro.`);
 
     try {
-      const response = await this.makeRequestWithRetry(() =>
-        axios.post<GeminiResponse>(
-          `${this.apiUrl}?key=${this.apiKey}`,
-          {
-            contents: [{ parts: [{ text: prompt }] }],
-            generationConfig: {
-              temperature: 0.7,
-              topK: 40,
-              topP: 0.95,
-              maxOutputTokens: 2048,
-            },
+      const response = await this.requestGeminiWithFallback(
+        {
+          contents: [{ parts: [{ text: prompt }] }],
+          generationConfig: {
+            temperature: 0.7,
+            topK: 40,
+            topP: 0.95,
+            maxOutputTokens: 2048,
           },
-          { headers: { 'Content-Type': 'application/json' }, timeout: 30000 },
-        ),
+        },
+        { timeout: 30000 },
       );
 
       return (
-        response.data.candidates[0]?.content?.parts[0]?.text ||
+        response.candidates[0]?.content?.parts[0]?.text ||
         "Je suis désolé, je n'ai pas pu générer une réponse."
       );
     } catch (error) {

@@ -17,12 +17,88 @@ interface GeminiResponse {
 @Injectable()
 export class DigitalTwinService {
   private readonly logger = new Logger(DigitalTwinService.name);
+  private readonly geminiApiKeys: string[];
+  private readonly geminiModels: string[];
+  private readonly geminiBaseUrl =
+    'https://generativelanguage.googleapis.com/v1beta/models';
 
   constructor(
     private prisma: PrismaService,
     private rateLimiter: RateLimiterService,
     private cache: CacheService,
-  ) {}
+  ) {
+    this.geminiApiKeys = [
+      process.env.GEMINI_API_KEY,
+      process.env.GEMINI_API_KEY_2,
+      process.env.GEMINI_API_KEY_3,
+    ].filter((key): key is string => !!key && key.trim().length > 0);
+
+    this.geminiModels = [
+      process.env.GEMINI_PRIMARY_MODEL || 'gemini-2.5-flash',
+      process.env.GEMINI_FALLBACK_MODEL || 'gemini-1.5-flash',
+    ].filter((value, index, arr) => !!value && arr.indexOf(value) === index);
+
+    if (this.geminiApiKeys.length < 2) {
+      this.logger.warn(
+        'Digital Twin has limited Gemini resilience. Configure GEMINI_API_KEY and GEMINI_API_KEY_2.',
+      );
+    }
+  }
+
+  private async requestGeminiWithFallback(
+    queueKey: string,
+    prompt: string,
+    generationConfig: Record<string, any>,
+    priority: 'high' | 'normal' | 'low' = 'normal',
+  ): Promise<GeminiResponse> {
+    if (this.geminiApiKeys.length === 0) {
+      throw new Error('No Gemini API key configured');
+    }
+
+    let lastError: unknown;
+
+    for (const model of this.geminiModels) {
+      for (let keyIndex = 0; keyIndex < this.geminiApiKeys.length; keyIndex++) {
+        const apiKey = this.geminiApiKeys[keyIndex];
+        const requestKey = `${queueKey}-${model}-k${keyIndex + 1}`;
+
+        try {
+          const response = await this.rateLimiter.queueRequest(
+            requestKey,
+            async () => {
+              const result = await fetch(
+                `${this.geminiBaseUrl}/${model}:generateContent?key=${apiKey}`,
+                {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                    contents: [{ parts: [{ text: prompt }] }],
+                    generationConfig,
+                  }),
+                },
+              );
+
+              if (!result.ok) {
+                throw new Error(`Gemini HTTP ${result.status}`);
+              }
+
+              return (await result.json()) as GeminiResponse;
+            },
+            priority,
+          );
+
+          return response as GeminiResponse;
+        } catch (error) {
+          lastError = error;
+          this.logger.warn(
+            `Gemini request failed (model=${model}, key#${keyIndex + 1}): ${(error as Error).message}`,
+          );
+        }
+      }
+    }
+
+    throw lastError || new Error('All Gemini model/key candidates failed');
+  }
 
   // 🎯 Initialiser ou récupérer le Digital Twin
   async getOrCreateTwin(userId: string) {
@@ -292,26 +368,14 @@ Prédit l'état de la peau dans ${daysAhead} jours. Retourne UNIQUEMENT un JSON 
 }`;
 
     try {
-      const response: GeminiResponse = await this.rateLimiter.queueRequest(
-        'gemini-prediction', // key
-        async () => {
-          const result = await fetch(
-            `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${process.env.GEMINI_API_KEY}`,
-            {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                contents: [{ parts: [{ text: prompt }] }],
-                generationConfig: {
-                  temperature: 0.3,
-                  maxOutputTokens: 1000,
-                },
-              }),
-            }
-          );
-          return await result.json();
+      const response = await this.requestGeminiWithFallback(
+        'gemini-prediction',
+        prompt,
+        {
+          temperature: 0.3,
+          maxOutputTokens: 1000,
         },
-        'low', // Basse priorité
+        'low',
       );
 
       const text = response?.candidates?.[0]?.content?.parts?.[0]?.text || '{}';
@@ -327,7 +391,7 @@ Prédit l'état de la peau dans ${daysAhead} jours. Retourne UNIQUEMENT un JSON 
         preventiveTips: parsed.preventiveTips || [],
         warnings: parsed.warnings || [],
       };
-    } catch (error) {
+    } catch (error:any) {
       this.logger.warn(`AI prediction failed, using rule-based fallback: ${error.message}`);
       return this.ruleBasedPrediction(twin, snapshots, daysAhead);
     }
@@ -439,26 +503,13 @@ Simule l'effet probable de ce produit après ${days} jours. Retourne UNIQUEMENT 
 IMPORTANT: Les valeurs visualFilters doivent être ÉLEVÉES (40-60 en moyenne) pour des résultats visuels clairs. Ne sois pas timide avec les valeurs!`;
 
     try {
-      const response: GeminiResponse = await this.rateLimiter.queueRequest(
-        'gemini-product-simulation', // key
-        async () => {
-          const result = await fetch(
-            `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${process.env.GEMINI_API_KEY}`,
-            {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                contents: [{ parts: [{ text: prompt }] }],
-                generationConfig: {
-                  temperature: 0.4,
-                  maxOutputTokens: 1200,
-                },
-              }),
-            }
-          );
-          return await result.json();
+      const response = await this.requestGeminiWithFallback(
+        'gemini-product-simulation',
+        prompt,
+        {
+          temperature: 0.4,
+          maxOutputTokens: 1200,
         },
-        'normal',
       );
 
       const text = response?.candidates?.[0]?.content?.parts?.[0]?.text || '{}';
@@ -483,7 +534,7 @@ IMPORTANT: Les valeurs visualFilters doivent être ÉLEVÉES (40-60 en moyenne) 
         },
         reasoning: parsed.reasoning || '',
       };
-    } catch (error) {
+    } catch (error:any) {
       this.logger.warn(`AI simulation failed, using rule-based: ${error.message}`);
       return this.ruleBasedSimulation(twin, product);
     }
