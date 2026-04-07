@@ -185,67 +185,60 @@ export class UsersService {
 
     async searchCommunityProfiles(
         viewerId: string,
-        q: string,
+        q: string = '',
         page: number = 1,
         limit: number = 20,
     ) {
-        const skip = (page - 1) * limit;
+        const safePage = Math.max(1, page || 1);
+        const safeLimit = Math.min(50, Math.max(1, limit || 20));
+        const skip = (safePage - 1) * safeLimit;
         const search = q.trim();
-
-        // Keep search behavior explicit: no query => no search results.
-        if (!search) {
-            return {
-                data: [],
-                total: 0,
-                page,
-                limit,
-                totalPages: 0,
-            };
-        }
 
         const where: Prisma.UserWhereInput = {
             id: { not: viewerId },
             isPublic: true,
             isActive: true,
-            OR: [
-                { name: { contains: search, mode: 'insensitive' } },
-                { email: { contains: search, mode: 'insensitive' } },
-            ],
+            ...(search
+                ? {
+                    OR: [
+                        { name: { contains: search, mode: 'insensitive' } },
+                        { email: { contains: search, mode: 'insensitive' } },
+                    ],
+                }
+                : {}),
         };
 
-        const [users, total, followed] = await Promise.all([
+        const [users, total] = await Promise.all([
             this.prisma.user.findMany({
                 where,
-                orderBy: { createdAt: 'desc' },
                 skip,
-                take: limit,
+                take: safeLimit,
+                orderBy: [{ createdAt: 'desc' }],
                 select: {
                     id: true,
                     name: true,
                     email: true,
                     avatar: true,
-                    isPublic: true,
                     skinProfile: {
-                        select: {
-                            skinType: true,
-                        },
+                        select: { skinType: true },
                     },
                     _count: {
-                        select: {
-                            followers: true,
-                            posts: true,
-                        },
+                        select: { followers: true },
                     },
                 },
             }),
             this.prisma.user.count({ where }),
-            this.prisma.follower.findMany({
-                where: { followerId: viewerId },
-                select: { followingId: true },
-            }),
         ]);
 
-        const followingSet = new Set(followed.map((f) => f.followingId));
+        const following = await this.prisma.follower.findMany({
+            where: {
+                followerId: viewerId,
+                followingId: { in: users.map((u) => u.id) },
+            },
+            select: { followingId: true },
+        });
+
+        const followingSet = new Set(following.map((f) => f.followingId));
 
         return {
             data: users.map((u) => ({
@@ -253,9 +246,9 @@ export class UsersService {
                 isFollowing: followingSet.has(u.id),
             })),
             total,
-            page,
-            limit,
-            totalPages: Math.ceil(total / limit),
+            page: safePage,
+            limit: safeLimit,
+            totalPages: Math.max(1, Math.ceil(total / safeLimit)),
         };
     }
 

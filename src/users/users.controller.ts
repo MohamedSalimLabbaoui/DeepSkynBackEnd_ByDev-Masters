@@ -104,6 +104,21 @@ export class UsersController {
         return this.usersService.toggleFollow(followerId, followingId);
     }
 
+    @Get('search')
+    async searchCommunityProfiles(
+        @CurrentUser('sub') viewerId: string,
+        @Query('q') q?: string,
+        @Query('page') page: string = '1',
+        @Query('limit') limit: string = '20',
+    ) {
+        return this.usersService.searchCommunityProfiles(
+            viewerId,
+            q || '',
+            Number(page) || 1,
+            Number(limit) || 20,
+        );
+    }
+
     @Patch('admin/:id/status')
     @UseGuards(RolesGuard)
     @Roles('admin')

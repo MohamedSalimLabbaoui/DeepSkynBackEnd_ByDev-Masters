@@ -94,13 +94,13 @@ export class LikesController {
 
   @Get('post/:postId/reactions')
   @ApiOperation({
-    summary: "Réactions d'un post",
-    description: "Récupère la liste des utilisateurs qui ont réagi à un post",
+    summary: "Réactions d'un post (legacy)",
+    description: "Alias rétrocompatible vers /likes/post/:postId",
   })
   @ApiParam({ name: 'postId', description: 'ID du post' })
   @ApiQuery({ name: 'page', required: false, type: Number })
   @ApiQuery({ name: 'limit', required: false, type: Number })
-  async findReactionsByPost(
+  async findReactionsLegacy(
     @Param('postId') postId: string,
     @Query('page') page?: number,
     @Query('limit') limit?: number,
