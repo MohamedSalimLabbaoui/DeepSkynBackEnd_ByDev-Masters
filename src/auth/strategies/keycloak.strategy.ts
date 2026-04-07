@@ -174,11 +174,13 @@ export class KeycloakStrategy extends PassportStrategy(Strategy, 'keycloak') {
     }
 
     // Return an object that matches what KeycloakStrategy.validate returns
-    // We map the Prisma ID to 'sub' and 'userId' to maintain backward compatibility
+    // We map the Prisma ID to 'sub', 'userId', and 'id' to maintain backward compatibility
+    const userId = user?.id || payload.sub;
     return {
       ...(user || {}),
-      userId: user?.id || payload.sub,
-      sub: user?.id || payload.sub,
+      id: userId,
+      userId: userId,
+      sub: userId,
       keycloakSub: payload.sub,
       email: user?.email || payload.email,
       name: user?.name || payload.name,

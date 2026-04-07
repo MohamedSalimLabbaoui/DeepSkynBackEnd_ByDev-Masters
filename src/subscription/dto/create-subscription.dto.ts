@@ -7,12 +7,6 @@ import {
 } from 'class-validator';
 import { ApiPropertyOptional } from '@nestjs/swagger';
 
-export enum SubscriptionPlan {
-  FREE = 'free',
-  PREMIUM = 'premium',
-  PREMIUM_YEARLY = 'premium_yearly',
-}
-
 export enum SubscriptionStatus {
   ACTIVE = 'active',
   CANCELLED = 'cancelled',
@@ -22,13 +16,20 @@ export enum SubscriptionStatus {
 
 export class CreateSubscriptionDto {
   @ApiPropertyOptional({
-    description: "Plan d'abonnement",
-    enum: SubscriptionPlan,
+    description: "Code du plan d'abonnement",
     default: 'free',
   })
-  @IsEnum(SubscriptionPlan)
+  @IsString()
   @IsOptional()
-  plan?: SubscriptionPlan = SubscriptionPlan.FREE;
+  plan?: string = 'free';
+
+  @ApiPropertyOptional({
+    description: 'Alias rétro-compatible (préférer plan)',
+    default: 'free',
+  })
+  @IsString()
+  @IsOptional()
+  planCode?: string;
 
   @ApiPropertyOptional({
     description: "Statut de l'abonnement",

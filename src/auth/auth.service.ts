@@ -74,6 +74,8 @@ export class AuthService {
   private readonly clientSecret: string;
   private readonly adminUser: string;
   private readonly adminPassword: string;
+  private readonly adminClientId: string;
+  private readonly adminClientSecret: string;
 
   constructor(
     private readonly configService: ConfigService,
@@ -90,6 +92,10 @@ export class AuthService {
     );
     this.adminUser = this.configService.get<string>('KEYCLOAK_ADMIN_USER') || 'admin';
     this.adminPassword = this.configService.get<string>('KEYCLOAK_ADMIN_PASSWORD') || 'admin';
+    this.adminClientId =
+      this.configService.get<string>('KEYCLOAK_ADMIN_CLIENT_ID') || 'admin-cli';
+    this.adminClientSecret =
+      this.configService.get<string>('KEYCLOAK_ADMIN_CLIENT_SECRET') || 'pFhUhztRlEJaEM75T7S1qbYvzBR2FnV1';
   }
 
   /**
@@ -170,12 +176,12 @@ export class AuthService {
       );
     }
 
-    // 5. Create user in Prisma with hashed password and SAME ID as Keycloak if possible
+    // 5. Create user in Prisma with hashed password and SAME ID as Keycloak
     try {
       const hashedPassword = await bcrypt.hash(password, 10);
       await this.prisma.user.create({
         data: {
-          id: keycloakId || undefined, // Use Keycloak ID as Prisma ID
+          id: keycloakId || undefined,
           email,
           name,
           password: hashedPassword,
@@ -184,8 +190,22 @@ export class AuthService {
         },
       });
     } catch (error) {
-      this.logger.error('Prisma user creation failed', error);
-      // User created in Keycloak but not in Prisma — still allow login
+      this.logger.error('Prisma user creation failed - rolling back Keycloak user', error);
+
+      if (keycloakId) {
+        try {
+          await this.deleteKeycloakUser(adminToken, keycloakId);
+        } catch (rollbackError) {
+          this.logger.error(
+            `Failed to rollback Keycloak user ${keycloakId} after Prisma failure`,
+            rollbackError,
+          );
+        }
+      }
+
+      throw new InternalServerErrorException(
+        "Le compte n'a pas pu être créé correctement. Veuillez réessayer.",
+      );
     }
 
     // 6. Auto-login: authenticate with Keycloak to get tokens
@@ -201,14 +221,16 @@ export class AuthService {
    * Get a Keycloak admin access token via password grant on the master realm
    */
   private async getKeycloakAdminToken(): Promise<string> {
-    try {
-      const tokenUrl = `${this.keycloakUrl}/realms/master/protocol/openid-connect/token`;
+    const tokenUrl = `${this.keycloakUrl}/realms/master/protocol/openid-connect/token`;
 
+    // Strategy 1: service account (client_credentials)
+    try {
       const params = new URLSearchParams();
-      params.append('grant_type', 'password');
-      params.append('client_id', 'admin-cli');
-      params.append('username', this.adminUser);
-      params.append('password', this.adminPassword);
+      params.append('grant_type', 'client_credentials');
+      params.append('client_id', this.adminClientId);
+      if (this.adminClientSecret) {
+        params.append('client_secret', this.adminClientSecret);
+      }
 
       const response = await axios.post(tokenUrl, params, {
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
@@ -216,11 +238,54 @@ export class AuthService {
 
       return response.data.access_token;
     } catch (error) {
-      this.logger.error('Failed to obtain Keycloak admin token', error);
+      if (axios.isAxiosError(error)) {
+        this.logger.warn(
+          `Admin token via client_credentials failed (${error.response?.status}). Falling back to password grant.`,
+        );
+      }
+    }
+
+    // Strategy 2: admin user/password (password grant)
+    try {
+      const params = new URLSearchParams();
+      params.append('grant_type', 'password');
+      params.append('client_id', this.adminClientId || 'admin-cli');
+      params.append('username', this.adminUser);
+      params.append('password', this.adminPassword);
+      if (this.adminClientSecret) {
+        params.append('client_secret', this.adminClientSecret);
+      }
+
+      const response = await axios.post(tokenUrl, params, {
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      });
+
+      return response.data.access_token;
+    } catch (error) {
+      if (axios.isAxiosError(error)) {
+        this.logger.error(
+          `Failed to obtain Keycloak admin token (${error.response?.status})`,
+          error.response?.data,
+        );
+      } else {
+        this.logger.error('Failed to obtain Keycloak admin token', error);
+      }
       throw new InternalServerErrorException(
-        'Impossible de contacter le serveur d\'authentification',
+        'Impossible de contacter Keycloak avec les identifiants admin. Vérifiez KEYCLOAK_ADMIN_CLIENT_ID/SECRET ou KEYCLOAK_ADMIN_USER/PASSWORD.',
       );
     }
+  }
+
+  private async deleteKeycloakUser(
+    adminToken: string,
+    userId: string,
+  ): Promise<void> {
+    const url = `${this.keycloakUrl}/admin/realms/${this.realm}/users/${userId}`;
+    await axios.delete(url, {
+      headers: {
+        Authorization: `Bearer ${adminToken}`,
+      },
+    });
   }
 
   /**

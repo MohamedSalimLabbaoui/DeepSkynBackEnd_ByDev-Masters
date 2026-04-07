@@ -3,6 +3,7 @@ import {
   Logger,
   NotFoundException,
   BadRequestException,
+  ForbiddenException,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { GeminiService } from '../analysis/services/gemini.service';
@@ -10,6 +11,7 @@ import { SkinProfileService } from '../skin-profile/skin-profile.service';
 import { NotificationService } from '../notification/notification.service';
 import { CrawlingService } from '../crawling/crawling.service';
 import { PostsService } from '../posts/posts.service';
+import { SubscriptionService } from '../subscription/subscription.service';
 import {
   CreateRoutineDto,
   UpdateRoutineDto,
@@ -22,6 +24,12 @@ import {
 } from './dto';
 import { Routine } from '@prisma/client';
 import * as QRCode from 'qrcode';
+import {
+  abbrevSkinType,
+  abbrevConcerns,
+  compressWhitespace,
+  buildCompactSkinContext,
+} from './prompt-compression.util';
 
 export interface RoutineStep {
   order: number;
@@ -47,6 +55,8 @@ export interface AIGeneratedRoutine {
 export class RoutineService {
   private readonly logger = new Logger(RoutineService.name);
 
+  private readonly freeMonthlyAiRoutineLimit = 3;
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly geminiService: GeminiService,
@@ -54,7 +64,30 @@ export class RoutineService {
     private readonly notificationService: NotificationService,
     private readonly crawlingService: CrawlingService,
     private readonly postsService: PostsService,
+    private readonly subscriptionService: SubscriptionService,
   ) {}
+
+  private async enforceAiRoutineAccess(userId: string): Promise<void> {
+    const isPremium = await this.subscriptionService.isPremium(userId);
+    if (isPremium) return;
+
+    const { periodStart, resetsAt } =
+      await this.subscriptionService.getFreeMonthlyQuotaWindow(userId);
+
+    const thisMonthCount = await this.prisma.routine.count({
+      where: {
+        userId,
+        isAIGenerated: true,
+        createdAt: { gte: periodStart, lt: resetsAt },
+      },
+    });
+
+    if (thisMonthCount >= this.freeMonthlyAiRoutineLimit) {
+      throw new ForbiddenException(
+        `Limite de ${this.freeMonthlyAiRoutineLimit} routines IA/mois atteinte. Réinitialisation: ${resetsAt.toISOString()}. Passez à Premium pour des routines illimitées.`,
+      );
+    }
+  }
 
   /**
    * Create a manual routine
@@ -87,6 +120,8 @@ export class RoutineService {
     userId: string,
     generateDto: GenerateRoutineDto,
   ): Promise<Routine> {
+    await this.enforceAiRoutineAccess(userId);
+
     // Get user's skin profile if available
     let skinProfile = null;
     try {
@@ -162,29 +197,23 @@ export class RoutineService {
   }
 
   /**
-   * Build prompt for routine generation
+   * Build compressed prompt for routine generation
+   * Reduces tokens by ~50% using abbreviations and compact format
    */
   private buildRoutinePrompt(context: any): string {
-    const typeDesc =
-      context.routineType === 'AM'
-        ? 'morning (AM)'
-        : context.routineType === 'PM'
-          ? 'evening (PM)'
-          : 'weekly treatment';
+    const typeMap: Record<string, string> = { 'AM': 'matin', 'PM': 'soir', 'weekly': 'hebdo' };
+    const type = typeMap[context.routineType] || context.routineType;
+    const st = abbrevSkinType(context.skinType);
+    const c = abbrevConcerns(context.concerns);
+    const s = context.sensitivities?.length || 0;
+    const b = context.budget?.charAt(0)?.toUpperCase() || 'M';
+    const f = context.fitzpatrickType || '-';
 
-    return `
-Create a personalized ${typeDesc} skincare routine with the following parameters:
-- Skin Type: ${context.skinType}
-- Concerns: ${context.concerns?.join(', ') || 'none specified'}
-- Sensitivities: ${context.sensitivities?.join(', ') || 'none'}
-- Budget: ${context.budget}
-- Fitzpatrick Type: ${context.fitzpatrickType || 'not specified'}
-${context.preferredBrands ? `- Preferred Brands: ${context.preferredBrands}` : ''}
-${context.additionalNotes ? `- Additional Notes: ${context.additionalNotes}` : ''}
-
-Please provide a routine with 4-7 steps, including product categories and application order.
-Format each step with: order, name, category, description, duration (in seconds).
-    `.trim();
+    return compressWhitespace(`
+Dermato expert. Routine ${type}.
+Ctx:ty:${context.routineType}|st:${st}|c:${c}|s:${s}|b:${b}|f:${f}${context.preferredBrands ? `|m:${context.preferredBrands}` : ''}${context.additionalNotes ? `|n:${context.additionalNotes}` : ''}
+Rép JSON:{name,type,steps:[{order,name,category,description,duration}],notes}
+4-7 étapes. Durée sec.`);
   }
 
   /**
@@ -654,14 +683,13 @@ Format each step with: order, name, category, description, duration (in seconds)
   }
 
   /**
-   * Get AI advice on a routine change
+   * Get AI advice on a routine change (compressed prompt)
    */
   async adviseOnChange(
     userId: string,
     routineId: string,
     adviseDto: AdviseRoutineDto,
   ): Promise<{ advice: string; rating: string; emoji: string }> {
-    // Get user's skin profile for context
     let skinProfile = null;
     try {
       skinProfile = await this.skinProfileService.findByUserId(userId);
@@ -669,27 +697,23 @@ Format each step with: order, name, category, description, duration (in seconds)
       this.logger.warn(`No skin profile found for user ${userId}`);
     }
 
-    const prompt = `
-You are an expert dermatologist and skincare advisor. A user just modified their skincare routine.
+    // Compressed prompt - ~60% token reduction
+    const skinCtx = skinProfile
+      ? buildCompactSkinContext({
+          skinType: skinProfile.skinType,
+          concerns: skinProfile.concerns as string[],
+          sensitivities: skinProfile.sensitivities as string[],
+        })
+      : '-';
+    const stepsStr = adviseDto.currentSteps.map((s, i) => `${i + 1}.${s}`).join(',');
 
-User profile:
-- Skin type: ${skinProfile?.skinType || 'not specified'}
-- Concerns: ${(skinProfile?.concerns || []).join(', ') || 'none'}
-- Sensitivities: ${(skinProfile?.sensitivities || []).join(', ') || 'none'}
-
-Change made: ${adviseDto.changeType}
-${adviseDto.changeDescription ? `Description: ${adviseDto.changeDescription}` : ''}
-${adviseDto.addedStepName ? `New step added: ${adviseDto.addedStepName}` : ''}
-
-Current routine order after change:
-${adviseDto.currentSteps.map((s, i) => `${i + 1}. ${s}`).join('\n')}
-
-Provide a short (2-3 sentences max), friendly expert opinion on this change.
-Include whether it improves or worsens the routine effectiveness.
-Be encouraging but honest. Use a conversational tone.
-Reply in French.
-Format your response as JSON: { "advice": "your advice text", "rating": "good|neutral|caution", "emoji": "appropriate emoji" }
-    `.trim();
+    const prompt = compressWhitespace(`
+Dermato expert. Conseil modif routine.
+Profil:${skinCtx}
+Modif:${adviseDto.changeType}${adviseDto.changeDescription ? ` (${adviseDto.changeDescription})` : ''}${adviseDto.addedStepName ? ` +${adviseDto.addedStepName}` : ''}
+Étapes:[${stepsStr}]
+Rép JSON:{advice,rating:good|neutral|caution,emoji}
+2-3 phrases, français.`);
 
     try {
       const result = await this.geminiService.getSkincareAdvice(
@@ -699,7 +723,6 @@ Format your response as JSON: { "advice": "your advice text", "rating": "good|ne
 
       const adviceText = typeof result === 'object' ? (result as any)?.advice || JSON.stringify(result) : String(result || '');
 
-      // Try to parse JSON from the response
       try {
         const jsonMatch = adviceText.match(/\{[\s\S]*\}/);
         if (jsonMatch) {
@@ -724,7 +747,6 @@ Format your response as JSON: { "advice": "your advice text", "rating": "good|ne
     } catch (error) {
       this.logger.error('Failed to get AI advice', error.message);
 
-      // Return a friendly fallback
       const fallbacks = {
         reorder:
           "Réorganisation notée ! L'ordre d'application est important — du plus léger au plus épais est généralement recommandé. 👍",
@@ -745,13 +767,12 @@ Format your response as JSON: { "advice": "your advice text", "rating": "good|ne
   }
 
   /**
-   * Recommend a product for a routine step using AI + crawled articles
+   * Recommend a product for a routine step using AI + crawled articles (compressed prompt)
    */
   async recommendProductForStep(
     userId: string,
     dto: RecommendProductDto,
   ): Promise<ProductRecommendation> {
-    // 1. Get user skin profile
     let skinProfile = null;
     try {
       skinProfile = await this.skinProfileService.findByUserId(userId);
@@ -764,45 +785,31 @@ Format your response as JSON: { "advice": "your advice text", "rating": "good|ne
       ? dto.concerns.split(',')
       : skinProfile?.concerns || [];
 
-    // 2. Search crawled articles for relevant product info
-    const searchQuery = `${dto.stepCategory} ${dto.stepName} ${skinType} ${concerns.join(' ')}`;
+    // Search crawled articles for relevant product info
+    const searchQuery = `${dto.stepCategory} ${dto.stepName} ${skinType}`;
     let relevantArticles: { title: string; summary: string; source: string; url: string }[] = [];
     try {
-      relevantArticles = await this.crawlingService.getRelevantArticles(searchQuery, 5);
+      relevantArticles = await this.crawlingService.getRelevantArticles(searchQuery, 3);
     } catch {
       this.logger.warn('Failed to fetch relevant articles for recommendation');
     }
 
-    const articlesContext = relevantArticles.length > 0
-      ? relevantArticles.map((a, i) => `${i + 1}. "${a.title}" (${a.source}) — ${a.summary?.substring(0, 200)}`).join('\n')
-      : 'Aucun article trouvé dans la base de connaissances.';
+    // Compressed articles context (max 150 chars)
+    const articlesCtx = relevantArticles.length > 0
+      ? relevantArticles.slice(0, 2).map(a => a.title.substring(0, 50)).join(';')
+      : '-';
 
-    // 3. Ask Gemini to recommend a specific product
-    const prompt = `
-Tu es un expert dermatologue et conseiller skincare.
-Un utilisateur cherche le meilleur produit pour cette étape de sa routine :
-
-- Étape : ${dto.stepName}
-- Catégorie : ${dto.stepCategory}
-- Description : ${dto.stepDescription || 'Non spécifiée'}
-- Type de peau : ${skinType}
-- Préoccupations : ${concerns.join(', ') || 'aucune spécifiée'}
-
-Articles de référence de notre base de connaissances dermatologiques :
-${articlesContext}
-
-Recommande UN produit spécifique disponible à l'achat. Réponds UNIQUEMENT en JSON valide :
-{
-  "productName": "nom exact du produit",
-  "brand": "marque",
-  "description": "description courte du produit (2 phrases max, en français)",
-  "keyIngredients": ["ingrédient 1", "ingrédient 2", "ingrédient 3"],
-  "whyRecommended": "explication courte pourquoi ce produit est idéal pour ce step ET ce type de peau (2-3 phrases, en français)",
-  "estimatedPrice": "fourchette de prix en EUR (ex: 15-25€)",
-  "purchaseUrl": "URL d'achat réel sur un site e-commerce fiable (Amazon, Sephora, Lookfantastic, etc.)",
-  "rating": "excellent|good|alternative"
-}
-    `.trim();
+    // Compressed prompt - ~65% token reduction
+    const st = abbrevSkinType(skinType);
+    const c = abbrevConcerns(concerns as string[]);
+    
+    const prompt = compressWhitespace(`
+Dermato. Recommande 1 produit.
+Étape:${dto.stepName}(${dto.stepCategory})${dto.stepDescription ? ` ${dto.stepDescription.substring(0, 50)}` : ''}
+Peau:${st}|c:${c}
+Réf:${articlesCtx}
+Rép JSON:{productName,brand,description,keyIngredients:[],whyRecommended,estimatedPrice,purchaseUrl,rating:excellent|good|alternative}
+Français.`);
 
     let productData: any;
     try {
@@ -823,12 +830,10 @@ Recommande UN produit spécifique disponible à l'achat. Réponds UNIQUEMENT en 
       this.logger.error('AI product recommendation failed', error.message);
     }
 
-    // Fallback if AI fails
     if (!productData) {
       productData = this.getFallbackProduct(dto.stepCategory, skinType);
     }
 
-    // 4. Generate QR code for purchase URL
     const purchaseUrl = productData.purchaseUrl || `https://www.sephora.fr/search?q=${encodeURIComponent(productData.productName || dto.stepName)}`;
     let qrCodeDataUrl = '';
     try {

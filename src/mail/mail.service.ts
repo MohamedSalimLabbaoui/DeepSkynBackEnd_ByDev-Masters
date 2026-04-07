@@ -27,11 +27,11 @@ export class MailService {
     userName: string,
     resetToken: string,
   ): Promise<void> {
-    const frontendUrl = this.configService.get<string>(
-      'FRONTEND_URL',
-      'http://localhost:3001',
-    );
-    const resetUrl = `${frontendUrl}/auth/reset-password?token=${resetToken}`;
+    const frontendUrl = (
+      this.configService.get<string>('FRONTEND_URL', 'http://localhost:5173') ||
+      'http://localhost:5173'
+    ).replace(/\/+$/, '');
+    const resetUrl = `${frontendUrl}/reset-password?token=${encodeURIComponent(resetToken)}`;
 
     const mailOptions: nodemailer.SendMailOptions = {
       from: this.configService.get<string>(
@@ -119,6 +119,34 @@ export class MailService {
     }
   }
 
+  async sendSignupVerificationCode(
+    to: string,
+    userName: string,
+    code: string,
+    expiresInMinutes: number,
+  ): Promise<void> {
+    const mailOptions: nodemailer.SendMailOptions = {
+      from: this.configService.get<string>(
+        'MAIL_FROM',
+        '"DeepSkyn" <noreply@deepskyn.com>',
+      ),
+      to,
+      subject: 'DeepSkyn - Code de verification inscription',
+      html: this.getSignupVerificationTemplate(userName, code, expiresInMinutes),
+    };
+
+    try {
+      await this.transporter.sendMail(mailOptions);
+      this.logger.log(`Code de verification inscription envoye a ${to}`);
+    } catch (error) {
+      this.logger.error(
+        `Erreur lors de l'envoi du code de verification a ${to}`,
+        error.stack,
+      );
+      throw new Error("Impossible d'envoyer le code de verification");
+    }
+  }
+
   /**
    * Template HTML pour l'email de réinitialisation
    */
@@ -174,6 +202,54 @@ export class MailService {
             <p style="color: #999; font-size: 12px; margin: 0;">
               © 2026 DeepSkyn. Tous droits réservés.
             </p>
+          </td>
+        </tr>
+      </table>
+    </body>
+    </html>
+    `;
+  }
+
+  private getSignupVerificationTemplate(
+    userName: string,
+    code: string,
+    expiresInMinutes: number,
+  ): string {
+    return `
+    <!DOCTYPE html>
+    <html lang="fr">
+    <head>
+      <meta charset="UTF-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    </head>
+    <body style="margin: 0; padding: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f4f7fa;">
+      <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width: 600px; margin: 0 auto; background-color: #ffffff; border-radius: 12px; overflow: hidden; margin-top: 40px; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
+        <tr>
+          <td style="background: linear-gradient(135deg, #0ea5e9 0%, #06b6d4 100%); padding: 36px 30px; text-align: center;">
+            <h1 style="color: #ffffff; margin: 0; font-size: 28px; font-weight: 700;">DeepSkyn</h1>
+            <p style="color: rgba(255,255,255,0.95); margin: 8px 0 0; font-size: 14px;">Verification de votre inscription</p>
+          </td>
+        </tr>
+        <tr>
+          <td style="padding: 34px 30px;">
+            <h2 style="color: #111827; margin: 0 0 12px; font-size: 22px;">Code de verification</h2>
+            <p style="color: #4b5563; font-size: 16px; line-height: 1.6; margin: 0 0 20px;">
+              Bonjour <strong>${userName || 'utilisateur'}</strong>,
+            </p>
+            <p style="color: #4b5563; font-size: 16px; line-height: 1.6; margin: 0 0 24px;">
+              Utilisez le code ci-dessous pour finaliser votre inscription DeepSkyn.
+            </p>
+            <div style="text-align:center; margin: 0 0 24px;">
+              <span style="display:inline-block; letter-spacing: 8px; font-size: 34px; font-weight: 800; color:#0f172a; background:#f8fafc; border:1px solid #dbeafe; border-radius: 12px; padding: 12px 20px;">${code}</span>
+            </div>
+            <p style="color: #6b7280; font-size: 14px; line-height: 1.6; margin: 0;">
+              Ce code expire dans <strong>${expiresInMinutes} minutes</strong>. Si vous n'etes pas a l'origine de cette demande, ignorez cet email.
+            </p>
+          </td>
+        </tr>
+        <tr>
+          <td style="background-color: #f8fafc; padding: 20px 30px; text-align: center;">
+            <p style="color: #9ca3af; font-size: 12px; margin: 0;">2026 DeepSkyn. Tous droits reserves.</p>
           </td>
         </tr>
       </table>

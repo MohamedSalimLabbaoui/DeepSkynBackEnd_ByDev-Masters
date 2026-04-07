@@ -20,6 +20,7 @@ export class SocialJwtStrategy extends PassportStrategy(Strategy, 'social-jwt') 
 
         // Return an object that matches what KeycloakStrategy.validate returns
         return {
+            id: payload.sub,
             userId: payload.sub,
             sub: payload.sub,
             email: payload.email,

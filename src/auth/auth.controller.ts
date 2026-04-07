@@ -49,16 +49,25 @@ import { GoogleTokenDto } from './dto/google-token.dto';
 import { ForgotPasswordDto } from './dto/forgot-password.dto';
 import { ResetPasswordDto } from './dto/reset-password.dto';
 import { RegisterDto } from './dto/register.dto';
+import { RequestSignupCodeDto } from './dto/request-signup-code.dto';
+import { VerifySignupCodeDto } from './dto/verify-signup-code.dto';
 import { UpdateProfileDto } from './dto/update-profile.dto';
 import { UpdateAddressDto } from './dto/update-address.dto';
 import { PasswordResetService } from './services/password-reset.service';
+import { SignupVerificationService } from './services/signup-verification.service';
 import { PrismaService } from '../prisma/prisma.service';
 import axios from 'axios';
+import * as path from 'path';
+import * as faceapi from 'face-api.js';
+import * as tf from '@tensorflow/tfjs';
+import * as jpeg from 'jpeg-js';
+import { PNG } from 'pngjs';
 
 @ApiTags('Auth')
 @Controller('auth')
 export class AuthController {
   private readonly logger = new Logger(AuthController.name);
+  private static faceModelsLoadPromise: Promise<void> | null = null;
 
   constructor(
     private readonly authService: AuthService,
@@ -67,6 +76,7 @@ export class AuthController {
     private readonly facebookAuthService: FacebookAuthService,
     private readonly recaptchaService: RecaptchaService,
     private readonly passwordResetService: PasswordResetService,
+    private readonly signupVerificationService: SignupVerificationService,
     private readonly prisma: PrismaService,
   ) { }
 
@@ -123,6 +133,51 @@ export class AuthController {
       registerDto.name,
       registerDto.firstName,
       registerDto.lastName,
+    );
+  }
+
+  @Post('register/request-code')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Demander un code email pour inscription',
+    description:
+      "Envoie un code de verification a 6 chiffres sur l'email avant de finaliser l'inscription.",
+  })
+  @ApiResponse({ status: 200, description: 'Code envoye' })
+  @ApiResponse({ status: 400, description: 'Donnees invalides ou email deja utilise' })
+  @ApiResponse({ status: 429, description: 'Demande de code trop frequente' })
+  async requestSignupCode(@Body() dto: RequestSignupCodeDto) {
+    if (dto.captchaToken) {
+      const isCaptchaValid = await this.recaptchaService.verify(dto.captchaToken);
+      if (!isCaptchaValid) {
+        throw new UnauthorizedException('Validation captcha echouee');
+      }
+    }
+
+    return this.signupVerificationService.requestCode(dto);
+  }
+
+  @Post('register/verify-code')
+  @HttpCode(HttpStatus.CREATED)
+  @ApiOperation({
+    summary: 'Verifier le code email et creer le compte',
+    description:
+      "Verifie le code recu par email puis finalise la creation du compte (Keycloak + base de donnees).",
+  })
+  @ApiResponse({ status: 201, description: 'Compte cree et utilisateur authentifie' })
+  @ApiResponse({ status: 400, description: 'Code invalide/expire ou demande absente' })
+  async verifySignupCode(@Body() dto: VerifySignupCodeDto): Promise<LoginResponse> {
+    const payload = this.signupVerificationService.verifyCodeAndConsume(
+      dto.email,
+      dto.code,
+    );
+
+    return this.authService.register(
+      payload.email,
+      payload.password,
+      payload.name,
+      payload.firstName,
+      payload.lastName,
     );
   }
 
@@ -312,6 +367,7 @@ export class AuthController {
         preferredLanguage: true,
         isPublic: true,
         receiveRecommendations: true,
+        onboardingComplete: true,
         createdAt: true,
         updatedAt: true,
       },
@@ -338,6 +394,7 @@ export class AuthController {
           preferredLanguage: true,
           isPublic: true,
           receiveRecommendations: true,
+          onboardingComplete: true,
           createdAt: true,
           updatedAt: true,
         },
@@ -810,7 +867,7 @@ export class AuthController {
         res.set('Content-Type', contentType);
         res.set('Access-Control-Allow-Origin', '*');
         return res.send(buffer);
-      } catch (error) {
+      } catch (error: any) {
         this.logger.error(`Error processing data URL: ${error.message}`);
         return res.status(500).send('Error processing data URL');
       }
@@ -828,7 +885,7 @@ export class AuthController {
       res.set('Content-Type', response.headers['content-type'] || 'image/jpeg');
       res.set('Access-Control-Allow-Origin', '*');
       response.data.pipe(res);
-    } catch (error) {
+    } catch (error: any) {
       this.logger.error(`Error fetching image from ${url}: ${error.message}`);
       res.status(500).send('Error fetching image');
     }
@@ -837,12 +894,43 @@ export class AuthController {
   @Post('face-login')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Connexion via FaceID' })
-  async faceLogin(@Body() body: { email: string }) {
+  async faceLogin(
+    @Body() body: { email: string; descriptor?: number[]; imageBase64?: string },
+  ) {
+    if (
+      (!Array.isArray(body.descriptor) || body.descriptor.length === 0) &&
+      !body.imageBase64
+    ) {
+      throw new BadRequestException('Image faciale ou descripteur requis');
+    }
+
     const user = await this.prisma.user.findUnique({
-      where: { email: body.email }
+      where: { email: body.email },
     });
     if (!user) throw new UnauthorizedException('Utilisateur non trouvé');
     if (!user.isActive) throw new UnauthorizedException('Compte désactivé');
+    const faceReference = await this.prisma.faceReference.findUnique({
+      where: { userId: user.id },
+      select: { descriptor: true },
+    });
+
+    if (!faceReference?.descriptor || !Array.isArray(faceReference.descriptor)) {
+      throw new UnauthorizedException('Aucune reference faciale enregistree pour ce compte');
+    }
+
+    const liveDescriptor =
+      Array.isArray(body.descriptor) && body.descriptor.length > 0
+        ? body.descriptor
+        : await this.extractDescriptorFromImageBase64(body.imageBase64 as string);
+
+    const confidence = this.calculateDescriptorSimilarity(
+      liveDescriptor,
+      faceReference.descriptor as number[],
+    );
+
+    if (confidence < 0.5) {
+      throw new UnauthorizedException('Vérification faciale échouée');
+    }
 
     const accessToken = this.googleAuthService.generateToken(user);
 
@@ -858,6 +946,132 @@ export class AuthController {
         name: user.name,
       },
     };
+  }
+
+  private calculateDescriptorSimilarity(desc1: number[], desc2: number[]): number {
+    if (desc1.length !== desc2.length) {
+      throw new BadRequestException('Descripteurs faciaux incompatibles');
+    }
+
+    let sumSquares = 0;
+    for (let i = 0; i < desc1.length; i++) {
+      const diff = desc1[i] - desc2[i];
+      sumSquares += diff * diff;
+    }
+
+    const euclideanDistance = Math.sqrt(sumSquares);
+    const maxExpectedDistance = 1.2;
+    return Math.max(0, 1 - euclideanDistance / maxExpectedDistance);
+  }
+
+  private async ensureFaceModelsLoaded(): Promise<void> {
+    if (!AuthController.faceModelsLoadPromise) {
+      const modelPath = path.join(process.cwd(), 'public', 'models');
+      AuthController.faceModelsLoadPromise = Promise.all([
+        faceapi.nets.ssdMobilenetv1.loadFromDisk(modelPath),
+        faceapi.nets.faceLandmark68Net.loadFromDisk(modelPath),
+        faceapi.nets.faceRecognitionNet.loadFromDisk(modelPath),
+      ]).then(() => undefined);
+    }
+
+    try {
+      await AuthController.faceModelsLoadPromise;
+    } catch (error: any) {
+      this.logger.error(`FaceID model loading failed: ${error?.message || 'unknown error'}`);
+      AuthController.faceModelsLoadPromise = null;
+      throw new UnauthorizedException('Modeles FaceID indisponibles');
+    }
+  }
+
+  private normalizeBase64(input: string): string {
+    if (input.startsWith('data:')) {
+      const match = input.match(/^data:[^;]+;base64,(.+)$/);
+      if (!match) {
+        throw new BadRequestException('Format image base64 invalide');
+      }
+      return match[1];
+    }
+
+    return input;
+  }
+
+  private decodeImageToTensor(imageBuffer: Buffer): tf.Tensor3D {
+    const isPng =
+      imageBuffer.length >= 8 &&
+      imageBuffer[0] === 0x89 &&
+      imageBuffer[1] === 0x50 &&
+      imageBuffer[2] === 0x4e &&
+      imageBuffer[3] === 0x47;
+
+    const isJpeg =
+      imageBuffer.length >= 3 &&
+      imageBuffer[0] === 0xff &&
+      imageBuffer[1] === 0xd8 &&
+      imageBuffer[2] === 0xff;
+
+    let width = 0;
+    let height = 0;
+    let rgbaData: Uint8Array;
+
+    if (isPng) {
+      const decoded = PNG.sync.read(imageBuffer);
+      width = decoded.width;
+      height = decoded.height;
+      rgbaData = decoded.data;
+    } else if (isJpeg) {
+      const decoded = jpeg.decode(imageBuffer, { useTArray: true });
+      width = decoded.width;
+      height = decoded.height;
+      rgbaData = decoded.data;
+    } else {
+      throw new BadRequestException('Format image non supporte (PNG/JPEG attendu)');
+    }
+
+    const rgbData = new Uint8Array(width * height * 3);
+    for (let i = 0, j = 0; i < rgbaData.length; i += 4, j += 3) {
+      rgbData[j] = rgbaData[i];
+      rgbData[j + 1] = rgbaData[i + 1];
+      rgbData[j + 2] = rgbaData[i + 2];
+    }
+
+    return tf.tensor3d(rgbData, [height, width, 3], 'int32');
+  }
+
+  private async extractDescriptorFromImageBase64(imageBase64: string): Promise<number[]> {
+    await this.ensureFaceModelsLoaded();
+
+    let imageBuffer: Buffer;
+    try {
+      imageBuffer = Buffer.from(this.normalizeBase64(imageBase64), 'base64');
+    } catch {
+      throw new BadRequestException('Image base64 invalide');
+    }
+
+    let tensor: tf.Tensor3D;
+    try {
+      tensor = this.decodeImageToTensor(imageBuffer);
+    } catch (error) {
+      if (error instanceof BadRequestException) {
+        throw error;
+      }
+      throw new BadRequestException('Image faciale illisible');
+    }
+
+    let detection: any;
+    try {
+      detection = await faceapi
+        .detectSingleFace(tensor as any, new faceapi.SsdMobilenetv1Options({ minConfidence: 0.3 }))
+        .withFaceLandmarks()
+        .withFaceDescriptor();
+    } finally {
+      tensor.dispose();
+    }
+
+    if (!detection) {
+      throw new UnauthorizedException('Aucun visage detecte dans la capture');
+    }
+
+    return Array.from(detection.descriptor);
   }
 
   private extractTokenFromRequest(req: any): string {

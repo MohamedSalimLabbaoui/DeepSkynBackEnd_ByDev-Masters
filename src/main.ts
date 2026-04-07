@@ -9,11 +9,25 @@ async function bootstrap() {
   const app = await NestFactory.create(AppModule);
 
   // Increase payload limit
+  app.use(
+    '/webhook',
+    json({
+      verify: (req: any, _res, buf) => {
+        req.rawBody = buf;
+      },
+      limit: '5mb',
+    }),
+  );
   app.use(json({ limit: '50mb' }));
   app.use(urlencoded({ extended: true, limit: '50mb' }));
 
   app.enableCors({
-    origin: process.env.FRONTEND_URL || 'http://localhost:5173',
+    origin: [
+      process.env.FRONTEND_URL || 'http://localhost:5173',
+      'http://localhost:8081',
+      'http://localhost:19006',
+      'http://localhost:4200',
+    ],
     credentials: true,
   });
   // Ajouter les pipes de validation globalement
