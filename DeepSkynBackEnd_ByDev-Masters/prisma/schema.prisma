@@ -1,0 +1,326 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id                     String         @id @default(uuid())
+  email                  String         @unique
+  password               String?
+  googleId               String?        @unique
+  twoFactorEnabled       Boolean        @default(false)
+  twoFactorSecret        String?
+  resetPasswordToken     String?
+  resetPasswordExpires   DateTime?
+  name                   String?
+  avatar                 String?
+  preferredLanguage      String         @default("fr")
+  dateOfBirth            DateTime?
+  gender                 String?
+  emailVerified          Boolean        @default(false)
+  onboardingComplete     Boolean        @default(false)
+  refreshToken           String?
+  role                   String         @default("user")
+  isActive               Boolean        @default(true)
+  settings               Json?
+  lastActivity           DateTime?
+  interactionCount       Int            @default(0)
+  sessionCount           Int            @default(0)
+  churnRiskScore         Float?
+  churnRiskLevel         String?
+  lastChurnAnalysis      DateTime?
+  reEngagementSentAt     DateTime?
+  createdAt              DateTime       @default(now())
+  updatedAt              DateTime       @updatedAt
+  facebookId             String?        @unique
+  address                String?
+  city                   String?
+  zipCode                String?
+  country                String?
+  latitude               Float?
+  longitude              Float?
+  avatar3D               String?
+  coverPhoto             String?
+  isPublic               Boolean        @default(false)
+  receiveRecommendations Boolean        @default(true)
+  analyses               Analysis[]
+  chatHistories          ChatHistory[]
+  commentLikes           CommentLike[]
+  comments               Comment[]
+  following              Follower[]     @relation("follower")
+  followers              Follower[]     @relation("following")
+  likes                  Like[]
+  notifications          Notification[]
+  posts                  Post[]
+  routines               Routine[]
+  skinProfile            SkinProfile?
+  stories                Story[]
+  storyLikes             StoryLike[]
+  storyComments          StoryComment[]
+  subscription           Subscription?
+
+  @@map("users")
+}
+
+model Follower {
+  id          String   @id @default(uuid())
+  followerId  String
+  followingId String
+  createdAt   DateTime @default(now())
+  follower    User     @relation("follower", fields: [followerId], references: [id], onDelete: Cascade)
+  following   User     @relation("following", fields: [followingId], references: [id], onDelete: Cascade)
+
+  @@unique([followerId, followingId])
+  @@map("followers")
+}
+
+model Notification {
+  id        String   @id @default(uuid())
+  userId    String
+  title     String
+  message   String
+  type      String   @default("info")
+  isRead    Boolean  @default(false)
+  actionUrl String?
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("notifications")
+}
+
+model SkinProfile {
+  id              String    @id @default(uuid())
+  userId          String    @unique
+  skinType        String?
+  fitzpatrickType Int?
+  concerns        String[]
+  sensitivities   String[]
+  skinAge         Int?
+  healthScore     Int?
+  lastAnalysisAt  DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("skin_profiles")
+}
+
+model Analysis {
+  id              String   @id @default(uuid())
+  userId          String
+  images          String[]
+  questionnaire   Json?
+  results         Json?
+  healthScore     Int?
+  skinAge         Int?
+  conditions      String[]
+  recommendations Json?
+  status          String   @default("pending")
+  processingTime  Int?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("analyses")
+}
+
+model Routine {
+  id            String   @id @default(uuid())
+  userId        String
+  name          String
+  type          String
+  steps         Json
+  ingredients   String[]
+  frequency     String?
+  estimatedTime Int?
+  isAIGenerated Boolean  @default(false)
+  isActive      Boolean  @default(true)
+  notes         String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("routines")
+}
+
+model ChatHistory {
+  id                String   @id @default(uuid())
+  userId            String
+  message           String?
+  imageUrl          String?
+  modelUsed         String?
+  assistantResponse String?
+  messages          Json?
+  context           Json?
+  isPremium         Boolean  @default(false)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("chat_histories")
+}
+
+model Subscription {
+  id            String    @id @default(uuid())
+  userId        String    @unique
+  planId        String?
+  plan          String    @default("free")
+  status        String    @default("active")
+  amount        Float?
+  currency      String?   @default("TND")
+  paymentMethod String?
+  autoRenew     Boolean   @default(true)
+  startDate     DateTime  @default(now())
+  endDate       DateTime?
+  cancelledAt   DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("subscriptions")
+}
+
+model Post {
+  id        String    @id @default(uuid())
+  userId    String
+  media     String?
+  message   String
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  status    String    @default("published")
+  views     Int       @default(0)
+  impressions Int     @default(0)
+  comments  Comment[]
+  likes     Like[]
+  signTranslation SignTranslation?
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("posts")
+}
+
+model Like {
+  id        String   @id @default(uuid())
+  userId    String
+  postId    String
+  createdAt DateTime @default(now())
+  type      String   @default("like")
+  post      Post     @relation(fields: [postId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, postId])
+  @@map("likes")
+}
+
+model Comment {
+  id        String        @id @default(uuid())
+  userId    String
+  postId    String
+  comment   String
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+  parentId  String?
+  likes     CommentLike[]
+  parent    Comment?      @relation("CommentToComment", fields: [parentId], references: [id], onDelete: Cascade)
+  replies   Comment[]     @relation("CommentToComment")
+  post      Post          @relation(fields: [postId], references: [id], onDelete: Cascade)
+  user      User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("comments")
+}
+
+model CommentLike {
+  id        String   @id @default(uuid())
+  userId    String
+  commentId String
+  createdAt DateTime @default(now())
+  comment   Comment  @relation(fields: [commentId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, commentId])
+  @@map("comment_likes")
+}
+
+model DermatologyArticle {
+  id          String    @id @default(uuid())
+  title       String
+  url         String    @unique
+  source      String
+  summary     String
+  content     String
+  category    String
+  tags        String[]
+  imageUrl    String?
+  publishedAt DateTime?
+  crawledAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@index([source])
+  @@index([category])
+  @@index([crawledAt])
+  @@map("dermatology_articles")
+}
+
+model Story {
+  id              String         @id @default(uuid())
+  userId          String
+  mediaUrl        String
+  musicUrl        String?
+  musicTitle      String?
+  expiresAt       DateTime
+  createdAt       DateTime       @default(now())
+  isHighlight     Boolean        @default(false)
+  highlightTitle  String?        // Title for highlights grouping (e.g., "Vacation", "Friends")
+  highlightOrder  Int?           // Order of highlights display
+  user            User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  likes           StoryLike[]
+  comments        StoryComment[]
+
+  @@index([expiresAt])
+  @@index([userId, isHighlight])
+  @@map("stories")
+}
+
+model StoryLike {
+  id        String   @id @default(uuid())
+  userId    String
+  storyId   String
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  story     Story    @relation(fields: [storyId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, storyId])
+  @@map("story_likes")
+}
+
+model StoryComment {
+  id        String   @id @default(uuid())
+  userId    String
+  storyId   String
+  comment   String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  story     Story    @relation(fields: [storyId], references: [id], onDelete: Cascade)
+
+  @@map("story_comments")
+}
+
+model SignTranslation {
+  id          String   @id @default(uuid())
+  postId      String   @unique
+  transcript  String
+  language    String   @default("fr")
+  frames      Json
+  metadata    Json
+  status      String   @default("completed")
+  errorMessage String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  post        Post     @relation(fields: [postId], references: [id], onDelete: Cascade)
+
+  @@map("sign_translations")
+}
