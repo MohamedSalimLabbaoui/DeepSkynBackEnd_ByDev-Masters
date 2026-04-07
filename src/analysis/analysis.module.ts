@@ -4,12 +4,13 @@ import { AnalysisService } from './analysis.service';
 import { AnalysisController } from './analysis.controller';
 import { AnalysisTestController } from './analysis-test.controller';
 import { GeminiService } from './services/gemini.service';
-import { OllamaService } from './services/ollama.service';
+import { GrokService } from './services/grok.service';
 import { SupabaseService } from './services/supabase.service';
 import { PrismaModule } from '../prisma/prisma.module';
 import { SkinProfileModule } from '../skin-profile/skin-profile.module';
 import { NotificationModule } from '../notification/notification.module';
 import { SubscriptionModule } from '../subscription/subscription.module';
+import { DigitalTwinModule } from '../digital-twin/digital-twin.module';
 
 @Module({
   imports: [
@@ -18,9 +19,10 @@ import { SubscriptionModule } from '../subscription/subscription.module';
     SkinProfileModule,
     NotificationModule,
     SubscriptionModule,
+    DigitalTwinModule,
   ],
   controllers: [AnalysisController, AnalysisTestController],
-  providers: [AnalysisService, GeminiService, OllamaService, SupabaseService],
-  exports: [AnalysisService, GeminiService, OllamaService, SupabaseService],
+  providers: [AnalysisService, GeminiService, GrokService, SupabaseService],
+  exports: [AnalysisService, GeminiService, GrokService, SupabaseService],
 })
 export class AnalysisModule {}

@@ -23,9 +23,13 @@ import { SignTranslationModule } from './sign-translation/sign-translation.modul
 import { ContextualAnalysisModule } from './contextual-analysis/contextual-analysis.module';
 import { PredictiveRoutineModule } from './predictive-routine/predictive-routine.module';
 import { FaceVerificationModule } from './face-verification/face-verification.module';
+import { SharedModule } from './shared/shared.module';
+import { DigitalTwinModule } from './digital-twin/digital-twin.module';
+import { N8nModule } from './n8n/n8n.module';
 
 @Module({
   imports: [
+    SharedModule, // Add SharedModule here to make it available globally
     UsersModule,
     ConfigModule.forRoot({
       isGlobal: true,
@@ -53,6 +57,8 @@ import { FaceVerificationModule } from './face-verification/face-verification.mo
     ContextualAnalysisModule,
     PredictiveRoutineModule,
     FaceVerificationModule,
+    DigitalTwinModule,
+    N8nModule,
   ],
   controllers: [],
   providers: [],
