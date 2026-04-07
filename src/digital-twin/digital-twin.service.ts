@@ -17,6 +17,10 @@ interface GeminiResponse {
 @Injectable()
 export class DigitalTwinService {
   private readonly logger = new Logger(DigitalTwinService.name);
+  private readonly vertexApiKeys: string[];
+  private readonly vertexModels: string[];
+  private readonly vertexBaseUrl =
+    'https://aiplatform.googleapis.com/v1/publishers/google/models';
   private readonly geminiApiKeys: string[];
   private readonly geminiModels: string[];
   private readonly geminiBaseUrl =
@@ -27,6 +31,17 @@ export class DigitalTwinService {
     private rateLimiter: RateLimiterService,
     private cache: CacheService,
   ) {
+    this.vertexApiKeys = [
+      process.env.VERTEX_API_KEY,
+      process.env.VERTEX_API_KEY_2,
+      process.env.VERTEX_API_KEY_3,
+    ].filter((key): key is string => !!key && key.trim().length > 0);
+
+    this.vertexModels = [
+      process.env.VERTEX_PRIMARY_MODEL || 'gemini-2.5-pro',
+      process.env.VERTEX_FALLBACK_MODEL || 'gemini-2.0-flash',
+    ].filter((value, index, arr) => !!value && arr.indexOf(value) === index);
+
     this.geminiApiKeys = [
       process.env.GEMINI_API_KEY,
       process.env.GEMINI_API_KEY_2,
@@ -37,6 +52,12 @@ export class DigitalTwinService {
       process.env.GEMINI_PRIMARY_MODEL || 'gemini-2.5-flash',
       process.env.GEMINI_FALLBACK_MODEL || 'gemini-1.5-flash',
     ].filter((value, index, arr) => !!value && arr.indexOf(value) === index);
+
+    if (this.vertexApiKeys.length < 2) {
+      this.logger.warn(
+        'Digital Twin Vertex resilience is limited. Configure VERTEX_API_KEY and VERTEX_API_KEY_2.',
+      );
+    }
 
     if (this.geminiApiKeys.length < 2) {
       this.logger.warn(
@@ -51,11 +72,51 @@ export class DigitalTwinService {
     generationConfig: Record<string, any>,
     priority: 'high' | 'normal' | 'low' = 'normal',
   ): Promise<GeminiResponse> {
-    if (this.geminiApiKeys.length === 0) {
-      throw new Error('No Gemini API key configured');
+    if (this.vertexApiKeys.length === 0 && this.geminiApiKeys.length === 0) {
+      throw new Error('No Vertex/Gemini API key configured');
     }
 
     let lastError: unknown;
+
+    for (const model of this.vertexModels) {
+      for (let keyIndex = 0; keyIndex < this.vertexApiKeys.length; keyIndex++) {
+        const apiKey = this.vertexApiKeys[keyIndex];
+        const requestKey = `${queueKey}-vertex-${model}-k${keyIndex + 1}`;
+
+        try {
+          const response = await this.rateLimiter.queueRequest(
+            requestKey,
+            async () => {
+              const result = await fetch(
+                `${this.vertexBaseUrl}/${model}:generateContent?key=${apiKey}`,
+                {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                    contents: [{ parts: [{ text: prompt }] }],
+                    generationConfig,
+                  }),
+                },
+              );
+
+              if (!result.ok) {
+                throw new Error(`Vertex HTTP ${result.status}`);
+              }
+
+              return (await result.json()) as GeminiResponse;
+            },
+            priority,
+          );
+
+          return response as GeminiResponse;
+        } catch (error) {
+          lastError = error;
+          this.logger.warn(
+            `Vertex request failed (model=${model}, key#${keyIndex + 1}): ${(error as Error).message}`,
+          );
+        }
+      }
+    }
 
     for (const model of this.geminiModels) {
       for (let keyIndex = 0; keyIndex < this.geminiApiKeys.length; keyIndex++) {
