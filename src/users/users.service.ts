@@ -183,6 +183,82 @@ export class UsersService {
         });
     }
 
+    async searchCommunityProfiles(
+        viewerId: string,
+        q: string,
+        page: number = 1,
+        limit: number = 20,
+    ) {
+        const skip = (page - 1) * limit;
+        const search = q.trim();
+
+        // Keep search behavior explicit: no query => no search results.
+        if (!search) {
+            return {
+                data: [],
+                total: 0,
+                page,
+                limit,
+                totalPages: 0,
+            };
+        }
+
+        const where: Prisma.UserWhereInput = {
+            id: { not: viewerId },
+            isPublic: true,
+            isActive: true,
+            OR: [
+                { name: { contains: search, mode: 'insensitive' } },
+                { email: { contains: search, mode: 'insensitive' } },
+            ],
+        };
+
+        const [users, total, followed] = await Promise.all([
+            this.prisma.user.findMany({
+                where,
+                orderBy: { createdAt: 'desc' },
+                skip,
+                take: limit,
+                select: {
+                    id: true,
+                    name: true,
+                    email: true,
+                    avatar: true,
+                    isPublic: true,
+                    skinProfile: {
+                        select: {
+                            skinType: true,
+                        },
+                    },
+                    _count: {
+                        select: {
+                            followers: true,
+                            posts: true,
+                        },
+                    },
+                },
+            }),
+            this.prisma.user.count({ where }),
+            this.prisma.follower.findMany({
+                where: { followerId: viewerId },
+                select: { followingId: true },
+            }),
+        ]);
+
+        const followingSet = new Set(followed.map((f) => f.followingId));
+
+        return {
+            data: users.map((u) => ({
+                ...u,
+                isFollowing: followingSet.has(u.id),
+            })),
+            total,
+            page,
+            limit,
+            totalPages: Math.ceil(total / limit),
+        };
+    }
+
     async toggleFollow(followerId: string, followingId: string) {
         if (followerId === followingId) throw new Error("Vous ne pouvez pas vous suivre vous-même");
 

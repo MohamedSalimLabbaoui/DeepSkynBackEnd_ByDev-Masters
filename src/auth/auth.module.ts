@@ -9,6 +9,7 @@ import { GoogleAuthService } from './services/google-auth.service';
 import { FacebookAuthService } from './services/facebook-auth.service';
 import { RecaptchaService } from './services/recaptcha.service';
 import { PasswordResetService } from './services/password-reset.service';
+import { SignupVerificationService } from './services/signup-verification.service';
 import { KeycloakStrategy } from './strategies/keycloak.strategy';
 import { GoogleStrategy } from './strategies/google.strategy';
 import { FacebookStrategy } from './strategies/facebook.strategy';
@@ -18,12 +19,14 @@ import { GoogleAuthGuard } from './guards/google-auth.guard';
 import { FacebookAuthGuard } from './guards/facebook-auth.guard';
 import { RolesGuard } from './guards/roles.guard';
 import { PrismaModule } from '../prisma/prisma.module';
+import { MailModule } from '../mail/mail.module';
 
 @Module({
   imports: [
     PassportModule.register({ defaultStrategy: 'keycloak' }),
     ConfigModule,
     PrismaModule,
+    MailModule,
     JwtModule.registerAsync({
       imports: [ConfigModule],
       inject: [ConfigService],
@@ -41,6 +44,7 @@ import { PrismaModule } from '../prisma/prisma.module';
     FacebookAuthService,
     RecaptchaService,
     PasswordResetService,
+    SignupVerificationService,
     KeycloakStrategy,
     GoogleStrategy,
     FacebookStrategy,
@@ -57,6 +61,7 @@ import { PrismaModule } from '../prisma/prisma.module';
     FacebookAuthService,
     RecaptchaService,
     PasswordResetService,
+    SignupVerificationService,
     KeycloakAuthGuard,
     GoogleAuthGuard,
     FacebookAuthGuard,

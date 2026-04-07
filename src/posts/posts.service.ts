@@ -96,6 +96,50 @@ export class PostsService {
     };
   }
 
+  async findAllCommunityPosts(
+    page: number = 1,
+    limit: number = 20,
+    currentUserId?: string,
+  ): Promise<any> {
+    const skip = (page - 1) * limit;
+    const where: any = {
+      status: 'published',
+      user: { isPublic: true, isActive: true },
+    };
+
+    const [posts, total] = await Promise.all([
+      this.prisma.post.findMany({
+        where,
+        orderBy: { createdAt: 'desc' },
+        skip,
+        take: limit,
+        include: {
+          user: { select: { id: true, name: true, avatar: true, isPublic: true } },
+          _count: { select: { likes: true, comments: true } },
+          likes: currentUserId
+            ? { where: { userId: currentUserId }, select: { id: true, type: true } }
+            : false,
+        },
+      }),
+      this.prisma.post.count({ where }),
+    ]);
+
+    const postsWithLiked = posts.map((post: any) => ({
+      ...post,
+      isLiked: currentUserId ? post.likes?.length > 0 : false,
+      reaction: (currentUserId && post.likes?.length > 0) ? post.likes[0].type : null,
+      likes: undefined,
+    }));
+
+    return {
+      data: postsWithLiked,
+      total,
+      page,
+      limit,
+      totalPages: Math.ceil(total / limit),
+    };
+  }
+
   /**
    * Récupérer les posts d'un utilisateur
    */

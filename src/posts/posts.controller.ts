@@ -62,6 +62,21 @@ export class PostsController {
     return this.postsService.findAll(page || 1, limit || 20, userId);
   }
 
+  @Get('feed/all')
+  @ApiOperation({
+    summary: 'Récupérer le feed global',
+    description: 'Récupère tous les posts publiés (communauté) paginés',
+  })
+  @ApiQuery({ name: 'page', required: false, type: Number })
+  @ApiQuery({ name: 'limit', required: false, type: Number })
+  async findAllCommunityPosts(
+    @CurrentUser('sub') userId: string,
+    @Query('page') page?: number,
+    @Query('limit') limit?: number,
+  ) {
+    return this.postsService.findAllCommunityPosts(page || 1, limit || 20, userId);
+  }
+
   @Get('user/:userId')
   @ApiOperation({
     summary: "Posts d'un utilisateur",
