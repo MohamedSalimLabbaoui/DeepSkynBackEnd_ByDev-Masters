@@ -40,6 +40,13 @@ export class ChurnService implements OnModuleInit {
   private readonly mlDir: string;
   private pythonPath: string;
   private modelReady = false;
+  private readonly excludedRoles = [
+    'admin',
+    'ADMIN',
+    'realm-admin',
+    'super_admin',
+    'administrator',
+  ];
 
   // Fallback thresholds if Python model is not available
   private readonly FALLBACK_THRESHOLDS = {
@@ -53,8 +60,26 @@ export class ChurnService implements OnModuleInit {
     private readonly mailService: MailService,
     private readonly configService: ConfigService,
   ) {
-    this.mlDir = path.join(process.cwd(), 'ml');
-    this.pythonPath = this.configService.get<string>('PYTHON_PATH', 'python');
+    // Resolve ML artifacts relative to the service file so startup cwd does not break model loading.
+    this.mlDir = path.resolve(__dirname, '../../ml');
+    const configuredPythonPath = this.configService.get<string>('PYTHON_PATH');
+    const pythonCandidates = [
+      path.resolve(this.mlDir, '../../.venv/Scripts/python.exe'),
+      path.resolve(this.mlDir, '../../../.venv/Scripts/python.exe'),
+      path.resolve(process.cwd(), '.venv/Scripts/python.exe'),
+      path.resolve(process.cwd(), '../.venv/Scripts/python.exe'),
+    ];
+    const localVenvPython = pythonCandidates.find((candidate) =>
+      fs.existsSync(candidate),
+    );
+
+    if (configuredPythonPath) {
+      this.pythonPath = configuredPythonPath;
+    } else if (localVenvPython) {
+      this.pythonPath = localVenvPython;
+    } else {
+      this.pythonPath = 'python';
+    }
   }
 
   async onModuleInit() {
@@ -98,7 +123,10 @@ export class ChurnService implements OnModuleInit {
    */
   async analyzeAllUsers(): Promise<PredictionOutput> {
     const users = await this.prisma.user.findMany({
-      where: { isActive: true },
+      where: {
+        isActive: true,
+        role: { notIn: this.excludedRoles },
+      },
       select: {
         id: true,
         email: true,
@@ -121,20 +149,31 @@ export class ChurnService implements OnModuleInit {
 
     const now = new Date();
     const userInputs: UserChurnInput[] = users.map((user) => ({
-      id: user.id,
-      email: user.email,
-      name: user.name,
-      interactionCount: user.interactionCount,
+      accountAgeDays: Math.max(
+        0,
+        Math.floor(
+          (now.getTime() - user.createdAt.getTime()) / (1000 * 60 * 60 * 24),
+        ),
+      ),
+      // For users with no recorded activity, fallback to account age instead of an extreme 999 days.
+      // This avoids classifying all brand-new accounts as immediate critical churn.
       daysSinceLastActivity: user.lastActivity
         ? Math.floor(
             (now.getTime() - user.lastActivity.getTime()) /
               (1000 * 60 * 60 * 24),
           )
-        : 999,
+        : Math.max(
+            0,
+            Math.floor(
+              (now.getTime() - user.createdAt.getTime()) /
+                (1000 * 60 * 60 * 24),
+            ),
+          ),
+      id: user.id,
+      email: user.email,
+      name: user.name,
+      interactionCount: user.interactionCount,
       sessionCount: user.sessionCount,
-      accountAgeDays: Math.floor(
-        (now.getTime() - user.createdAt.getTime()) / (1000 * 60 * 60 * 24),
-      ),
     }));
 
     let predictions: PredictionResult[];
@@ -282,6 +321,7 @@ export class ChurnService implements OnModuleInit {
     const atRiskUsers = await this.prisma.user.findMany({
       where: {
         isActive: true,
+        role: { notIn: this.excludedRoles },
         churnRiskLevel: { in: ['high', 'critical'] },
         OR: [
           { reEngagementSentAt: null },
@@ -340,6 +380,15 @@ export class ChurnService implements OnModuleInit {
    * Obtenir le rapport de churn pour le dashboard admin
    */
   async getChurnStats() {
+    const activeUsersWhere = {
+      isActive: true,
+      role: { notIn: this.excludedRoles },
+    };
+    const analyzedWhere = {
+      ...activeUsersWhere,
+      lastChurnAnalysis: { not: null },
+    };
+
     const [
       totalUsers,
       analyzed,
@@ -348,18 +397,46 @@ export class ChurnService implements OnModuleInit {
       highRisk,
       criticalRisk,
       emailsToday,
+      avgRisk,
     ] = await Promise.all([
-      this.prisma.user.count({ where: { isActive: true } }),
-      this.prisma.user.count({ where: { lastChurnAnalysis: { not: null } } }),
-      this.prisma.user.count({ where: { churnRiskLevel: 'low' } }),
-      this.prisma.user.count({ where: { churnRiskLevel: 'medium' } }),
-      this.prisma.user.count({ where: { churnRiskLevel: 'high' } }),
-      this.prisma.user.count({ where: { churnRiskLevel: 'critical' } }),
+      this.prisma.user.count({ where: activeUsersWhere }),
+      this.prisma.user.count({ where: analyzedWhere }),
       this.prisma.user.count({
         where: {
+          ...analyzedWhere,
+          churnRiskLevel: 'low',
+        },
+      }),
+      this.prisma.user.count({
+        where: {
+          ...analyzedWhere,
+          churnRiskLevel: 'medium',
+        },
+      }),
+      this.prisma.user.count({
+        where: {
+          ...analyzedWhere,
+          churnRiskLevel: 'high',
+        },
+      }),
+      this.prisma.user.count({
+        where: {
+          ...analyzedWhere,
+          churnRiskLevel: 'critical',
+        },
+      }),
+      this.prisma.user.count({
+        where: {
+          ...activeUsersWhere,
           reEngagementSentAt: {
             gte: new Date(new Date().setHours(0, 0, 0, 0)),
           },
+        },
+      }),
+      this.prisma.user.aggregate({
+        where: analyzedWhere,
+        _avg: {
+          churnRiskScore: true,
         },
       }),
     ]);
@@ -377,6 +454,7 @@ export class ChurnService implements OnModuleInit {
       mediumRisk,
       highRisk,
       criticalRisk,
+      avgProbability: Number(avgRisk._avg.churnRiskScore || 0),
       emailsSentToday: emailsToday,
       lastAnalysis: lastAnalyzed?.lastChurnAnalysis?.toISOString() || null,
       modelReady: this.modelReady,
@@ -408,6 +486,10 @@ export class ChurnService implements OnModuleInit {
     }
 
     const now = new Date();
+    const accountAgeDays = Math.max(
+      0,
+      Math.floor((now.getTime() - user.createdAt.getTime()) / (1000 * 60 * 60 * 24)),
+    );
     const input: UserChurnInput = {
       id: user.id,
       email: user.email,
@@ -418,11 +500,9 @@ export class ChurnService implements OnModuleInit {
             (now.getTime() - user.lastActivity.getTime()) /
               (1000 * 60 * 60 * 24),
           )
-        : 999,
+        : accountAgeDays,
       sessionCount: user.sessionCount,
-      accountAgeDays: Math.floor(
-        (now.getTime() - user.createdAt.getTime()) / (1000 * 60 * 60 * 24),
-      ),
+      accountAgeDays,
     };
 
     let prediction: PredictionResult;
@@ -463,6 +543,7 @@ export class ChurnService implements OnModuleInit {
     return this.prisma.user.findMany({
       where: {
         isActive: true,
+        role: { notIn: this.excludedRoles },
         churnRiskLevel: { in: ['high', 'critical'] },
       },
       select: {
