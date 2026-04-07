@@ -28,6 +28,13 @@ export interface PlanDetails {
 @Injectable()
 export class SubscriptionService {
   private readonly logger = new Logger(SubscriptionService.name);
+  private readonly excludedRoles = [
+    'admin',
+    'ADMIN',
+    'realm-admin',
+    'super_admin',
+    'administrator',
+  ];
 
   private static readonly FREE_PLAN_CODE = 'free';
   private static readonly PREMIUM_MONTHLY_PLAN_CODE = 'premium';
@@ -222,6 +229,15 @@ export class SubscriptionService {
     private readonly notificationService: NotificationService,
   ) {}
 
+  private async isExcludedUser(userId: string): Promise<boolean> {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { role: true },
+    });
+
+    return !!user && this.excludedRoles.includes(String(user.role || ''));
+  }
+
   async adminListPlans() {
     return this.prisma.subscriptionPlan.findMany({
       orderBy: [{ isActive: 'desc' }, { price: 'asc' }],
@@ -292,6 +308,19 @@ export class SubscriptionService {
       };
     };
   }> {
+    if (await this.isExcludedUser(userId)) {
+      const subscription = await this.findOrCreateByUserId(userId);
+      return {
+        isPremium: true,
+        subscription,
+        quotas: {
+          analyses: { used: 0, limit: null, remaining: null, resetsAt: null },
+          aiRoutines: { used: 0, limit: null, remaining: null, resetsAt: null },
+          chatMessages: { used: 0, limit: null, remaining: null, resetsAt: null },
+        },
+      };
+    }
+
     const subscription = await this.findOrCreateByUserId(userId);
     const isPremium = await this.isPremium(userId);
 
@@ -668,6 +697,10 @@ export class SubscriptionService {
    * Vérifier si un utilisateur a un plan premium actif
    */
   async isPremium(userId: string): Promise<boolean> {
+    if (await this.isExcludedUser(userId)) {
+      return true;
+    }
+
     try {
       const subscription = await this.findByUserId(userId);
 
@@ -827,7 +860,15 @@ export class SubscriptionService {
     byStatus: Record<string, number>;
     revenue: { total: number; currency: string };
   }> {
-    const subscriptions = await this.prisma.subscription.findMany();
+    const subscriptions = await this.prisma.subscription.findMany({
+      where: {
+        user: {
+          role: {
+            notIn: this.excludedRoles,
+          },
+        },
+      },
+    });
 
     const byPlan: Record<string, number> = {};
 
@@ -869,7 +910,11 @@ export class SubscriptionService {
     limit?: number;
     offset?: number;
   }): Promise<{ subscriptions: Subscription[]; total: number }> {
-    const where: any = {};
+    const where: any = {
+      user: {
+        role: { notIn: this.excludedRoles },
+      },
+    };
 
     if (options?.plan) {
       where.plan = options.plan;
@@ -906,11 +951,21 @@ export class SubscriptionService {
   async checkAndExpireSubscriptions(): Promise<number> {
     const now = new Date();
 
+    const adminUserIds = await this.prisma.user.findMany({
+      where: {
+        role: { in: this.excludedRoles },
+      },
+      select: { id: true },
+    });
+
     const expired = await this.prisma.subscription.updateMany({
       where: {
         status: SubscriptionStatus.ACTIVE,
         endDate: { lt: now },
         plan: { not: SubscriptionService.FREE_PLAN_CODE },
+        userId: {
+          notIn: adminUserIds.map((u) => u.id),
+        },
       },
       data: {
         status: SubscriptionStatus.EXPIRED,
