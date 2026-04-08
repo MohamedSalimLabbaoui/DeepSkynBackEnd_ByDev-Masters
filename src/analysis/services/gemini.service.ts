@@ -45,6 +45,28 @@ export interface GeminiResponse {
   }[];
 }
 
+export interface CosmeticProductAnalysisResult {
+  name: string;
+  brand: string;
+  category: string;
+  ingredients: string[];
+  benefits: {
+    title: string;
+    description: string;
+    matchPercentage: number;
+  }[];
+  concerns: {
+    title: string;
+    description: string;
+    severity: 'low' | 'medium' | 'high';
+  }[];
+  skinTypeCompatibility: {
+    skinType: string;
+    compatibility: number;
+  }[];
+  recommendation: string;
+}
+
 @Injectable()
 export class GeminiService {
   private readonly logger = new Logger(GeminiService.name);
@@ -709,6 +731,163 @@ Rép:français,utile,pro.`);
       }
       
       throw error;
+    }
+  }
+
+  /**
+   * Analyze a cosmetic product image and return structured compatibility details.
+   */
+  async analyzeCosmeticProductImage(
+    base64Image: string,
+    skinProfile?: {
+      skinType?: string;
+      concerns?: string[];
+      sensitivities?: string[];
+    },
+    mimeType: string = 'image/jpeg',
+  ): Promise<CosmeticProductAnalysisResult> {
+    const prompt = compressWhitespace(`
+Dermatology expert for cosmetic products.
+Analyze this product image and return ONLY valid JSON.
+User profile:
+- skinType: ${skinProfile?.skinType || 'unknown'}
+- concerns: ${(skinProfile?.concerns || []).join(', ') || 'none'}
+- sensitivities: ${(skinProfile?.sensitivities || []).join(', ') || 'none'}
+
+Required JSON schema:
+{
+  "name": "string",
+  "brand": "string",
+  "category": "string",
+  "ingredients": ["string"],
+  "benefits": [{"title":"string","description":"string","matchPercentage":0}],
+  "concerns": [{"title":"string","description":"string","severity":"low|medium|high"}],
+  "skinTypeCompatibility": [{"skinType":"Dry|Oily|Combination|Sensitive|Normal","compatibility":0}],
+  "recommendation": "string"
+}
+
+Rules:
+- identify the most likely product name and brand from packaging text;
+- infer ingredients only from visible/legible text; if unclear use empty array;
+- compatibility and recommendation must be specific to the provided user profile;
+- return JSON only, no markdown and no extra text.
+`);
+
+    const requestBody = {
+      contents: [
+        {
+          parts: [
+            { text: prompt },
+            {
+              inlineData: {
+                mimeType,
+                data: base64Image,
+              },
+            },
+          ],
+        },
+      ],
+      generationConfig: {
+        temperature: 0.2,
+        topK: 32,
+        topP: 1,
+        maxOutputTokens: 4096,
+      },
+    };
+
+    try {
+      const response = await this.requestGeminiWithFallback(requestBody, {
+        timeout: 45000,
+      });
+
+      const textResponse = response.candidates[0]?.content?.parts[0]?.text;
+      if (!textResponse) {
+        throw new Error('No response from Gemini API');
+      }
+
+      return this.parseCosmeticProductAnalysis(textResponse);
+    } catch (error) {
+      this.logger.error('Failed cosmetic product analysis', error);
+      throw error;
+    }
+  }
+
+  private parseCosmeticProductAnalysis(
+    textResponse: string,
+  ): CosmeticProductAnalysisResult {
+    try {
+      const jsonMatch = textResponse.match(/\{[\s\S]*\}/);
+      if (!jsonMatch) {
+        throw new Error('No JSON found in product analysis response');
+      }
+
+      const parsed = JSON.parse(jsonMatch[0]);
+
+      const benefits = Array.isArray(parsed.benefits)
+        ? parsed.benefits
+            .filter((item: any) => item && (item.title || item.description))
+            .map((item: any) => ({
+              title: String(item.title || 'Benefit'),
+              description: String(item.description || ''),
+              matchPercentage: Math.max(
+                0,
+                Math.min(100, Number(item.matchPercentage ?? 0) || 0),
+              ),
+            }))
+        : [];
+
+      const concerns = Array.isArray(parsed.concerns)
+        ? parsed.concerns
+            .filter((item: any) => item && (item.title || item.description))
+            .map((item: any) => {
+              const severityValue = String(item.severity || 'low').toLowerCase();
+              const severity: 'low' | 'medium' | 'high' =
+                severityValue === 'high'
+                  ? 'high'
+                  : severityValue === 'medium'
+                    ? 'medium'
+                    : 'low';
+
+              return {
+                title: String(item.title || 'Concern'),
+                description: String(item.description || ''),
+                severity,
+              };
+            })
+        : [];
+
+      const compatibility = Array.isArray(parsed.skinTypeCompatibility)
+        ? parsed.skinTypeCompatibility
+            .filter((item: any) => item && item.skinType)
+            .map((item: any) => ({
+              skinType: String(item.skinType),
+              compatibility: Math.max(
+                0,
+                Math.min(100, Number(item.compatibility ?? 0) || 0),
+              ),
+            }))
+        : [];
+
+      return {
+        name: String(parsed.name || 'Unknown Product'),
+        brand: String(parsed.brand || 'Unknown Brand'),
+        category: String(parsed.category || 'Cosmetics'),
+        ingredients: Array.isArray(parsed.ingredients)
+          ? parsed.ingredients
+              .map((item: any) => String(item).trim())
+              .filter((item: string) => item.length > 0)
+          : [],
+        benefits,
+        concerns,
+        skinTypeCompatibility: compatibility,
+        recommendation: String(
+          parsed.recommendation ||
+            'Recommendation unavailable. Please verify ingredients manually.',
+        ),
+      };
+    } catch (error) {
+      this.logger.error('Failed to parse cosmetic analysis response', error);
+      throw new Error('Failed to parse cosmetic analysis response');
     }
   }
 }
