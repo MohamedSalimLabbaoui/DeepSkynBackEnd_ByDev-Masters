@@ -36,7 +36,7 @@ export class CouponsController {
 
   @Post('admin')
   @UseGuards(KeycloakAuthGuard, RolesGuard)
-  @Roles('user')
+  @Roles('admin')
   async adminCreateCoupon(@Body() dto: CreateCouponDto) {
     return this.couponsService.adminCreateCoupon(dto);
   }

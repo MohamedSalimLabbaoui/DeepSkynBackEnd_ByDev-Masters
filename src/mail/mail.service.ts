@@ -147,6 +147,32 @@ export class MailService {
     }
   }
 
+  async sendReclamationProcessedEmail(
+    to: string,
+    userName: string,
+  ): Promise<void> {
+    const mailOptions: nodemailer.SendMailOptions = {
+      from: this.configService.get<string>(
+        'MAIL_FROM',
+        '"DeepSkyn" <noreply@deepskyn.com>',
+      ),
+      to,
+      subject: 'DeepSkyn - Votre reclamation a ete traitee',
+      html: this.getReclamationProcessedTemplate(userName),
+    };
+
+    try {
+      await this.transporter.sendMail(mailOptions);
+      this.logger.log(`Email de traitement reclamation envoye a ${to}`);
+    } catch (error) {
+      this.logger.error(
+        `Erreur lors de l'envoi de l'email reclamation a ${to}`,
+        error.stack,
+      );
+      throw new Error("Impossible d'envoyer l'email de reclamation");
+    }
+  }
+
   /**
    * Template HTML pour l'email de réinitialisation
    */
@@ -472,6 +498,47 @@ export class MailService {
               Vous recevez cet email car vous avez un compte DeepSkyn.
               <a href="${frontendUrl}/settings/notifications" style="color: #667eea;">Gérer mes préférences</a>
             </p>
+          </td>
+        </tr>
+      </table>
+    </body>
+    </html>
+    `;
+  }
+
+  private getReclamationProcessedTemplate(userName: string): string {
+    return `
+    <!DOCTYPE html>
+    <html lang="fr">
+    <head>
+      <meta charset="UTF-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    </head>
+    <body style="margin:0; padding:0; font-family:'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color:#f4f7fa;">
+      <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:600px; margin:40px auto; background:#ffffff; border-radius:12px; overflow:hidden; box-shadow:0 4px 12px rgba(0,0,0,0.12);">
+        <tr>
+          <td style="background:linear-gradient(135deg, #f59e0b 0%, #ea580c 100%); padding:36px 30px; text-align:center;">
+            <h1 style="color:#ffffff; margin:0; font-size:28px; font-weight:700;">DeepSkyn</h1>
+            <p style="color:rgba(255,255,255,0.95); margin:8px 0 0; font-size:14px;">Suivi reclamation</p>
+          </td>
+        </tr>
+        <tr>
+          <td style="padding:34px 30px;">
+            <h2 style="color:#111827; margin:0 0 14px; font-size:22px;">Votre reclamation a ete traitee</h2>
+            <p style="color:#4b5563; font-size:16px; line-height:1.6; margin:0 0 18px;">
+              Bonjour <strong>${userName || 'utilisateur'}</strong>,
+            </p>
+            <p style="color:#4b5563; font-size:16px; line-height:1.6; margin:0;">
+              Nous vous confirmons que votre reclamation a ete traitee par notre equipe.
+            </p>
+            <p style="color:#6b7280; font-size:14px; line-height:1.6; margin:18px 0 0;">
+              Merci pour votre patience et votre confiance.
+            </p>
+          </td>
+        </tr>
+        <tr>
+          <td style="background:#f8fafc; padding:20px 30px; text-align:center;">
+            <p style="color:#9ca3af; font-size:12px; margin:0;">2026 DeepSkyn. Tous droits reserves.</p>
           </td>
         </tr>
       </table>

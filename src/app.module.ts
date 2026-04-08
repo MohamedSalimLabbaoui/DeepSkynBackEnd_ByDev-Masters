@@ -26,6 +26,7 @@ import { FaceVerificationModule } from './face-verification/face-verification.mo
 import { SharedModule } from './shared/shared.module';
 import { DigitalTwinModule } from './digital-twin/digital-twin.module';
 import { N8nModule } from './n8n/n8n.module';
+import { AdminBiModule } from './admin-bi/admin-bi.module';
 
 @Module({
   imports: [
@@ -59,6 +60,7 @@ import { N8nModule } from './n8n/n8n.module';
     FaceVerificationModule,
     DigitalTwinModule,
     N8nModule,
+    AdminBiModule,
   ],
   controllers: [],
   providers: [],

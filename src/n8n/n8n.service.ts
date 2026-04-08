@@ -2,12 +2,17 @@ import { BadGatewayException, Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import axios from 'axios';
 import { CreateReclamationDto } from './dto/create-reclamation.dto';
+import { ProcessReclamationDto } from './dto/process-reclamation.dto';
+import { MailService } from '../mail/mail.service';
 
 @Injectable()
 export class N8nService {
 	private readonly logger = new Logger(N8nService.name);
 
-	constructor(private readonly configService: ConfigService) {}
+	constructor(
+		private readonly configService: ConfigService,
+		private readonly mailService: MailService,
+	) {}
 
 	private getReclamationWebhookUrls(): string[] {
 		const directWebhookUrl = this.configService.get<string>(
@@ -82,5 +87,16 @@ export class N8nService {
 		throw new BadGatewayException(
 			`Impossible de declencher le workflow de reclamation pour le moment (${lastErrorMessage}).`,
 		);
+	}
+
+	async sendProcessedReclamationEmail(payload: ProcessReclamationDto) {
+		const userName = payload.nom?.trim() || 'utilisateur';
+
+		await this.mailService.sendReclamationProcessedEmail(payload.email, userName);
+
+		return {
+			success: true,
+			message: 'Email de traitement reclamation envoye.',
+		};
 	}
 }
