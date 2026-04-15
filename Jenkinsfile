@@ -6,15 +6,20 @@ pipeline {
     IMAGE_TAG  = "${env.GIT_COMMIT[0..7]}"
   }
 
-  tools {
-    nodejs 'NodeJS-20'  // must match name in Jenkins → Tools config
-  }
-
   stages {
 
     stage('Checkout') {
       steps {
         checkout scm
+      }
+    }
+
+    stage('Verify Node Runtime') {
+      steps {
+        sh '''
+          node --version
+          npm --version
+        '''
       }
     }
 
