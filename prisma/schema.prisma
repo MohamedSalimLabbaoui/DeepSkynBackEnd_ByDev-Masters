@@ -72,8 +72,69 @@ model User {
   storyLikes             StoryLike[]
   subscription           Subscription?
   weatherLogs            WeatherLog[]
+  productScans           ProductScan[]
+  userProducts           UserProduct[]
+  productComparisons     ProductComparison[]
 
   @@map("users")
+}
+
+model ProductScan {
+  id                    String   @id @default(uuid())
+  userId                String
+  productName           String
+  brand                 String?
+  category              String?
+  ingredients           String?
+  benefits              String?
+  concerns              String?
+  skinTypeCompatibility String?
+  recommendation        String?
+  imageUrl              String?
+  qrCode                String?
+  analysisResult        String?
+  rating                Int?
+  review                String?
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+  user                  User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userProducts          UserProduct[]
+
+  @@index([userId, createdAt])
+  @@map("product_scans")
+}
+
+model UserProduct {
+  id           String      @id @default(uuid())
+  userId       String
+  productName  String
+  brand        String?
+  category     String
+  categoryType String?
+  ingredients  String?
+  imageUrl     String?
+  productData  String?
+  productScanId String?
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+  user         User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  productScan  ProductScan? @relation(fields: [productScanId], references: [id], onDelete: SetNull)
+
+  @@index([userId, category])
+  @@map("user_products")
+}
+
+model ProductComparison {
+  id             String   @id @default(uuid())
+  userId         String
+  productIds     String[]
+  comparisonData String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@map("product_comparisons")
 }
 
 model Follower {

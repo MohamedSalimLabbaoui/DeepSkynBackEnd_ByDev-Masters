@@ -27,6 +27,7 @@ import { SharedModule } from './shared/shared.module';
 import { DigitalTwinModule } from './digital-twin/digital-twin.module';
 import { N8nModule } from './n8n/n8n.module';
 import { AdminBiModule } from './admin-bi/admin-bi.module';
+import { ProductScanModule } from './product-scan/product-scan.module';
 
 @Module({
   imports: [
@@ -61,6 +62,7 @@ import { AdminBiModule } from './admin-bi/admin-bi.module';
     DigitalTwinModule,
     N8nModule,
     AdminBiModule,
+    ProductScanModule,
   ],
   controllers: [],
   providers: [],

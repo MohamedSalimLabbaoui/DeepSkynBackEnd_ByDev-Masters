@@ -52,8 +52,14 @@ interface GeminiResponse {
 @Injectable()
 export class PredictiveRoutineService {
   private readonly logger = new Logger(PredictiveRoutineService.name);
-  private readonly apiKey: string;
-  private readonly apiUrl: string;
+  private readonly vertexApiKeys: string[];
+  private readonly vertexModels: string[];
+  private readonly vertexBaseUrl =
+    'https://aiplatform.googleapis.com/v1/publishers/google/models';
+  private readonly geminiApiKeys: string[];
+  private readonly geminiModels: string[];
+  private readonly geminiBaseUrl =
+    'https://generativelanguage.googleapis.com/v1beta/models';
   private readonly grokService: GrokService;
   private readonly maxRetries = 3;
   private readonly retryDelay = 2000;
@@ -63,10 +69,161 @@ export class PredictiveRoutineService {
     private readonly config: ConfigService,
     private readonly digitalTwinService: DigitalTwinService,
   ) {
-    this.apiKey = this.config.get<string>('GEMINI_API_KEY');
-    this.apiUrl =
-      'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent';
+    this.vertexApiKeys = this.loadApiKeys('VERTEX_API_KEY');
+    this.vertexModels = [
+      this.config.get<string>('VERTEX_PRIMARY_MODEL') || 'gemini-2.5-pro',
+      this.config.get<string>('VERTEX_FALLBACK_MODEL') || 'gemini-2.0-flash',
+    ].filter((value, index, arr) => !!value && arr.indexOf(value) === index);
+
+    this.geminiApiKeys = this.loadApiKeys('GEMINI_API_KEY');
+    this.geminiModels = [
+      this.config.get<string>('GEMINI_PRIMARY_MODEL') || 'gemini-2.5-flash',
+      this.config.get<string>('GEMINI_FALLBACK_MODEL') || 'gemini-1.5-flash',
+    ].filter((value, index, arr) => !!value && arr.indexOf(value) === index);
+
+    if (this.vertexApiKeys.length < 2) {
+      this.logger.warn(
+        'Predictive routine Vertex resilience is limited. Configure VERTEX_API_KEY and VERTEX_API_KEY_2.',
+      );
+    }
+
+    if (this.geminiApiKeys.length < 2) {
+      this.logger.warn(
+        'Predictive routine has limited Gemini resilience. Configure GEMINI_API_KEY and GEMINI_API_KEY_2.',
+      );
+    }
+
     this.grokService = new GrokService(config);
+  }
+
+  private loadApiKeys(baseName: string): string[] {
+    const keys = [
+      this.config.get<string>(baseName),
+      this.config.get<string>(`${baseName}_2`),
+      this.config.get<string>(`${baseName}_3`),
+    ].filter((key): key is string => !!key && key.trim().length > 0);
+
+    return Array.from(new Set(keys));
+  }
+
+  private isRetryableStatus(status?: number): boolean {
+    return status === 429 || status === 500 || status === 503;
+  }
+
+  private async requestVertexRoutine(prompt: string): Promise<string> {
+    if (this.vertexApiKeys.length === 0) {
+      throw new Error('No Vertex AI API key configured');
+    }
+
+    for (const model of this.vertexModels) {
+      for (let keyIndex = 0; keyIndex < this.vertexApiKeys.length; keyIndex++) {
+        const apiKey = this.vertexApiKeys[keyIndex];
+        const url = `${this.vertexBaseUrl}/${model}:generateContent?key=${apiKey}`;
+
+        for (let attempt = 1; attempt <= this.maxRetries; attempt++) {
+          try {
+            const response = await axios.post<GeminiResponse>(
+              url,
+              {
+                contents: [{ parts: [{ text: prompt }] }],
+                generationConfig: {
+                  temperature: 0.7,
+                  topK: 40,
+                  topP: 0.95,
+                  maxOutputTokens: 4096,
+                },
+              },
+              {
+                headers: { 'Content-Type': 'application/json' },
+                timeout: 60000,
+              },
+            );
+
+            const textResponse = response.data.candidates[0]?.content?.parts[0]?.text;
+            if (textResponse) {
+              return textResponse;
+            }
+          } catch (error) {
+            const axiosError = error as AxiosError;
+            const status = axiosError.response?.status;
+            this.logger.warn(
+              `Vertex routine failed (model=${model}, key#${keyIndex + 1}, status=${status ?? 'n/a'}, attempt=${attempt}/${this.maxRetries})`,
+            );
+
+            if (this.isRetryableStatus(status) && attempt < this.maxRetries) {
+              await this.sleep(this.retryDelay * attempt);
+              continue;
+            }
+          }
+        }
+      }
+    }
+
+    throw new Error('All Vertex model/key candidates failed');
+  }
+
+  private async requestGeminiRoutine(prompt: string): Promise<string> {
+    if (this.vertexApiKeys.length === 0 && this.geminiApiKeys.length === 0) {
+      throw new Error('No Vertex/Gemini API key configured');
+    }
+
+    if (this.vertexApiKeys.length > 0) {
+      try {
+        return await this.requestVertexRoutine(prompt);
+      } catch (error) {
+        this.logger.warn('Vertex routine failed, trying Gemini fallback', error);
+      }
+    }
+
+    if (this.geminiApiKeys.length === 0) {
+      throw new Error('No Gemini API key configured');
+    }
+
+    for (const model of this.geminiModels) {
+      for (let keyIndex = 0; keyIndex < this.geminiApiKeys.length; keyIndex++) {
+        const apiKey = this.geminiApiKeys[keyIndex];
+        const url = `${this.geminiBaseUrl}/${model}:generateContent?key=${apiKey}`;
+
+        for (let attempt = 1; attempt <= this.maxRetries; attempt++) {
+          try {
+            const response = await axios.post<GeminiResponse>(
+              url,
+              {
+                contents: [{ parts: [{ text: prompt }] }],
+                generationConfig: {
+                  temperature: 0.7,
+                  topK: 40,
+                  topP: 0.95,
+                  maxOutputTokens: 4096,
+                },
+              },
+              {
+                headers: { 'Content-Type': 'application/json' },
+                timeout: 60000,
+              },
+            );
+
+            const textResponse = response.data.candidates[0]?.content?.parts[0]?.text;
+            if (textResponse) {
+              return textResponse;
+            }
+          } catch (error) {
+            const axiosError = error as AxiosError;
+            const status = axiosError.response?.status;
+            this.logger.warn(
+              `Gemini routine failed (model=${model}, key#${keyIndex + 1}, status=${status ?? 'n/a'}, attempt=${attempt}/${this.maxRetries})`,
+            );
+
+            if (this.isRetryableStatus(status) && attempt < this.maxRetries) {
+              await this.sleep(this.retryDelay * attempt);
+              continue;
+            }
+          }
+        }
+      }
+    }
+
+    throw new Error('All Gemini model/key candidates failed');
   }
 
   /**
@@ -178,7 +335,8 @@ export class PredictiveRoutineService {
         confidence: twinData.confidence, // 🆕 Include confidence
       };
     } catch (error) {
-      this.logger.error(`Error generating predictive routine: ${error.message}`, error.stack);
+      const err = error as Error;
+      this.logger.error(`Error generating predictive routine: ${err.message}`, err.stack);
       
       // Fallback: return a static routine based on skin type
       const fallbackRoutine = this.getFallbackRoutine(analysisResult.skinType);
@@ -215,7 +373,7 @@ export class PredictiveRoutineService {
         recentSnapshots: snapshots.slice(0, 3), // Last 3 snapshots
       };
     } catch (error) {
-      this.logger.warn(`Could not fetch Digital Twin data: ${error.message}`);
+      this.logger.warn(`Could not fetch Digital Twin data: ${(error as Error).message}`);
       return {
         enabled: false,
         confidence: 0,
@@ -245,7 +403,7 @@ export class PredictiveRoutineService {
       const data = await response.json();
       return data;
     } catch (error) {
-      this.logger.warn(`Weather API failed: ${error.message}, using default data`);
+      this.logger.warn(`Weather API failed: ${(error as Error).message}, using default data`);
       
       // Return default weather data
       return {
@@ -284,7 +442,7 @@ export class PredictiveRoutineService {
 
       return { cyclePhase, products };
     } catch (error) {
-      this.logger.warn(`Error fetching user profile: ${error.message}`);
+      this.logger.warn(`Error fetching user profile: ${(error as Error).message}`);
       return { cyclePhase: null, products: null };
     }
   }
@@ -296,7 +454,7 @@ export class PredictiveRoutineService {
     products: string[] | null,
     twinData?: any, // 🆕 Digital Twin data
   ): Promise<GeneratedRoutine> {
-    if (!this.apiKey) {
+    if (this.geminiApiKeys.length === 0) {
       this.logger.warn('Gemini API not configured, using fallback');
       return this.getFallbackRoutine(analysisResult.skinType);
     }
@@ -339,26 +497,7 @@ ${twinData?.enabled ? 'Utilise données Twin pour routine optimisée.' : ''}`);
 
       this.logger.log(`Calling Gemini API with compressed prompt (Twin: ${twinData?.enabled || false})...`);
 
-      const response = await this.makeRequestWithRetry(() =>
-        axios.post<GeminiResponse>(
-          `${this.apiUrl}?key=${this.apiKey}`,
-          {
-            contents: [{ parts: [{ text: prompt }] }],
-            generationConfig: {
-              temperature: 0.7,
-              topK: 40,
-              topP: 0.95,
-              maxOutputTokens: 4096,
-            },
-          },
-          {
-            headers: { 'Content-Type': 'application/json' },
-            timeout: 60000,
-          },
-        ),
-      );
-
-      const textResponse = response.data.candidates[0]?.content?.parts[0]?.text;
+      const textResponse = await this.requestGeminiRoutine(prompt);
 
       if (!textResponse) {
         throw new Error('No response from Gemini API');
@@ -392,7 +531,8 @@ ${twinData?.enabled ? 'Utilise données Twin pour routine optimisée.' : ''}`);
       this.logger.log('Gemini AI routine generated successfully');
       return routine;
     } catch (error) {
-      this.logger.error(`Gemini API failed: ${error.message}, trying OpenRouter fallback`, error.stack);
+      const err = error as Error;
+      this.logger.error(`Gemini API failed: ${err.message}, trying OpenRouter fallback`, err.stack);
       
       try {
         const isGrokAvailable = await this.grokService.isAvailable();
@@ -695,9 +835,10 @@ Français, 7 jours.`);
         message: 'Routines matin et soir créées et activées avec succès',
       };
     } catch (error) {
+      const err = error as Error;
       this.logger.error(
-        `Error validating routine: ${error.message}`,
-        error.stack,
+        `Error validating routine: ${err.message}`,
+        err.stack,
       );
 
       if (error instanceof HttpException) {

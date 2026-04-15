@@ -401,81 +401,23 @@ Pour un service prioritaire, pensez à notre abonnement Premium !`;
     totalMessages: number;
     premiumChats: number;
     averageMessagesPerChat: number;
-    totalConversations: number;
-    activeUsers: number;
-    avgMessagesPerChat: number;
-    dailyStats: Array<{ date: string; count: number }>;
-    topTopics: Array<{ topic: string; count: number }>;
   }> {
     const chats = await this.prisma.chatHistory.findMany();
-    const start30 = new Date();
-    start30.setDate(start30.getDate() - 30);
-
-    const activeUsers = await this.prisma.chatHistory.groupBy({
-      by: ['userId'],
-      where: { updatedAt: { gte: start30 } },
-    });
 
     let totalMessages = 0;
-    const dailyCounter: Record<string, number> = {};
-    const topicCounter: Record<string, number> = {};
-
-    const addTopic = (text: string) => {
-      const tokens = text
-        .toLowerCase()
-        .replace(/[^a-z0-9\u00C0-\u017F\u0600-\u06FF\s]/g, ' ')
-        .split(/\s+/)
-        .filter((token) => token.length >= 4);
-      for (const token of tokens) {
-        topicCounter[token] = (topicCounter[token] || 0) + 1;
-      }
-    };
-
     for (const chat of chats) {
       const messages = chat.messages as unknown as ChatMessage[];
       if (Array.isArray(messages)) {
         totalMessages += messages.length;
-        for (const message of messages) {
-          const dateValue = message?.timestamp
-            ? new Date(message.timestamp)
-            : chat.updatedAt;
-          if (Number.isNaN(dateValue.getTime())) {
-            continue;
-          }
-
-          const dayKey = dateValue.toISOString().slice(0, 10);
-          dailyCounter[dayKey] = (dailyCounter[dayKey] || 0) + 1;
-
-          if (message?.role === MessageRole.USER && typeof message.content === 'string') {
-            addTopic(message.content);
-          }
-        }
       }
     }
-
-    const dailyStats = Object.entries(dailyCounter)
-      .sort((a, b) => a[0].localeCompare(b[0]))
-      .slice(-14)
-      .map(([date, count]) => ({ date, count }));
-
-    const topTopics = Object.entries(topicCounter)
-      .sort((a, b) => b[1] - a[1])
-      .slice(0, 8)
-      .map(([topic, count]) => ({ topic, count }));
-
-    const averageMessagesPerChat =
-      chats.length > 0 ? Math.round(totalMessages / chats.length) : 0;
 
     return {
       totalChats: chats.length,
       totalMessages,
       premiumChats: chats.filter((c) => c.isPremium).length,
-      averageMessagesPerChat,
-      totalConversations: chats.length,
-      activeUsers: activeUsers.length,
-      avgMessagesPerChat: averageMessagesPerChat,
-      dailyStats,
-      topTopics,
+      averageMessagesPerChat:
+        chats.length > 0 ? Math.round(totalMessages / chats.length) : 0,
     };
   }
 }

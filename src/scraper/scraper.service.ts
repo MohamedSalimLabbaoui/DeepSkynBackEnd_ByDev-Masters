@@ -123,8 +123,7 @@ export class ScraperService {
             const bodyText = document.body.innerText;
 
             // Récupérer le titre principal du produit
-            const title =
-              document.querySelector('h1, h2')?.textContent?.trim() || '';
+            const title = document.querySelector('h1, h2')?.textContent?.trim() || '';
             if (title) {
               attrs['title'] = title;
             }

@@ -104,6 +104,7 @@ export class UsersController {
         return this.usersService.toggleFollow(followerId, followingId);
     }
 
+
     @Patch('admin/:id/status')
     @UseGuards(RolesGuard)
     @Roles('admin')

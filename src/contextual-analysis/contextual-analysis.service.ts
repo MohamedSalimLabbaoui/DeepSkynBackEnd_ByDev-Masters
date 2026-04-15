@@ -48,18 +48,169 @@ export interface AlertResult {
 @Injectable()
 export class ContextualAnalysisService {
   private readonly logger = new Logger(ContextualAnalysisService.name);
-  private readonly geminiApiKey: string;
-  private readonly geminiApiUrl: string;
+  private readonly vertexApiKeys: string[];
+  private readonly vertexModels: string[];
+  private readonly vertexBaseUrl =
+    'https://aiplatform.googleapis.com/v1/publishers/google/models';
+  private readonly geminiApiKeys: string[];
+  private readonly geminiModels: string[];
+  private readonly geminiBaseUrl =
+    'https://generativelanguage.googleapis.com/v1beta/models';
+  private readonly maxRetries = 2;
+  private readonly retryDelay = 1500;
   private readonly grokService: GrokService;
 
   constructor(
     private readonly prisma: PrismaService,
     private readonly configService: ConfigService,
   ) {
-    this.geminiApiKey = this.configService.get<string>('GEMINI_API_KEY') || '';
-    this.geminiApiUrl =
-      'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent';
+    this.vertexApiKeys = this.loadApiKeys('VERTEX_API_KEY');
+    this.vertexModels = [
+      this.configService.get<string>('VERTEX_PRIMARY_MODEL') || 'gemini-2.5-pro',
+      this.configService.get<string>('VERTEX_FALLBACK_MODEL') || 'gemini-2.0-flash',
+    ].filter((value, index, arr) => !!value && arr.indexOf(value) === index);
+
+    this.geminiApiKeys = this.loadApiKeys('GEMINI_API_KEY');
+    this.geminiModels = [
+      this.configService.get<string>('GEMINI_PRIMARY_MODEL') || 'gemini-2.5-flash',
+      this.configService.get<string>('GEMINI_FALLBACK_MODEL') || 'gemini-1.5-flash',
+    ].filter((value, index, arr) => !!value && arr.indexOf(value) === index);
+
+    if (this.vertexApiKeys.length < 2) {
+      this.logger.warn(
+        'Contextual analysis Vertex resilience is limited. Configure VERTEX_API_KEY and VERTEX_API_KEY_2.',
+      );
+    }
+
+    if (this.geminiApiKeys.length < 2) {
+      this.logger.warn(
+        'Contextual analysis has limited Gemini resilience. Configure GEMINI_API_KEY and GEMINI_API_KEY_2.',
+      );
+    }
+
     this.grokService = new GrokService(configService);
+  }
+
+  private loadApiKeys(baseName: string): string[] {
+    const keys = [
+      this.configService.get<string>(baseName),
+      this.configService.get<string>(`${baseName}_2`),
+      this.configService.get<string>(`${baseName}_3`),
+    ].filter((key): key is string => !!key && key.trim().length > 0);
+
+    return Array.from(new Set(keys));
+  }
+
+  private sleep(ms: number): Promise<void> {
+    return new Promise((resolve) => setTimeout(resolve, ms));
+  }
+
+  private isRetryableStatus(status?: number): boolean {
+    return status === 429 || status === 500 || status === 503;
+  }
+
+  private async requestVertexAdvice(prompt: string): Promise<string> {
+    if (this.vertexApiKeys.length === 0) {
+      throw new Error('No Vertex AI API key configured');
+    }
+
+    for (const model of this.vertexModels) {
+      for (let keyIndex = 0; keyIndex < this.vertexApiKeys.length; keyIndex++) {
+        const apiKey = this.vertexApiKeys[keyIndex];
+        const url = `${this.vertexBaseUrl}/${model}:generateContent?key=${apiKey}`;
+
+        for (let attempt = 1; attempt <= this.maxRetries; attempt++) {
+          try {
+            const response = await axios.post(
+              url,
+              {
+                contents: [{ parts: [{ text: prompt }] }],
+                generationConfig: {
+                  temperature: 0.7,
+                  maxOutputTokens: 1024,
+                },
+              },
+              { timeout: 15000, headers: { 'Content-Type': 'application/json' } },
+            );
+
+            const text = response.data?.candidates?.[0]?.content?.parts?.[0]?.text;
+            if (text) {
+              return text;
+            }
+          } catch (error) {
+            const status = (error as any)?.response?.status as number | undefined;
+            this.logger.warn(
+              `Vertex advice failed (model=${model}, key#${keyIndex + 1}, status=${status ?? 'n/a'}, attempt=${attempt}/${this.maxRetries})`,
+            );
+
+            if (this.isRetryableStatus(status) && attempt < this.maxRetries) {
+              await this.sleep(this.retryDelay * attempt);
+              continue;
+            }
+          }
+        }
+      }
+    }
+
+    throw new Error('All Vertex model/key candidates failed');
+  }
+
+  private async requestGeminiAdvice(prompt: string): Promise<string> {
+    if (this.vertexApiKeys.length === 0 && this.geminiApiKeys.length === 0) {
+      throw new Error('No Vertex/Gemini API key configured');
+    }
+
+    if (this.vertexApiKeys.length > 0) {
+      try {
+        return await this.requestVertexAdvice(prompt);
+      } catch (error) {
+        this.logger.warn('Vertex advice failed, trying Gemini fallback', error);
+      }
+    }
+
+    if (this.geminiApiKeys.length === 0) {
+      throw new Error('No Gemini API key configured');
+    }
+
+    for (const model of this.geminiModels) {
+      for (let keyIndex = 0; keyIndex < this.geminiApiKeys.length; keyIndex++) {
+        const apiKey = this.geminiApiKeys[keyIndex];
+        const url = `${this.geminiBaseUrl}/${model}:generateContent?key=${apiKey}`;
+
+        for (let attempt = 1; attempt <= this.maxRetries; attempt++) {
+          try {
+            const response = await axios.post(
+              url,
+              {
+                contents: [{ parts: [{ text: prompt }] }],
+                generationConfig: {
+                  temperature: 0.7,
+                  maxOutputTokens: 1024,
+                },
+              },
+              { timeout: 15000, headers: { 'Content-Type': 'application/json' } },
+            );
+
+            const text = response.data?.candidates?.[0]?.content?.parts?.[0]?.text;
+            if (text) {
+              return text;
+            }
+          } catch (error) {
+            const status = (error as any)?.response?.status as number | undefined;
+            this.logger.warn(
+              `Gemini advice failed (model=${model}, key#${keyIndex + 1}, status=${status ?? 'n/a'}, attempt=${attempt}/${this.maxRetries})`,
+            );
+
+            if (this.isRetryableStatus(status) && attempt < this.maxRetries) {
+              await this.sleep(this.retryDelay * attempt);
+              continue;
+            }
+          }
+        }
+      }
+    }
+
+    throw new Error('All Gemini model/key candidates failed');
   }
 
   /**
@@ -156,7 +307,7 @@ export class ContextualAnalysisService {
     skinProfile: { skinType?: string; concerns?: string[]; fitzpatrickType?: number } | null,
     city?: string,
   ): Promise<AIAdvice> {
-    if (!this.geminiApiKey) {
+    if (this.geminiApiKeys.length === 0) {
       return this.getFallbackAdvice(weather);
     }
 
@@ -173,19 +324,7 @@ Rép JSON:{personalizedMessage:string,skinCareRoutine:[],productsToUse:[],warnin
 Court, français.`);
 
     try {
-      const response = await axios.post(
-        `${this.geminiApiUrl}?key=${this.geminiApiKey}`,
-        {
-          contents: [{ parts: [{ text: prompt }] }],
-          generationConfig: {
-            temperature: 0.7,
-            maxOutputTokens: 1024,
-          },
-        },
-        { timeout: 15000 },
-      );
-
-      const text = response.data?.candidates?.[0]?.content?.parts?.[0]?.text;
+      const text = await this.requestGeminiAdvice(prompt);
       if (!text) {
         throw new Error('Empty Gemini response');
       }
