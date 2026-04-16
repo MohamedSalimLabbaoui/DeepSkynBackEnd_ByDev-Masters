@@ -45,20 +45,79 @@ export interface GeminiResponse {
   }[];
 }
 
+export interface CosmeticProductAnalysisResult {
+  name: string;
+  brand: string;
+  category: string;
+  ingredients: string[];
+  benefits: {
+    title: string;
+    description: string;
+    matchPercentage: number;
+  }[];
+  concerns: {
+    title: string;
+    description: string;
+    severity: 'low' | 'medium' | 'high';
+  }[];
+  skinTypeCompatibility: {
+    skinType: string;
+    compatibility: number;
+  }[];
+  recommendation: string;
+}
+
 @Injectable()
 export class GeminiService {
   private readonly logger = new Logger(GeminiService.name);
-  private readonly apiKey: string;
-  private readonly apiUrl: string;
-  private readonly maxRetries = 1;
+  private readonly vertexApiKeys: string[];
+  private readonly vertexModels: string[];
+  private readonly vertexBaseUrl =
+    'https://aiplatform.googleapis.com/v1/publishers/google/models';
+  private readonly geminiApiKeys: string[];
+  private readonly geminiModels: string[];
+  private readonly geminiBaseUrl =
+    'https://generativelanguage.googleapis.com/v1beta/models';
+  private readonly maxRetries = 2;
   private readonly retryDelay = 2000; // 2 seconds
   private readonly grokService: GrokService;
 
   constructor(private readonly configService: ConfigService) {
-    this.apiKey = this.configService.get<string>('GEMINI_API_KEY');
-    this.apiUrl =
-      'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent';
+    this.vertexApiKeys = this.loadApiKeys('VERTEX_API_KEY');
+    this.vertexModels = [
+      this.configService.get<string>('VERTEX_PRIMARY_MODEL') || 'gemini-2.5-pro',
+      this.configService.get<string>('VERTEX_FALLBACK_MODEL') || 'gemini-2.0-flash',
+    ].filter((value, index, arr) => !!value && arr.indexOf(value) === index);
+
+    this.geminiApiKeys = this.loadApiKeys('GEMINI_API_KEY');
+    this.geminiModels = [
+      this.configService.get<string>('GEMINI_PRIMARY_MODEL') || 'gemini-2.5-flash',
+      this.configService.get<string>('GEMINI_FALLBACK_MODEL') || 'gemini-1.5-flash',
+    ].filter((value, index, arr) => !!value && arr.indexOf(value) === index);
+
+    if (this.vertexApiKeys.length < 2) {
+      this.logger.warn(
+        'Vertex AI resilience is limited. Configure at least VERTEX_API_KEY and VERTEX_API_KEY_2.',
+      );
+    }
+
+    if (this.geminiApiKeys.length < 2) {
+      this.logger.warn(
+        'Gemini fallback resilience is limited. Configure at least GEMINI_API_KEY and GEMINI_API_KEY_2.',
+      );
+    }
+
     this.grokService = new GrokService(configService);
+  }
+
+  private loadApiKeys(baseName: string): string[] {
+    const keys = [
+      this.configService.get<string>(baseName),
+      this.configService.get<string>(`${baseName}_2`),
+      this.configService.get<string>(`${baseName}_3`),
+    ].filter((key): key is string => !!key && key.trim().length > 0);
+
+    return Array.from(new Set(keys));
   }
 
   /**
@@ -66,6 +125,128 @@ export class GeminiService {
    */
   private sleep(ms: number): Promise<void> {
     return new Promise((resolve) => setTimeout(resolve, ms));
+  }
+
+  private isRetryableStatus(status?: number): boolean {
+    return status === 429 || status === 500 || status === 503;
+  }
+
+  private async requestVertexWithFallback(
+    requestBody: Record<string, any>,
+    options?: { timeout?: number },
+  ): Promise<GeminiResponse> {
+    if (this.vertexApiKeys.length === 0) {
+      throw new Error('No Vertex AI API key configured');
+    }
+
+    const timeout = options?.timeout ?? 30000;
+    const errors: string[] = [];
+
+    for (const model of this.vertexModels) {
+      for (let keyIndex = 0; keyIndex < this.vertexApiKeys.length; keyIndex++) {
+        const apiKey = this.vertexApiKeys[keyIndex];
+        const url = `${this.vertexBaseUrl}/${model}:generateContent?key=${apiKey}`;
+
+        for (let attempt = 1; attempt <= this.maxRetries; attempt++) {
+          try {
+            this.logger.debug(
+              `Vertex request with model=${model}, key#${keyIndex + 1}, attempt=${attempt}`,
+            );
+
+            const response = await axios.post<GeminiResponse>(url, requestBody, {
+              headers: { 'Content-Type': 'application/json' },
+              timeout,
+            });
+
+            return response.data;
+          } catch (error) {
+            const axiosError = error as AxiosError;
+            const status = axiosError.response?.status;
+            const canRetry = this.isRetryableStatus(status);
+
+            this.logger.warn(
+              `Vertex failed (model=${model}, key#${keyIndex + 1}, status=${status ?? 'n/a'}, attempt=${attempt}/${this.maxRetries})`,
+            );
+
+            if (canRetry && attempt < this.maxRetries) {
+              await this.sleep(this.retryDelay * attempt);
+              continue;
+            }
+
+            errors.push(
+              `vertex:model=${model}, key#${keyIndex + 1}, status=${status ?? 'n/a'}`,
+            );
+            break;
+          }
+        }
+      }
+    }
+
+    throw new Error(`All Vertex candidates failed: ${errors.join(' | ')}`);
+  }
+
+  private async requestGeminiWithFallback(
+    requestBody: Record<string, any>,
+    options?: { timeout?: number },
+  ): Promise<GeminiResponse> {
+    if (this.vertexApiKeys.length === 0 && this.geminiApiKeys.length === 0) {
+      throw new Error('No Vertex/Gemini API key configured');
+    }
+
+    const timeout = options?.timeout ?? 30000;
+    const errors: string[] = [];
+
+    if (this.vertexApiKeys.length > 0) {
+      try {
+        return await this.requestVertexWithFallback(requestBody, { timeout });
+      } catch (error) {
+        errors.push((error as Error).message);
+      }
+    }
+
+    if (this.geminiApiKeys.length > 0) {
+      for (const model of this.geminiModels) {
+        for (let keyIndex = 0; keyIndex < this.geminiApiKeys.length; keyIndex++) {
+          const apiKey = this.geminiApiKeys[keyIndex];
+          const url = `${this.geminiBaseUrl}/${model}:generateContent?key=${apiKey}`;
+
+          for (let attempt = 1; attempt <= this.maxRetries; attempt++) {
+            try {
+              this.logger.debug(
+                `Gemini request with model=${model}, key#${keyIndex + 1}, attempt=${attempt}`,
+              );
+
+              const response = await axios.post<GeminiResponse>(url, requestBody, {
+                headers: { 'Content-Type': 'application/json' },
+                timeout,
+              });
+
+              return response.data;
+            } catch (error) {
+              const axiosError = error as AxiosError;
+              const status = axiosError.response?.status;
+              const canRetry = this.isRetryableStatus(status);
+
+              this.logger.warn(
+                `Gemini failed (model=${model}, key#${keyIndex + 1}, status=${status ?? 'n/a'}, attempt=${attempt}/${this.maxRetries})`,
+              );
+
+              if (canRetry && attempt < this.maxRetries) {
+                await this.sleep(this.retryDelay * attempt);
+                continue;
+              }
+
+              errors.push(
+                `gemini:model=${model}, key#${keyIndex + 1}, status=${status ?? 'n/a'}`,
+              );
+              break;
+            }
+          }
+        }
+      }
+    }
+
+    throw new Error(`All Gemini candidates failed: ${errors.join(' | ')}`);
   }
 
   /**
@@ -159,20 +340,11 @@ export class GeminiService {
         ],
       };
 
-      const response = await this.makeRequestWithRetry(() =>
-        axios.post<GeminiResponse>(
-          `${this.apiUrl}?key=${this.apiKey}`,
-          requestBody,
-          {
-            headers: {
-              'Content-Type': 'application/json',
-            },
-            timeout: 60000,
-          },
-        ),
-      );
+      const response = await this.requestGeminiWithFallback(requestBody, {
+        timeout: 60000,
+      });
 
-      const textResponse = response.data.candidates[0]?.content?.parts[0]?.text;
+      const textResponse = response.candidates[0]?.content?.parts[0]?.text;
 
       if (!textResponse) {
         throw new Error('No response from Gemini API');
@@ -236,20 +408,11 @@ export class GeminiService {
         },
       };
 
-      const response = await this.makeRequestWithRetry(() =>
-        axios.post<GeminiResponse>(
-          `${this.apiUrl}?key=${this.apiKey}`,
-          requestBody,
-          {
-            headers: {
-              'Content-Type': 'application/json',
-            },
-            timeout: 30000,
-          },
-        ),
-      );
+      const response = await this.requestGeminiWithFallback(requestBody, {
+        timeout: 30000,
+      });
 
-      const textResponse = response.data.candidates[0]?.content?.parts[0]?.text;
+      const textResponse = response.candidates[0]?.content?.parts[0]?.text;
 
       if (!textResponse) {
         throw new Error('No response from Gemini API');
@@ -272,6 +435,71 @@ export class GeminiService {
         this.logger.error('OpenRouter fallback also failed', grokError);
       }
       
+      throw error;
+    }
+  }
+
+  async analyzeRealTimeMultiAngleScan(
+    images: { image: string; mimeType: string }[],
+  ): Promise<GeminiAnalysisResult> {
+    if (!Array.isArray(images) || images.length === 0) {
+      throw new Error('At least one scan image is required');
+    }
+
+    try {
+      const prompt = this.buildRealTimeScanPrompt();
+      const imageParts = images.map((item) => ({
+        inlineData: {
+          mimeType: item.mimeType || 'image/jpeg',
+          data: item.image,
+        },
+      }));
+
+      const requestBody = {
+        contents: [
+          {
+            parts: [{ text: prompt }, ...imageParts],
+          },
+        ],
+        generationConfig: {
+          temperature: 0.4,
+          topK: 32,
+          topP: 1,
+          maxOutputTokens: 8192,
+        },
+      };
+
+      const response = await this.requestGeminiWithFallback(requestBody, {
+        timeout: 30000,
+      });
+
+      const textResponse = response.candidates[0]?.content?.parts[0]?.text;
+      if (!textResponse) {
+        throw new Error('No response from Gemini API');
+      }
+
+      return this.parseAnalysisResponse(textResponse);
+    } catch (error) {
+      this.logger.error(
+        'Multi-angle real-time scan analysis failed, trying OpenRouter fallback',
+        error,
+      );
+
+      try {
+        const isGrokAvailable = await this.grokService.isAvailable();
+        if (isGrokAvailable) {
+          const prompt = this.buildRealTimeScanPrompt();
+          const primaryImage = images[0];
+          const grokResponse = await this.grokService.analyzeImage(
+            primaryImage.image,
+            prompt,
+          );
+          return this.parseAnalysisResponse(grokResponse);
+        }
+      } catch (grokError) {
+        this.logger.error('OpenRouter fallback also failed', grokError);
+      }
+
       throw error;
     }
   }
@@ -485,22 +713,19 @@ Concerns:${concernsList}
 3-4 sentences, actionable.`);
 
     try {
-      const response = await this.makeRequestWithRetry(() =>
-        axios.post<GeminiResponse>(
-          `${this.apiUrl}?key=${this.apiKey}`,
-          {
-            contents: [{ parts: [{ text: prompt }] }],
-            generationConfig: {
-              temperature: 0.7,
-              maxOutputTokens: 1024,
-            },
+      const response = await this.requestGeminiWithFallback(
+        {
+          contents: [{ parts: [{ text: prompt }] }],
+          generationConfig: {
+            temperature: 0.7,
+            maxOutputTokens: 1024,
           },
-          { headers: { 'Content-Type': 'application/json' }, timeout: 30000 },
-        ),
+        },
+        { timeout: 30000 },
       );
 
       return (
-        response.data.candidates[0]?.content?.parts[0]?.text ||
+        response.candidates[0]?.content?.parts[0]?.text ||
         'Unable to generate advice.'
       );
     } catch (error) {
@@ -540,29 +765,21 @@ User:${userMessage}
 Rép:français,utile,pro.`);
 
     try {
-      const response = await this.makeRequestWithRetry(() =>
-        axios.post<GeminiResponse>(
-          `${this.apiUrl}?key=${this.apiKey}`,
-          {
-            contents: [{ parts: [{ text: prompt }] }],
-            generationConfig: {
-              temperature: 0.7,
-              topK: 40,
-              topP: 0.95,
-              maxOutputTokens: 2048,
-            },
+      const response = await this.requestGeminiWithFallback(
+        {
+          contents: [{ parts: [{ text: prompt }] }],
+          generationConfig: {
+            temperature: 0.7,
+            topK: 40,
+            topP: 0.95,
+            maxOutputTokens: 2048,
           },
-<<<<<<< HEAD
-          { headers: { 'Content-Type': 'application/json' }, timeout: 30000 },
-        ),
-=======
         },
         { timeout: 3000000 },
->>>>>>> 1450d89 (analysis_fixv1)
       );
 
       return (
-        response.data.candidates[0]?.content?.parts[0]?.text ||
+        response.candidates[0]?.content?.parts[0]?.text ||
         "Je suis désolé, je n'ai pas pu générer une réponse."
       );
     } catch (error) {
@@ -579,6 +796,163 @@ Rép:français,utile,pro.`);
       }
       
       throw error;
+    }
+  }
+
+  /**
+   * Analyze a cosmetic product image and return structured compatibility details.
+   */
+  async analyzeCosmeticProductImage(
+    base64Image: string,
+    skinProfile?: {
+      skinType?: string;
+      concerns?: string[];
+      sensitivities?: string[];
+    },
+    mimeType: string = 'image/jpeg',
+  ): Promise<CosmeticProductAnalysisResult> {
+    const prompt = compressWhitespace(`
+Dermatology expert for cosmetic products.
+Analyze this product image and return ONLY valid JSON.
+User profile:
+- skinType: ${skinProfile?.skinType || 'unknown'}
+- concerns: ${(skinProfile?.concerns || []).join(', ') || 'none'}
+- sensitivities: ${(skinProfile?.sensitivities || []).join(', ') || 'none'}
+
+Required JSON schema:
+{
+  "name": "string",
+  "brand": "string",
+  "category": "string",
+  "ingredients": ["string"],
+  "benefits": [{"title":"string","description":"string","matchPercentage":0}],
+  "concerns": [{"title":"string","description":"string","severity":"low|medium|high"}],
+  "skinTypeCompatibility": [{"skinType":"Dry|Oily|Combination|Sensitive|Normal","compatibility":0}],
+  "recommendation": "string"
+}
+
+Rules:
+- identify the most likely product name and brand from packaging text;
+- infer ingredients only from visible/legible text; if unclear use empty array;
+- compatibility and recommendation must be specific to the provided user profile;
+- return JSON only, no markdown and no extra text.
+`);
+
+    const requestBody = {
+      contents: [
+        {
+          parts: [
+            { text: prompt },
+            {
+              inlineData: {
+                mimeType,
+                data: base64Image,
+              },
+            },
+          ],
+        },
+      ],
+      generationConfig: {
+        temperature: 0.2,
+        topK: 32,
+        topP: 1,
+        maxOutputTokens: 4096,
+      },
+    };
+
+    try {
+      const response = await this.requestGeminiWithFallback(requestBody, {
+        timeout: 45000,
+      });
+
+      const textResponse = response.candidates[0]?.content?.parts[0]?.text;
+      if (!textResponse) {
+        throw new Error('No response from Gemini API');
+      }
+
+      return this.parseCosmeticProductAnalysis(textResponse);
+    } catch (error) {
+      this.logger.error('Failed cosmetic product analysis', error);
+      throw error;
+    }
+  }
+
+  private parseCosmeticProductAnalysis(
+    textResponse: string,
+  ): CosmeticProductAnalysisResult {
+    try {
+      const jsonMatch = textResponse.match(/\{[\s\S]*\}/);
+      if (!jsonMatch) {
+        throw new Error('No JSON found in product analysis response');
+      }
+
+      const parsed = JSON.parse(jsonMatch[0]);
+
+      const benefits = Array.isArray(parsed.benefits)
+        ? parsed.benefits
+            .filter((item: any) => item && (item.title || item.description))
+            .map((item: any) => ({
+              title: String(item.title || 'Benefit'),
+              description: String(item.description || ''),
+              matchPercentage: Math.max(
+                0,
+                Math.min(100, Number(item.matchPercentage ?? 0) || 0),
+              ),
+            }))
+        : [];
+
+      const concerns = Array.isArray(parsed.concerns)
+        ? parsed.concerns
+            .filter((item: any) => item && (item.title || item.description))
+            .map((item: any) => {
+              const severityValue = String(item.severity || 'low').toLowerCase();
+              const severity: 'low' | 'medium' | 'high' =
+                severityValue === 'high'
+                  ? 'high'
+                  : severityValue === 'medium'
+                    ? 'medium'
+                    : 'low';
+
+              return {
+                title: String(item.title || 'Concern'),
+                description: String(item.description || ''),
+                severity,
+              };
+            })
+        : [];
+
+      const compatibility = Array.isArray(parsed.skinTypeCompatibility)
+        ? parsed.skinTypeCompatibility
+            .filter((item: any) => item && item.skinType)
+            .map((item: any) => ({
+              skinType: String(item.skinType),
+              compatibility: Math.max(
+                0,
+                Math.min(100, Number(item.compatibility ?? 0) || 0),
+              ),
+            }))
+        : [];
+
+      return {
+        name: String(parsed.name || 'Unknown Product'),
+        brand: String(parsed.brand || 'Unknown Brand'),
+        category: String(parsed.category || 'Cosmetics'),
+        ingredients: Array.isArray(parsed.ingredients)
+          ? parsed.ingredients
+              .map((item: any) => String(item).trim())
+              .filter((item: string) => item.length > 0)
+          : [],
+        benefits,
+        concerns,
+        skinTypeCompatibility: compatibility,
+        recommendation: String(
+          parsed.recommendation ||
+            'Recommendation unavailable. Please verify ingredients manually.',
+        ),
+      };
+    } catch (error) {
+      this.logger.error('Failed to parse cosmetic analysis response', error);
+      throw new Error('Failed to parse cosmetic analysis response');
     }
   }
 }

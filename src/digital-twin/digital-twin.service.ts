@@ -239,13 +239,18 @@ export class DigitalTwinService {
 
         // Utiliser Gemini pour prédiction intelligente
         const predictionData = await this.generateAIPrediction(twin, snapshots, daysAhead);
+        const normalizedPredictedState = this.normalizePredictedState(
+          twin,
+          predictionData.predictedState,
+          daysAhead,
+        );
 
         // Sauvegarder la prédiction
         const prediction = await this.prisma.skinPrediction.create({
           data: {
             userId,
             predictionDate: new Date(Date.now() + daysAhead * 24 * 60 * 60 * 1000),
-            predictedState: predictionData.predictedState,
+            predictedState: normalizedPredictedState,
             confidence: predictionData.confidence,
             basedOnDays: snapshots.length,
             factors: predictionData.factors,
@@ -263,7 +268,7 @@ export class DigitalTwinService {
 
   // 🤖 Générer prédiction avec AI
   private async generateAIPrediction(twin: any, snapshots: any[], daysAhead: number) {
-    const prompt = `Tu es un dermatologue AI expert. Analyse le jumeau numérique de peau suivant et prédit l'état futur.
+    const prompt = `Tu es un expert skin-care marketing + dermatologie. Analyse le jumeau numérique et projette UNIQUEMENT le résultat après application régulière de la routine recommandée.
 
 ÉTAT ACTUEL:
 ${JSON.stringify(twin.currentState, null, 2)}
@@ -272,22 +277,25 @@ TENDANCES RÉCENTES:
 ${JSON.stringify(twin.trendAnalysis, null, 2)}
 
 HISTORIQUE (${snapshots.length} snapshots):
-${snapshots.slice(0, 5).map(s => `- ${s.timestamp.toISOString()}: Health ${s.healthScore}, Conditions: ${JSON.stringify(s.conditions)}`).join('\n')}
+${snapshots.slice(0, 5).map(s => `- ${s.timestamp.toISOString()}: Health ${s.healthScore}, SkinAge ${s.skinAge ?? 'N/A'}`).join('\n')}
 
 TÂCHE:
-Prédit l'état de la peau dans ${daysAhead} jours. Retourne UNIQUEMENT un JSON valide avec cette structure:
+Prédit l'état du visage dans ${daysAhead} jours APRÈS routine. Ton ton doit rester positif et orienté amélioration.
+N'inclus AUCUNE remarque sur des défauts (acné, rougeurs, etc.), pas de section "warnings", pas de risques.
+Retourne UNIQUEMENT un JSON valide avec cette structure:
 {
   "predictedState": {
     "healthScore": number (0-100),
-    "conditions": {"acne": {"severity": "low|medium|high"}, "dryness": {...}},
+    "skinAge": number,
+    "radianceScore": number (0-100),
     "confidence": number (0-1)
   },
   "factors": {
-    "seasonal": "description",
-    "trend": "description"
+    "routineImpact": "description orientée amélioration",
+    "consistencyNote": "description courte"
   },
-  "preventiveTips": ["conseil 1", "conseil 2"],
-  "warnings": ["alerte si risque"],
+  "preventiveTips": ["étape routine 1", "étape routine 2", "étape routine 3"],
+  "warnings": [],
   "confidence": number (0-1)
 }`;
 
@@ -321,11 +329,11 @@ Prédit l'état de la peau dans ${daysAhead} jours. Retourne UNIQUEMENT un JSON 
       const parsed = JSON.parse(jsonStr);
 
       return {
-        predictedState: parsed.predictedState || {},
+        predictedState: this.normalizePredictedState(twin, parsed.predictedState, daysAhead),
         confidence: parsed.confidence || 0.5,
         factors: parsed.factors || {},
         preventiveTips: parsed.preventiveTips || [],
-        warnings: parsed.warnings || [],
+        warnings: [],
       };
     } catch (error) {
       this.logger.warn(`AI prediction failed, using rule-based fallback: ${error.message}`);
@@ -347,13 +355,69 @@ Prédit l'état de la peau dans ${daysAhead} jours. Retourne UNIQUEMENT un JSON 
     return {
       predictedState: {
         healthScore: Math.round(predictedHealth),
-        conditions: twin.currentState?.conditions || {},
+        skinAge: Math.max(14, Math.round((twin.currentState?.skinAge ?? 30) - Math.min(3, daysAhead / 7))),
+        radianceScore: Math.max(40, Math.min(100, Math.round(predictedHealth + 6))),
         confidence: 0.6,
       },
       confidence: 0.6,
-      factors: { trend: `Following ${trend} pattern` },
-      preventiveTips: ['Maintain current routine', 'Stay hydrated'],
-      warnings: trend === 'declining' ? ['Skin condition may worsen'] : [],
+      factors: {
+        routineImpact: 'Routine appliquée de façon régulière, amélioration progressive projetée.',
+        consistencyNote: 'La régularité quotidienne maximise le résultat attendu.',
+      },
+      preventiveTips: [
+        'Nettoyage doux matin/soir',
+        'Hydratation quotidienne adaptée',
+        'Protection solaire chaque matin',
+      ],
+      warnings: [],
+    };
+  }
+
+  private normalizePredictedState(twin: any, predictedState: any, daysAhead: number) {
+    const currentHealth = Number(twin?.currentState?.healthScore);
+    const baselineHealth = Number.isFinite(currentHealth) ? currentHealth : 55;
+    const currentSkinAge = Number(twin?.currentState?.skinAge);
+    const baselineSkinAge = Number.isFinite(currentSkinAge) ? currentSkinAge : 30;
+
+    const toNumber = (value: unknown) => {
+      const parsed = Number(value);
+      return Number.isFinite(parsed) ? parsed : null;
+    };
+
+    const rawHealth = toNumber(predictedState?.healthScore);
+    const rawRadiance = toNumber(predictedState?.radianceScore);
+    const rawSkinAge = toNumber(predictedState?.skinAge);
+    const rawConfidence = toNumber(predictedState?.confidence);
+
+    return {
+      healthScore: Math.max(0, Math.min(100, Math.round(rawHealth ?? baselineHealth + 4))),
+      skinAge: Math.max(
+        14,
+        Math.min(90, Math.round(rawSkinAge ?? baselineSkinAge - Math.min(3, daysAhead / 7))),
+      ),
+      radianceScore: Math.max(
+        0,
+        Math.min(100, Math.round(rawRadiance ?? (rawHealth ?? baselineHealth) + 6)),
+      ),
+      confidence: Math.max(0, Math.min(1, rawConfidence ?? 0.6)),
+    };
+  }
+
+  private clampVisualFilters(filters: Record<string, any>) {
+    const toNum = (value: unknown, fallback: number) => {
+      const num = typeof value === 'number' ? value : Number(value);
+      return Number.isFinite(num) ? num : fallback;
+    };
+
+    // Conservative ranges to avoid "dirty/over-processed" output.
+    return {
+      smoothness: Math.min(38, Math.max(6, toNum(filters.smoothness, 18))),
+      brightness: Math.min(14, Math.max(-6, toNum(filters.brightness, 6))),
+      redness: Math.min(0, Math.max(-20, toNum(filters.redness, -10))),
+      saturation: Math.min(8, Math.max(-8, toNum(filters.saturation, 1))),
+      acneReduction: Math.min(34, Math.max(6, toNum(filters.acneReduction, 14))),
+      hydration: Math.min(36, Math.max(8, toNum(filters.hydration, 18))),
+      evenness: Math.min(32, Math.max(6, toNum(filters.evenness, 14))),
     };
   }
 
@@ -472,7 +536,7 @@ IMPORTANT: Les valeurs visualFilters doivent être ÉLEVÉES (40-60 en moyenne) 
         expectedChanges: parsed.expectedChanges || {},
         riskFactors: parsed.riskFactors || [],
         successProbability: parsed.successProbability || 0.5,
-        visualFilters: parsed.visualFilters || {
+        visualFilters: this.clampVisualFilters(parsed.visualFilters || {
           smoothness: 40,      // Valeurs par défaut plus élevées
           brightness: 25,
           redness: -35,
@@ -480,7 +544,7 @@ IMPORTANT: Les valeurs visualFilters doivent être ÉLEVÉES (40-60 en moyenne) 
           acneReduction: 35,
           hydration: 45,
           evenness: 35,
-        },
+        }),
         reasoning: parsed.reasoning || '',
       };
     } catch (error) {
@@ -613,7 +677,7 @@ IMPORTANT: Les valeurs visualFilters doivent être ÉLEVÉES (40-60 en moyenne) 
       },
       riskFactors: risks,
       successProbability: 0.6,
-      visualFilters,
+      visualFilters: this.clampVisualFilters(visualFilters),
       reasoning: 'Simulation basée sur les ingrédients et la catégorie du produit',
     };
   }

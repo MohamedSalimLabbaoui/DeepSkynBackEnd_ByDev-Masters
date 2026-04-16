@@ -27,9 +27,8 @@ import {
   ApiQuery,
 } from '@nestjs/swagger';
 import { AnalysisService, AnalysisStats } from './analysis.service';
-import { GeminiAnalysisResult } from './services/gemini.service';
 import { CreateAnalysisDto } from './dto/create-analysis.dto';
-import { RealTimeScanDto } from './dto/real-time-scan.dto';
+import { RealTimeScanDto, RealTimeScanResult } from './dto/real-time-scan.dto';
 import { KeycloakAuthGuard } from '../auth/guards/keycloak-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
@@ -118,7 +117,7 @@ export class AnalysisController {
   async realTimeScan(
     @CurrentUser('userId') userId: string,
     @Body() realTimeScanDto: RealTimeScanDto,
-  ): Promise<GeminiAnalysisResult> {
+  ): Promise<RealTimeScanResult> {
     return this.analysisService.processRealTimeScan(userId, realTimeScanDto);
   }
 
