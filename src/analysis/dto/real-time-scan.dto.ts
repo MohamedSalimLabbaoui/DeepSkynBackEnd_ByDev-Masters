@@ -1,4 +1,4 @@
-import { IsString, IsOptional, IsBoolean, IsIn } from 'class-validator';
+import { IsString, IsOptional, IsBoolean, IsIn, IsArray } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 export class RealTimeScanDto {
@@ -36,4 +36,14 @@ export class RealTimeScanDto {
   @IsOptional()
   @IsBoolean()
   saveAnalysis?: boolean; // Save analysis to database
+
+  @ApiPropertyOptional({
+    description: 'Zones du visage qui preoccupent le plus l utilisateur',
+    type: [String],
+    example: ['nez', 'joues'],
+  })
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  preocupent?: string[];
 }

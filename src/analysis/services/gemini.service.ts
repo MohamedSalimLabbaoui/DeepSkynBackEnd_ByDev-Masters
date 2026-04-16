@@ -552,8 +552,13 @@ Rép:français,utile,pro.`);
               maxOutputTokens: 2048,
             },
           },
+<<<<<<< HEAD
           { headers: { 'Content-Type': 'application/json' }, timeout: 30000 },
         ),
+=======
+        },
+        { timeout: 3000000 },
+>>>>>>> 1450d89 (analysis_fixv1)
       );
 
       return (

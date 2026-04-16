@@ -40,7 +40,7 @@ export class ChatService {
     private readonly skinProfileService: SkinProfileService,
     private readonly subscriptionService: SubscriptionService,
     private readonly crawlingService: CrawlingService,
-  ) {}
+  ) { }
 
   /**
    * Envoyer un message et obtenir une réponse AI
@@ -279,20 +279,8 @@ export class ChatService {
     const lastUserMessage = messages[messages.length - 1]?.content || '';
 
     // Enrichir le contexte avec des articles dermatologiques pertinents
-    let articlesContext = '';
-    try {
-      const relevantArticles = await this.crawlingService.getRelevantArticles(lastUserMessage, 3);
-      if (relevantArticles.length > 0) {
-        articlesContext = '\n\nRéférences dermatologiques récentes à utiliser pour enrichir ta réponse:\n' +
-          relevantArticles.map((a, i) => 
-            `${i + 1}. [${a.source}] "${a.title}"\n   ${a.summary}`
-          ).join('\n');
-      }
-    } catch (error) {
-      this.logger.warn('Impossible de récupérer les articles pour le contexte AI', error.message);
-    }
 
-    const systemPrompt = this.buildSystemPrompt(context, isPremium, articlesContext);
+    const systemPrompt = this.buildSystemPrompt(context, isPremium);
     const conversationHistory = this.formatConversationHistory(messages.slice(0, -1)); // Exclude last user message
 
     try {
@@ -314,7 +302,6 @@ export class ChatService {
   private buildSystemPrompt(
     context: Record<string, any>,
     isPremium: boolean,
-    articlesContext: string = '',
   ): string {
     let prompt = `Tu es DeepSkyn AI, un assistant expert en dermatologie et soins de la peau. 
 Tu fournis des conseils personnalisés, bienveillants et basés sur des connaissances dermatologiques.
@@ -328,7 +315,6 @@ Règles de style obligatoires:
 - Utilise des puces courtes uniquement si l'utilisateur demande des étapes.
 
 Règles de confidentialité et personnalisation:
-- N'affiche jamais spontanément les informations du profil utilisateur (type de peau, âge, score, sensibilités, etc.).
 - Utilise le profil seulement comme contexte interne pour adapter la réponse.
 - Ne cite explicitement les données du profil que si l'utilisateur le demande clairement.
 - Si la question est générale, donne une réponse générale sans mentionner le profil.`;
@@ -357,10 +343,7 @@ Même en Premium, reste concis par défaut et n'allonge la réponse que si l'uti
 de passer à Premium pour des recommandations plus détaillées quand c'est pertinent.`;
     }
 
-    // Ajouter le contexte des articles crawlés
-    if (articlesContext) {
-      prompt += articlesContext;
-    }
+
 
     return prompt;
   }
