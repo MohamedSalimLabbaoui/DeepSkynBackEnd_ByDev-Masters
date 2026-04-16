@@ -710,7 +710,7 @@ Rép:français,utile,pro.`);
             maxOutputTokens: 2048,
           },
         },
-        { timeout: 30000 },
+        { timeout: 3000000 },
       );
 
       return (

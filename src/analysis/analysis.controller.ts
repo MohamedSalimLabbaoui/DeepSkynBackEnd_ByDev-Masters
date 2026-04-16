@@ -13,6 +13,7 @@ import {
   HttpStatus,
   ParseIntPipe,
   DefaultValuePipe,
+  BadRequestException,
 } from '@nestjs/common';
 import { FilesInterceptor } from '@nestjs/platform-express';
 import {
@@ -55,6 +56,10 @@ export class AnalysisController {
       properties: {
         images: { type: 'array', items: { type: 'string', format: 'binary' } },
         questionnaire: { type: 'string', description: 'Questionnaire JSON' },
+        preocupent: {
+          type: 'string',
+          description: 'JSON array of selected face zones (ex: ["nez","joues"])',
+        },
       },
     },
   })
@@ -64,14 +69,31 @@ export class AnalysisController {
     @CurrentUser('userId') userId: string,
     @UploadedFiles() files: Express.Multer.File[],
     @Body('questionnaire') questionnaire?: string,
+    @Body('preocupent') preocupent?: string,
   ): Promise<Analysis> {
     const parsedQuestionnaire = questionnaire
       ? JSON.parse(questionnaire)
       : undefined;
+    let parsedPreocupent: string[] | undefined;
+    if (preocupent) {
+      try {
+        const payload = JSON.parse(preocupent);
+        if (!Array.isArray(payload)) {
+          throw new BadRequestException('preocupent must be a JSON array');
+        }
+        parsedPreocupent = payload;
+      } catch (error) {
+        if (error instanceof BadRequestException) {
+          throw error;
+        }
+        throw new BadRequestException('preocupent must be a valid JSON array');
+      }
+    }
     return this.analysisService.createWithImages(
       userId,
       files,
       parsedQuestionnaire,
+      parsedPreocupent,
     );
   }
 

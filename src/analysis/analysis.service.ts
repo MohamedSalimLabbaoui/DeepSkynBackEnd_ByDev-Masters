@@ -78,6 +78,16 @@ export class AnalysisService {
     return num;
   }
 
+  private sanitizePreocupent(preocupent?: string[] | null): string[] {
+    if (!Array.isArray(preocupent)) return [];
+
+    return [...new Set(
+      preocupent
+        .map((item) => (typeof item === 'string' ? item.trim() : ''))
+        .filter((item) => item.length > 0),
+    )];
+  }
+
   private async enforceAnalysisAccess(userId: string): Promise<void> {
     const isPremium = await this.subscriptionService.isPremium(userId);
     if (isPremium) return;
@@ -106,8 +116,10 @@ export class AnalysisService {
     userId: string,
     files: Express.Multer.File[],
     questionnaire?: Record<string, any>,
+    preocupent?: string[],
   ): Promise<Analysis> {
     const startTime = Date.now();
+    const normalizedPreocupent = this.sanitizePreocupent(preocupent);
 
     await this.enforceAnalysisAccess(userId);
 
@@ -132,6 +144,7 @@ export class AnalysisService {
         userId,
         images: imageUrls,
         questionnaire: questionnaire || null,
+        preocupent: normalizedPreocupent,
         status: 'processing',
         conditions: [],
       },
@@ -165,6 +178,7 @@ export class AnalysisService {
         userId,
         images: createAnalysisDto.images,
         questionnaire: createAnalysisDto.questionnaire || null,
+        preocupent: this.sanitizePreocupent(createAnalysisDto.preocupent),
         status: 'processing',
         conditions: [],
       },
@@ -190,6 +204,9 @@ export class AnalysisService {
     realTimeScanDto: RealTimeScanDto,
   ): Promise<GeminiAnalysisResult> {
     const startTime = Date.now();
+    const normalizedPreocupent = this.sanitizePreocupent(
+      realTimeScanDto.preocupent,
+    );
 
     if (realTimeScanDto.saveAnalysis) {
       await this.enforceAnalysisAccess(userId);
@@ -231,6 +248,7 @@ export class AnalysisService {
           data: {
             userId,
             images: imageUrl ? [imageUrl] : [],
+            preocupent: normalizedPreocupent,
             results: result as any,
             healthScore: normalizedHealthScore,
             skinAge: normalizedSkinAge,
