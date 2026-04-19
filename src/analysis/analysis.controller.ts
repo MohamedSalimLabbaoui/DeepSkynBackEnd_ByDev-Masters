@@ -59,6 +59,12 @@ export class AnalysisController {
           type: 'string',
           description: 'JSON array of selected face zones (ex: ["nez","joues"])',
         },
+        saveAnalysis: {
+          type: 'string',
+          description:
+            "Optional boolean string. Set to 'false' to analyze upload without persisting in database.",
+          example: 'false',
+        },
       },
     },
   })
@@ -69,6 +75,7 @@ export class AnalysisController {
     @UploadedFiles() files: Express.Multer.File[],
     @Body('questionnaire') questionnaire?: string,
     @Body('preocupent') preocupent?: string,
+    @Body('saveAnalysis') saveAnalysis?: string,
   ): Promise<Analysis> {
     const parsedQuestionnaire = questionnaire
       ? JSON.parse(questionnaire)
@@ -88,11 +95,16 @@ export class AnalysisController {
         throw new BadRequestException('preocupent must be a valid JSON array');
       }
     }
+    const shouldSaveAnalysis =
+      typeof saveAnalysis === 'string'
+        ? saveAnalysis.trim().toLowerCase() !== 'false'
+        : true;
     return this.analysisService.createWithImages(
       userId,
       files,
       parsedQuestionnaire,
       parsedPreocupent,
+      shouldSaveAnalysis,
     );
   }
 

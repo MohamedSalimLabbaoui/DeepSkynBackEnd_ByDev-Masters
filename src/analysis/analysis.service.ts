@@ -94,6 +94,79 @@ export class AnalysisService {
     )];
   }
 
+  private buildRealtimeFallbackAnalysis(
+    previousAnalysis?: Analysis | null,
+  ): GeminiAnalysisResult {
+    const previousResults =
+      previousAnalysis?.results &&
+      typeof previousAnalysis.results === 'object'
+        ? (previousAnalysis.results as any)
+        : null;
+
+    const previousHealthScore =
+      typeof previousAnalysis?.healthScore === 'number'
+        ? previousAnalysis.healthScore
+        : typeof previousResults?.healthScore === 'number'
+          ? previousResults.healthScore
+          : 72;
+
+    const previousSkinAge =
+      typeof previousAnalysis?.skinAge === 'number'
+        ? previousAnalysis.skinAge
+        : typeof previousResults?.skinAge === 'number'
+          ? previousResults.skinAge
+          : 29;
+
+    const previousSkinType =
+      typeof previousResults?.skinType === 'string'
+        ? previousResults.skinType
+        : 'normal';
+
+    const previousConditions = Array.isArray(previousAnalysis?.conditions)
+      ? previousAnalysis.conditions
+      : [];
+
+    return {
+      skinType: previousSkinType,
+      skinAge: previousSkinAge,
+      healthScore: previousHealthScore,
+      conditions: previousConditions,
+      concerns: Array.isArray(previousResults?.concerns)
+        ? previousResults.concerns
+        : previousConditions,
+      recommendations: {
+        products: Array.isArray(previousResults?.recommendations?.products)
+          ? previousResults.recommendations.products
+          : ['Nettoyant doux', 'Hydratant quotidien', 'SPF 50+'],
+        ingredients: Array.isArray(previousResults?.recommendations?.ingredients)
+          ? previousResults.recommendations.ingredients
+          : ['Niacinamide', 'Acide hyaluronique'],
+        lifestyle: Array.isArray(previousResults?.recommendations?.lifestyle)
+          ? previousResults.recommendations.lifestyle
+          : ['Hydratez-vous régulièrement', 'Dormez au moins 7h', 'Protection solaire quotidienne'],
+        warnings: [
+          'Analyse effectuee en mode resilient: les services IA externes sont temporairement indisponibles.',
+        ],
+      },
+      detailedAnalysis: {
+        hydration: { score: 70, description: 'Hydratation globalement correcte' },
+        texture: { score: 70, description: 'Texture relativement homogene' },
+        pores: { score: 68, description: 'Pores moderes' },
+        pigmentation: { score: 69, description: 'Pigmentation globalement stable' },
+        wrinkles: { score: 72, description: 'Signes legers de rides' },
+        acne: { score: 71, description: 'Imperfections legeres a moderees' },
+        redness: { score: 70, description: 'Rougeurs limitees' },
+        elasticity: { score: 70, description: 'Elasticite satisfaisante' },
+      },
+      fitzpatrickType:
+        typeof previousResults?.fitzpatrickType === 'number'
+          ? Math.max(1, Math.min(6, Math.round(previousResults.fitzpatrickType)))
+          : 3,
+      summary:
+        'Analyse retournee en mode de secours. Les fournisseurs IA externes sont momentanement indisponibles; reessayez plus tard pour une lecture complete.',
+    };
+  }
+
   private buildEvolutionRemark(params: {
     previous?: Analysis | null;
     current: GeminiAnalysisResult;
@@ -186,7 +259,17 @@ export class AnalysisService {
     files: Express.Multer.File[],
     questionnaire?: Record<string, any>,
     preocupent?: string[],
+    saveAnalysis: boolean = true,
   ): Promise<Analysis> {
+    if (!saveAnalysis) {
+      return this.createUploadAnalysisPreview(
+        userId,
+        files,
+        questionnaire,
+        preocupent,
+      );
+    }
+
     const startTime = Date.now();
     const normalizedPreocupent = this.sanitizePreocupent(preocupent);
 
@@ -229,6 +312,72 @@ export class AnalysisService {
     );
 
     return analysis;
+  }
+
+  private async createUploadAnalysisPreview(
+    userId: string,
+    files: Express.Multer.File[],
+    questionnaire?: Record<string, any>,
+    preocupent?: string[],
+  ): Promise<Analysis> {
+    const normalizedPreocupent = this.sanitizePreocupent(preocupent);
+    const previousAnalysis = await this.prisma.analysis.findFirst({
+      where: { userId, status: 'completed' },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    let result: GeminiAnalysisResult;
+    try {
+      result = await this.geminiService.analyzeSkinImageBuffers(
+        files.map((file) => ({
+          buffer: file.buffer,
+          mimeType: file.mimetype || 'image/jpeg',
+        })),
+        questionnaire,
+      );
+    } catch (analysisError) {
+      const reason =
+        analysisError instanceof Error
+          ? analysisError.message
+          : 'unknown provider error';
+      this.logger.warn(
+        `Upload analysis switched to resilient fallback analysis: ${reason}`,
+      );
+      result = this.buildRealtimeFallbackAnalysis(previousAnalysis);
+    }
+
+    const normalizedHealthScore = this.toSafeInt(result.healthScore, 70, {
+      min: 0,
+      max: 100,
+      treat0to10AsPercent: true,
+    });
+    const normalizedSkinAge = this.toSafeInt(result.skinAge, 25, {
+      min: 10,
+      max: 100,
+    });
+    const normalizedResult: GeminiAnalysisResult = {
+      ...result,
+      healthScore: normalizedHealthScore,
+      skinAge: normalizedSkinAge,
+    };
+
+    const now = new Date();
+    return {
+      id: `preview-${Date.now()}`,
+      userId,
+      images: [],
+      questionnaire: questionnaire || null,
+      preocupent: normalizedPreocupent,
+      results: normalizedResult as any,
+      healthScore: normalizedHealthScore,
+      skinAge: normalizedSkinAge,
+      conditions: normalizedResult.conditions,
+      recommendations: normalizedResult.recommendations as any,
+      status: 'completed',
+      processingTime: null,
+      createdAt: now,
+      updatedAt: now,
+    };
   }
 
   /**
@@ -306,12 +455,24 @@ export class AnalysisService {
       }
 
       // Analyze with Gemini
-      const result = await this.geminiService.analyzeRealTimeMultiAngleScan(
-        (Object.entries(normalizedScanInput) as [
-          ScanFaceAngle,
-          { image: string; mimeType: string },
-        ][]).map(([, data]) => data),
-      );
+      let result: GeminiAnalysisResult;
+      try {
+        result = await this.geminiService.analyzeRealTimeMultiAngleScan(
+          (Object.entries(normalizedScanInput) as [
+            ScanFaceAngle,
+            { image: string; mimeType: string },
+          ][]).map(([, data]) => data),
+        );
+      } catch (analysisError) {
+        const reason =
+          analysisError instanceof Error
+            ? analysisError.message
+            : 'unknown provider error';
+        this.logger.warn(
+          `Real-time scan switched to resilient fallback analysis: ${reason}`,
+        );
+        result = this.buildRealtimeFallbackAnalysis(previousAnalysis);
+      }
 
       const processingTime = Date.now() - startTime;
       const normalizedHealthScore = this.toSafeInt(result.healthScore, 70, {
