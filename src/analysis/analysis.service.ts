@@ -13,7 +13,13 @@ import { NotificationService } from '../notification/notification.service';
 import { SubscriptionService } from '../subscription/subscription.service';
 import { DigitalTwinService } from '../digital-twin/digital-twin.service';
 import { CreateAnalysisDto } from './dto/create-analysis.dto';
-import { RealTimeScanDto } from './dto/real-time-scan.dto';
+import {
+  AnalysisEvolutionRemark,
+  CapturedScanImage,
+  RealTimeScanDto,
+  RealTimeScanResult,
+  ScanFaceAngle,
+} from './dto/real-time-scan.dto';
 import { Analysis } from '@prisma/client';
 import { Prisma } from '@prisma/client';
 
@@ -88,6 +94,141 @@ export class AnalysisService {
     )];
   }
 
+  private buildRealtimeFallbackAnalysis(
+    previousAnalysis?: Analysis | null,
+  ): GeminiAnalysisResult {
+    const previousResults =
+      previousAnalysis?.results &&
+      typeof previousAnalysis.results === 'object'
+        ? (previousAnalysis.results as any)
+        : null;
+
+    const previousHealthScore =
+      typeof previousAnalysis?.healthScore === 'number'
+        ? previousAnalysis.healthScore
+        : typeof previousResults?.healthScore === 'number'
+          ? previousResults.healthScore
+          : 72;
+
+    const previousSkinAge =
+      typeof previousAnalysis?.skinAge === 'number'
+        ? previousAnalysis.skinAge
+        : typeof previousResults?.skinAge === 'number'
+          ? previousResults.skinAge
+          : 29;
+
+    const previousSkinType =
+      typeof previousResults?.skinType === 'string'
+        ? previousResults.skinType
+        : 'normal';
+
+    const previousConditions = Array.isArray(previousAnalysis?.conditions)
+      ? previousAnalysis.conditions
+      : [];
+
+    return {
+      skinType: previousSkinType,
+      skinAge: previousSkinAge,
+      healthScore: previousHealthScore,
+      conditions: previousConditions,
+      concerns: Array.isArray(previousResults?.concerns)
+        ? previousResults.concerns
+        : previousConditions,
+      recommendations: {
+        products: Array.isArray(previousResults?.recommendations?.products)
+          ? previousResults.recommendations.products
+          : ['Nettoyant doux', 'Hydratant quotidien', 'SPF 50+'],
+        ingredients: Array.isArray(previousResults?.recommendations?.ingredients)
+          ? previousResults.recommendations.ingredients
+          : ['Niacinamide', 'Acide hyaluronique'],
+        lifestyle: Array.isArray(previousResults?.recommendations?.lifestyle)
+          ? previousResults.recommendations.lifestyle
+          : ['Hydratez-vous régulièrement', 'Dormez au moins 7h', 'Protection solaire quotidienne'],
+        warnings: [
+          'Analyse effectuee en mode resilient: les services IA externes sont temporairement indisponibles.',
+        ],
+      },
+      detailedAnalysis: {
+        hydration: { score: 70, description: 'Hydratation globalement correcte' },
+        texture: { score: 70, description: 'Texture relativement homogene' },
+        pores: { score: 68, description: 'Pores moderes' },
+        pigmentation: { score: 69, description: 'Pigmentation globalement stable' },
+        wrinkles: { score: 72, description: 'Signes legers de rides' },
+        acne: { score: 71, description: 'Imperfections legeres a moderees' },
+        redness: { score: 70, description: 'Rougeurs limitees' },
+        elasticity: { score: 70, description: 'Elasticite satisfaisante' },
+      },
+      fitzpatrickType:
+        typeof previousResults?.fitzpatrickType === 'number'
+          ? Math.max(1, Math.min(6, Math.round(previousResults.fitzpatrickType)))
+          : 3,
+      summary:
+        'Analyse retournee en mode de secours. Les fournisseurs IA externes sont momentanement indisponibles; reessayez plus tard pour une lecture complete.',
+    };
+  }
+
+  private buildEvolutionRemark(params: {
+    previous?: Analysis | null;
+    current: GeminiAnalysisResult;
+  }): AnalysisEvolutionRemark {
+    const { previous, current } = params;
+    if (!previous || previous.healthScore === null || previous.skinAge === null) {
+      return {
+        hasHistory: false,
+        trend: 'stable',
+        healthScoreChange: 0,
+        skinAgeChange: 0,
+        newConditions: [],
+        resolvedConditions: [],
+        remark:
+          "C'est votre première analyse enregistrée. Continuez avec des scans réguliers pour suivre l'évolution.",
+      };
+    }
+
+    const healthScoreChange = (current.healthScore ?? 0) - (previous.healthScore ?? 0);
+    const skinAgeChange = (current.skinAge ?? 0) - (previous.skinAge ?? 0);
+
+    const previousConditions = new Set(previous.conditions || []);
+    const currentConditions = new Set(current.conditions || []);
+    const newConditions = [...currentConditions].filter((c) => !previousConditions.has(c));
+    const resolvedConditions = [...previousConditions].filter((c) => !currentConditions.has(c));
+
+    const trend: AnalysisEvolutionRemark['trend'] =
+      healthScoreChange >= 3 || skinAgeChange <= -1
+        ? 'improved'
+        : healthScoreChange <= -3 || skinAgeChange >= 1
+          ? 'declined'
+          : 'stable';
+
+    const scoreText =
+      healthScoreChange > 0
+        ? `votre score santé a augmenté de +${healthScoreChange}`
+        : healthScoreChange < 0
+          ? `votre score santé a baissé de ${healthScoreChange}`
+          : 'votre score santé est stable';
+
+    const ageText =
+      skinAgeChange < 0
+        ? `votre âge cutané s'est amélioré de ${Math.abs(skinAgeChange)} an(s)`
+        : skinAgeChange > 0
+          ? `votre âge cutané a augmenté de ${skinAgeChange} an(s)`
+          : 'votre âge cutané est stable';
+
+    const conditionText =
+      newConditions.length || resolvedConditions.length
+        ? `Nouvelles conditions: ${newConditions.length ? newConditions.join(', ') : 'aucune'}. Conditions améliorées/disparues: ${resolvedConditions.length ? resolvedConditions.join(', ') : 'aucune'}.`
+        : 'Aucun changement majeur sur les conditions détectées.';
+
+    return {
+      hasHistory: true,
+      trend,
+      healthScoreChange,
+      skinAgeChange,
+      newConditions,
+      resolvedConditions,
+      remark: `${scoreText}; ${ageText}. ${conditionText}`,
+    };
+  }
   private async enforceAnalysisAccess(userId: string): Promise<void> {
     const isPremium = await this.subscriptionService.isPremium(userId);
     if (isPremium) return;
@@ -117,7 +258,17 @@ export class AnalysisService {
     files: Express.Multer.File[],
     questionnaire?: Record<string, any>,
     preocupent?: string[],
+    saveAnalysis: boolean = true,
   ): Promise<Analysis> {
+    if (!saveAnalysis) {
+      return this.createUploadAnalysisPreview(
+        userId,
+        files,
+        questionnaire,
+        preocupent,
+      );
+    }
+
     const startTime = Date.now();
     const normalizedPreocupent = this.sanitizePreocupent(preocupent);
 
@@ -162,6 +313,72 @@ export class AnalysisService {
     return analysis;
   }
 
+  private async createUploadAnalysisPreview(
+    userId: string,
+    files: Express.Multer.File[],
+    questionnaire?: Record<string, any>,
+    preocupent?: string[],
+  ): Promise<Analysis> {
+    const normalizedPreocupent = this.sanitizePreocupent(preocupent);
+    const previousAnalysis = await this.prisma.analysis.findFirst({
+      where: { userId, status: 'completed' },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    let result: GeminiAnalysisResult;
+    try {
+      result = await this.geminiService.analyzeSkinImageBuffers(
+        files.map((file) => ({
+          buffer: file.buffer,
+          mimeType: file.mimetype || 'image/jpeg',
+        })),
+        questionnaire,
+      );
+    } catch (analysisError) {
+      const reason =
+        analysisError instanceof Error
+          ? analysisError.message
+          : 'unknown provider error';
+      this.logger.warn(
+        `Upload analysis switched to resilient fallback analysis: ${reason}`,
+      );
+      result = this.buildRealtimeFallbackAnalysis(previousAnalysis);
+    }
+
+    const normalizedHealthScore = this.toSafeInt(result.healthScore, 70, {
+      min: 0,
+      max: 100,
+      treat0to10AsPercent: true,
+    });
+    const normalizedSkinAge = this.toSafeInt(result.skinAge, 25, {
+      min: 10,
+      max: 100,
+    });
+    const normalizedResult: GeminiAnalysisResult = {
+      ...result,
+      healthScore: normalizedHealthScore,
+      skinAge: normalizedSkinAge,
+    };
+
+    const now = new Date();
+    return {
+      id: `preview-${Date.now()}`,
+      userId,
+      images: [],
+      questionnaire: questionnaire || null,
+      preocupent: normalizedPreocupent,
+      results: normalizedResult as any,
+      healthScore: normalizedHealthScore,
+      skinAge: normalizedSkinAge,
+      conditions: normalizedResult.conditions,
+      recommendations: normalizedResult.recommendations as any,
+      status: 'completed',
+      processingTime: null,
+      createdAt: now,
+      updatedAt: now,
+    };
+  }
+
   /**
    * Create analysis from existing image URLs
    */
@@ -202,34 +419,59 @@ export class AnalysisService {
   async processRealTimeScan(
     userId: string,
     realTimeScanDto: RealTimeScanDto,
-  ): Promise<GeminiAnalysisResult> {
+  ): Promise<RealTimeScanResult> {
     const startTime = Date.now();
     const normalizedPreocupent = this.sanitizePreocupent(
       realTimeScanDto.preocupent,
     );
+    const normalizedScanInput = this.normalizeRealTimeScanInput(realTimeScanDto);
 
     if (realTimeScanDto.saveAnalysis) {
       await this.enforceAnalysisAccess(userId);
     }
 
     try {
-      // Optionally save the scan image
-      let imageUrl: string | null = null;
+      const previousAnalysis = await this.prisma.analysis.findFirst({
+        where: { userId, status: 'completed' },
+        orderBy: { createdAt: 'desc' },
+      });
+
+      // Optionally save scan images
+      const imageUrlsByAngle: Partial<Record<ScanFaceAngle, string>> = {};
       if (realTimeScanDto.saveImage) {
-        const uploadResult = await this.supabaseService.uploadBase64Image(
-          realTimeScanDto.image,
-          userId,
-          realTimeScanDto.mimeType || 'image/jpeg',
-          'scans',
-        );
-        imageUrl = uploadResult.url;
+        for (const [angle, data] of Object.entries(normalizedScanInput) as [
+          ScanFaceAngle,
+          { image: string; mimeType: string },
+        ][]) {
+          const uploadResult = await this.supabaseService.uploadBase64Image(
+            data.image,
+            userId,
+            data.mimeType,
+            `scans/${angle}`,
+          );
+          imageUrlsByAngle[angle] = uploadResult.url;
+        }
       }
 
       // Analyze with Gemini
-      const result = await this.geminiService.analyzeRealTimeScan(
-        realTimeScanDto.image,
-        realTimeScanDto.mimeType || 'image/jpeg',
-      );
+      let result: GeminiAnalysisResult;
+      try {
+        result = await this.geminiService.analyzeRealTimeMultiAngleScan(
+          (Object.entries(normalizedScanInput) as [
+            ScanFaceAngle,
+            { image: string; mimeType: string },
+          ][]).map(([, data]) => data),
+        );
+      } catch (analysisError) {
+        const reason =
+          analysisError instanceof Error
+            ? analysisError.message
+            : 'unknown provider error';
+        this.logger.warn(
+          `Real-time scan switched to resilient fallback analysis: ${reason}`,
+        );
+        result = this.buildRealtimeFallbackAnalysis(previousAnalysis);
+      }
 
       const processingTime = Date.now() - startTime;
       const normalizedHealthScore = this.toSafeInt(result.healthScore, 70, {
@@ -241,13 +483,25 @@ export class AnalysisService {
         min: 10,
         max: 100,
       });
+      const normalizedResult: GeminiAnalysisResult = {
+        ...result,
+        healthScore: normalizedHealthScore,
+        skinAge: normalizedSkinAge,
+      };
+      const evolution = this.buildEvolutionRemark({
+        previous: previousAnalysis,
+        current: normalizedResult,
+      });
 
       // Create analysis record if requested
       if (realTimeScanDto.saveAnalysis) {
+        const savedImageUrls = (Object.values(imageUrlsByAngle) as string[]).filter(
+          Boolean,
+        );
         await this.prisma.analysis.create({
           data: {
             userId,
-            images: imageUrl ? [imageUrl] : [],
+            images: savedImageUrls,
             preocupent: normalizedPreocupent,
             results: result as any,
             healthScore: normalizedHealthScore,
@@ -264,14 +518,41 @@ export class AnalysisService {
         
         // 📸 AUTO-CAPTURE SNAPSHOT for Digital Twin
         try {
-          await this.captureDigitalTwinSnapshot(userId, result, imageUrl);
+          await this.captureDigitalTwinSnapshot(
+            userId,
+            result,
+            imageUrlsByAngle.front ?? null,
+          );
         } catch (error) {
           this.logger.warn(`Failed to capture Digital Twin snapshot: ${error.message}`);
           // Don't fail the analysis if snapshot capture fails
         }
       }
 
-      return result;
+      return {
+        analysis: normalizedResult,
+        capturedImages: {
+          front: this.buildCapturedScanImage(
+            'front',
+            normalizedScanInput.front.image,
+            normalizedScanInput.front.mimeType,
+            imageUrlsByAngle.front ?? null,
+          ),
+          left: this.buildCapturedScanImage(
+            'left',
+            normalizedScanInput.left.image,
+            normalizedScanInput.left.mimeType,
+            imageUrlsByAngle.left ?? null,
+          ),
+          right: this.buildCapturedScanImage(
+            'right',
+            normalizedScanInput.right.image,
+            normalizedScanInput.right.mimeType,
+            imageUrlsByAngle.right ?? null,
+          ),
+        },
+        evolution,
+      };
     } catch (error) {
       this.logger.error('Real-time scan failed', error);
       if (error instanceof BadRequestException) {
@@ -280,6 +561,57 @@ export class AnalysisService {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
       throw new BadRequestException(`Failed to process scan: ${errorMessage}`);
     }
+  }
+
+  private buildCapturedScanImage(
+    angle: ScanFaceAngle,
+    imageBase64: string,
+    mimeType: string,
+    imageUrl: string | null,
+  ): CapturedScanImage {
+    return {
+      angle,
+      imageBase64,
+      mimeType,
+      imageUrl,
+    };
+  }
+
+  private normalizeRealTimeScanInput(
+    realTimeScanDto: RealTimeScanDto,
+  ): Record<ScanFaceAngle, { image: string; mimeType: string }> {
+    const normalizeImage = (value?: string): string | null => {
+      if (typeof value !== 'string') return null;
+      const trimmed = value.trim();
+      if (!trimmed) return null;
+      return trimmed.replace(/^data:image\/\w+;base64,/, '');
+    };
+
+    const legacyImage = normalizeImage(realTimeScanDto.image);
+    const frontImage = normalizeImage(realTimeScanDto.frontImage);
+    const leftImage = normalizeImage(realTimeScanDto.leftImage);
+    const rightImage = normalizeImage(realTimeScanDto.rightImage);
+    const mimeType = realTimeScanDto.mimeType || 'image/jpeg';
+
+    if (frontImage && leftImage && rightImage) {
+      return {
+        front: { image: frontImage, mimeType },
+        left: { image: leftImage, mimeType },
+        right: { image: rightImage, mimeType },
+      };
+    }
+
+    if (legacyImage) {
+      return {
+        front: { image: legacyImage, mimeType },
+        left: { image: legacyImage, mimeType },
+        right: { image: legacyImage, mimeType },
+      };
+    }
+
+    throw new BadRequestException(
+      'Invalid scan payload: provide frontImage, leftImage, rightImage (or legacy image).',
+    );
   }
 
   /**

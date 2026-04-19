@@ -376,6 +376,90 @@ export class GeminiService {
     }
   }
 
+  async analyzeSkinImageBuffers(
+    images: { buffer: Buffer; mimeType?: string }[],
+    questionnaire?: Record<string, any>,
+  ): Promise<GeminiAnalysisResult> {
+    if (!Array.isArray(images) || images.length === 0) {
+      throw new Error('At least one image is required');
+    }
+
+    try {
+      const prompt = this.buildAnalysisPrompt(questionnaire);
+      const imageParts = images.map((item) => ({
+        inlineData: {
+          mimeType: item.mimeType || 'image/jpeg',
+          data: item.buffer.toString('base64'),
+        },
+      }));
+
+      const requestBody = {
+        contents: [
+          {
+            parts: [{ text: prompt }, ...imageParts],
+          },
+        ],
+        generationConfig: {
+          temperature: 0.4,
+          topK: 32,
+          topP: 1,
+          maxOutputTokens: 8192,
+        },
+        safetySettings: [
+          {
+            category: 'HARM_CATEGORY_HARASSMENT',
+            threshold: 'BLOCK_NONE',
+          },
+          {
+            category: 'HARM_CATEGORY_HATE_SPEECH',
+            threshold: 'BLOCK_NONE',
+          },
+          {
+            category: 'HARM_CATEGORY_SEXUALLY_EXPLICIT',
+            threshold: 'BLOCK_NONE',
+          },
+          {
+            category: 'HARM_CATEGORY_DANGEROUS_CONTENT',
+            threshold: 'BLOCK_NONE',
+          },
+        ],
+      };
+
+      const response = await this.requestGeminiWithFallback(requestBody, {
+        timeout: 60000,
+      });
+
+      const textResponse = response.candidates[0]?.content?.parts[0]?.text;
+      if (!textResponse) {
+        throw new Error('No response from Gemini API');
+      }
+
+      return this.parseAnalysisResponse(textResponse);
+    } catch (error) {
+      this.logger.error(
+        'Buffered upload analysis failed, trying OpenRouter fallback',
+        error,
+      );
+
+      try {
+        const isGrokAvailable = await this.grokService.isAvailable();
+        if (isGrokAvailable) {
+          const fallbackPrompt = this.buildAnalysisPrompt(questionnaire);
+          const primaryImage = images[0];
+          const grokResponse = await this.grokService.analyzeImage(
+            primaryImage.buffer.toString('base64'),
+            fallbackPrompt,
+          );
+          return this.parseAnalysisResponse(grokResponse);
+        }
+      } catch (grokError) {
+        this.logger.error('OpenRouter fallback also failed', grokError);
+      }
+
+      throw error;
+    }
+  }
+
   /**
    * Analyze real-time face scan with OpenRouter fallback
    */
@@ -435,6 +519,71 @@ export class GeminiService {
         this.logger.error('OpenRouter fallback also failed', grokError);
       }
       
+      throw error;
+    }
+  }
+
+  async analyzeRealTimeMultiAngleScan(
+    images: { image: string; mimeType: string }[],
+  ): Promise<GeminiAnalysisResult> {
+    if (!Array.isArray(images) || images.length === 0) {
+      throw new Error('At least one scan image is required');
+    }
+
+    try {
+      const prompt = this.buildRealTimeScanPrompt();
+      const imageParts = images.map((item) => ({
+        inlineData: {
+          mimeType: item.mimeType || 'image/jpeg',
+          data: item.image,
+        },
+      }));
+
+      const requestBody = {
+        contents: [
+          {
+            parts: [{ text: prompt }, ...imageParts],
+          },
+        ],
+        generationConfig: {
+          temperature: 0.4,
+          topK: 32,
+          topP: 1,
+          maxOutputTokens: 8192,
+        },
+      };
+
+      const response = await this.requestGeminiWithFallback(requestBody, {
+        timeout: 30000,
+      });
+
+      const textResponse = response.candidates[0]?.content?.parts[0]?.text;
+      if (!textResponse) {
+        throw new Error('No response from Gemini API');
+      }
+
+      return this.parseAnalysisResponse(textResponse);
+    } catch (error) {
+      this.logger.error(
+        'Multi-angle real-time scan analysis failed, trying OpenRouter fallback',
+        error,
+      );
+
+      try {
+        const isGrokAvailable = await this.grokService.isAvailable();
+        if (isGrokAvailable) {
+          const prompt = this.buildRealTimeScanPrompt();
+          const primaryImage = images[0];
+          const grokResponse = await this.grokService.analyzeImage(
+            primaryImage.image,
+            prompt,
+          );
+          return this.parseAnalysisResponse(grokResponse);
+        }
+      } catch (grokError) {
+        this.logger.error('OpenRouter fallback also failed', grokError);
+      }
+
       throw error;
     }
   }

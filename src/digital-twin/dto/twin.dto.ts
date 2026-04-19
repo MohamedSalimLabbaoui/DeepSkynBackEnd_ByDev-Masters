@@ -1,4 +1,5 @@
 import { IsString, IsInt, IsArray, IsOptional, IsNumber, Min, Max } from 'class-validator';
+import { Type } from 'class-transformer';
 
 export class CreateSnapshotDto {
   @IsOptional()
@@ -59,6 +60,7 @@ export class SimulateProductDto {
 
 export class GetPredictionDto {
   @IsOptional()
+  @Type(() => Number)
   @IsInt()
   @Min(1)
   @Max(90)

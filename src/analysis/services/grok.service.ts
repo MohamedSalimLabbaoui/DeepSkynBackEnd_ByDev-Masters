@@ -28,7 +28,7 @@ export class GrokService {
   private readonly groqTextModel: string;
   private readonly textModel: string;
   private readonly visionModel: string;
-  private readonly maxRetries = 2;
+  private readonly maxRetries = 5;
   private readonly retryDelay = 1000;
   private readonly cooldownMs = 60_000;
   private readonly cooldownMap = new Map<string, number>();
