@@ -2,7 +2,7 @@
 /dist
 /node_modules
 /build
-
+.env.weather.example
 public/
 ml/data/
 ml/models/

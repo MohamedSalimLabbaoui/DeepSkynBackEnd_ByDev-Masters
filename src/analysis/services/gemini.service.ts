@@ -78,7 +78,7 @@ export class GeminiService {
   private readonly geminiModels: string[];
   private readonly geminiBaseUrl =
     'https://generativelanguage.googleapis.com/v1beta/models';
-  private readonly maxRetries = 2;
+  private readonly maxRetries = 1;
   private readonly retryDelay = 2000; // 2 seconds
   private readonly grokService: GrokService;
 
@@ -139,7 +139,7 @@ export class GeminiService {
       throw new Error('No Vertex AI API key configured');
     }
 
-    const timeout = options?.timeout ?? 30000;
+    const timeout = options?.timeout ?? 60000;
     const errors: string[] = [];
 
     for (const model of this.vertexModels) {
@@ -193,7 +193,7 @@ export class GeminiService {
       throw new Error('No Vertex/Gemini API key configured');
     }
 
-    const timeout = options?.timeout ?? 30000;
+    const timeout = options?.timeout ?? 60000;
     const errors: string[] = [];
 
     if (this.vertexApiKeys.length > 0) {
@@ -341,7 +341,7 @@ export class GeminiService {
       };
 
       const response = await this.requestGeminiWithFallback(requestBody, {
-        timeout: 60000,
+        timeout: 120000,
       });
 
       const textResponse = response.candidates[0]?.content?.parts[0]?.text;
@@ -493,7 +493,7 @@ export class GeminiService {
       };
 
       const response = await this.requestGeminiWithFallback(requestBody, {
-        timeout: 30000,
+        timeout: 120000,
       });
 
       const textResponse = response.candidates[0]?.content?.parts[0]?.text;
@@ -805,7 +805,7 @@ Concerns:${concernsList}
             maxOutputTokens: 1024,
           },
         },
-        { timeout: 30000 },
+        { timeout: 60000 },
       );
 
       return (
@@ -946,7 +946,7 @@ Rules:
 
     try {
       const response = await this.requestGeminiWithFallback(requestBody, {
-        timeout: 45000,
+        timeout: 120000,
       });
 
       const textResponse = response.candidates[0]?.content?.parts[0]?.text;

@@ -1,4 +1,4 @@
-import { IsString, IsOptional, IsBoolean, IsIn, IsArray } from 'class-validator';
+import { IsString, IsOptional, IsBoolean, IsIn, IsArray, IsObject } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { GeminiAnalysisResult } from '../services/gemini.service';
 
@@ -97,4 +97,12 @@ export class RealTimeScanDto {
   @IsOptional()
   @IsString()
   rightImage?: string;
+
+  @ApiPropertyOptional({
+    description:
+      "Résultat d'analyse déjà calculé (à fournir pour sauvegarder sans relancer Gemini)",
+  })
+  @IsOptional()
+  @IsObject()
+  cachedAnalysis?: GeminiAnalysisResult;
 }

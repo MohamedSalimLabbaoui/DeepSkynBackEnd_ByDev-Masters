@@ -453,24 +453,28 @@ export class AnalysisService {
         }
       }
 
-      // Analyze with Gemini
+      // Analyze with Gemini unless an already computed analysis is provided by the client.
       let result: GeminiAnalysisResult;
-      try {
-        result = await this.geminiService.analyzeRealTimeMultiAngleScan(
-          (Object.entries(normalizedScanInput) as [
-            ScanFaceAngle,
-            { image: string; mimeType: string },
-          ][]).map(([, data]) => data),
-        );
-      } catch (analysisError) {
-        const reason =
-          analysisError instanceof Error
-            ? analysisError.message
-            : 'unknown provider error';
-        this.logger.warn(
-          `Real-time scan switched to resilient fallback analysis: ${reason}`,
-        );
-        result = this.buildRealtimeFallbackAnalysis(previousAnalysis);
+      if (realTimeScanDto.cachedAnalysis) {
+        result = realTimeScanDto.cachedAnalysis;
+      } else {
+        try {
+          result = await this.geminiService.analyzeRealTimeMultiAngleScan(
+            (Object.entries(normalizedScanInput) as [
+              ScanFaceAngle,
+              { image: string; mimeType: string },
+            ][]).map(([, data]) => data),
+          );
+        } catch (analysisError) {
+          const reason =
+            analysisError instanceof Error
+              ? analysisError.message
+              : 'unknown provider error';
+          this.logger.warn(
+            `Real-time scan switched to resilient fallback analysis: ${reason}`,
+          );
+          result = this.buildRealtimeFallbackAnalysis(previousAnalysis);
+        }
       }
 
       const processingTime = Date.now() - startTime;
