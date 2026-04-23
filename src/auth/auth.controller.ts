@@ -615,7 +615,44 @@ export class AuthController {
       },
     });
 
+    try {
+      await this.syncFaceReferenceFromAvatar(userId, body.avatarUrl);
+    } catch (error: any) {
+      this.logger.warn(
+        `Face reference sync skipped after avatar update for user ${userId}: ${error?.message || 'unknown error'}`,
+      );
+    }
+
     return user;
+  }
+
+  @Post('face-reference/sync')
+  @UseGuards(KeycloakAuthGuard)
+  @ApiBearerAuth('JWT-auth')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Synchroniser la reference faciale depuis la photo de profil',
+    description:
+      "Extrait un descripteur facial depuis l'avatar utilisateur et met a jour la reference faciale.",
+  })
+  @ApiResponse({ status: 200, description: 'Reference faciale synchronisee' })
+  @ApiResponse({ status: 400, description: 'Avatar absent ou visage non detecte' })
+  async syncFaceReference(@CurrentUser('sub') userId: string) {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { avatar: true },
+    });
+
+    if (!user?.avatar) {
+      throw new BadRequestException('Aucune photo de profil disponible pour la synchronisation.');
+    }
+
+    await this.syncFaceReferenceFromAvatar(userId, user.avatar);
+
+    return {
+      success: true,
+      message: 'Reference faciale synchronisee avec succes.',
+    };
   }
 
   @Get('roles')
@@ -909,13 +946,26 @@ export class AuthController {
     });
     if (!user) throw new UnauthorizedException('Utilisateur non trouvé');
     if (!user.isActive) throw new UnauthorizedException('Compte désactivé');
-    const faceReference = await this.prisma.faceReference.findUnique({
+    let faceReference = await this.prisma.faceReference.findUnique({
       where: { userId: user.id },
       select: { descriptor: true },
     });
 
     if (!faceReference?.descriptor || !Array.isArray(faceReference.descriptor)) {
-      throw new UnauthorizedException('Aucune reference faciale enregistree pour ce compte');
+      if (!user.avatar) {
+        throw new UnauthorizedException('Aucune reference faciale enregistree pour ce compte');
+      }
+
+      await this.syncFaceReferenceFromAvatar(user.id, user.avatar);
+
+      faceReference = await this.prisma.faceReference.findUnique({
+        where: { userId: user.id },
+        select: { descriptor: true },
+      });
+
+      if (!faceReference?.descriptor || !Array.isArray(faceReference.descriptor)) {
+        throw new UnauthorizedException('Aucune reference faciale enregistree pour ce compte');
+      }
     }
 
     const liveDescriptor =
@@ -928,7 +978,7 @@ export class AuthController {
       faceReference.descriptor as number[],
     );
 
-    if (confidence < 0.5) {
+    if (confidence < 0.42) {
       throw new UnauthorizedException('Vérification faciale échouée');
     }
 
@@ -1072,6 +1122,24 @@ export class AuthController {
     }
 
     return Array.from(detection.descriptor);
+  }
+
+  private async syncFaceReferenceFromAvatar(userId: string, avatarUrl: string): Promise<void> {
+    const descriptor = await this.extractDescriptorFromImageBase64(avatarUrl);
+
+    await this.prisma.faceReference.upsert({
+      where: { userId },
+      update: {
+        descriptor,
+        imageUrl: avatarUrl,
+        updatedAt: new Date(),
+      },
+      create: {
+        userId,
+        descriptor,
+        imageUrl: avatarUrl,
+      },
+    });
   }
 
   private extractTokenFromRequest(req: any): string {
