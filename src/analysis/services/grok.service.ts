@@ -71,31 +71,23 @@ export class GrokService {
       this.configService.get<string>('GROQ_TEXT_MODEL') ||
       'llama-3.3-70b-versatile';
 
-    if (this.openRouterKeys.length > 0 && this.openRouterKeys.length < 2) {
-      this.logger.warn(
-        'OpenRouter resilience is limited. Configure OPENROUTER_API_KEY and OPENROUTER_API_KEY_2.',
-      );
+    if (this.openRouterKeys.length === 0) {
+      this.logger.warn('OpenRouter is not configured. Set OPENROUTER_API_KEY.');
     }
 
-    if (this.groqApiKeys.length > 0 && this.groqApiKeys.length < 2) {
-      this.logger.warn(
-        'Groq resilience is limited. Configure GROQ_API_KEY and GROQ_API_KEY_2.',
-      );
+    if (this.groqApiKeys.length === 0) {
+      this.logger.warn('Groq is not configured. Set GROQ_API_KEY.');
     }
   }
 
   private loadApiKeys(baseName: string): string[] {
-    const keys = [
-      this.configService.get<string>(baseName),
-      this.configService.get<string>(`${baseName}_2`),
-      this.configService.get<string>(`${baseName}_3`),
-      // Backward compatibility
+    const primary = this.configService.get<string>(baseName);
+    const fallback =
       baseName === 'OPENROUTER_API_KEY'
         ? this.configService.get<string>('GROK_API_KEY')
-        : undefined,
-    ].filter((key): key is string => !!key && key.trim().length > 0);
-
-    return Array.from(new Set(keys));
+        : undefined;
+    const key = primary || fallback;
+    return key && key.trim().length > 0 ? [key.trim()] : [];
   }
 
   async isAvailable(): Promise<boolean> {
@@ -218,58 +210,56 @@ export class GrokService {
 
     if (this.openRouterKeys.length > 0) {
       for (const currentModel of modelCandidates) {
-        for (let keyIndex = 0; keyIndex < this.openRouterKeys.length; keyIndex++) {
-          const apiKey = this.openRouterKeys[keyIndex];
-          for (let attempt = 1; attempt <= this.maxRetries; attempt++) {
-            try {
-              const response = await axios.post<GrokChatCompletionsResponse>(
-                endpoint,
-                {
-                  model: currentModel,
-                  messages,
-                  temperature,
-                  max_tokens: maxTokens,
+        const apiKey = this.openRouterKeys[0];
+        for (let attempt = 1; attempt <= this.maxRetries; attempt++) {
+          try {
+            const response = await axios.post<GrokChatCompletionsResponse>(
+              endpoint,
+              {
+                model: currentModel,
+                messages,
+                temperature,
+                max_tokens: maxTokens,
+              },
+              {
+                timeout: 120000,
+                headers: {
+                  Authorization: `Bearer ${apiKey}`,
+                  'Content-Type': 'application/json',
+                  'HTTP-Referer': 'http://localhost',
+                  'X-Title': 'DeepSkynBackEnd',
                 },
-                {
-                  timeout: 120000,
-                  headers: {
-                    Authorization: `Bearer ${apiKey}`,
-                    'Content-Type': 'application/json',
-                    'HTTP-Referer': 'http://localhost',
-                    'X-Title': 'DeepSkynBackEnd',
-                  },
-                },
-              );
+              },
+            );
 
-              const content = response.data?.choices?.[0]?.message?.content;
-              if (content) {
-                return content;
-              }
+            const content = response.data?.choices?.[0]?.message?.content;
+            if (content) {
+              return content;
+            }
 
-              throw new Error('Empty response from OpenRouter');
-            } catch (error) {
-              lastError = error;
-              const axiosError = error as AxiosError;
-              const status = axiosError.response?.status;
-              this.logger.warn(
-                `OpenRouter request failed (model=${currentModel}, key#${keyIndex + 1}, attempt=${attempt}): ${axiosError.message}`,
-              );
+            throw new Error('Empty response from OpenRouter');
+          } catch (error) {
+            lastError = error;
+            const axiosError = error as AxiosError;
+            const status = axiosError.response?.status;
+            this.logger.warn(
+              `OpenRouter request failed (model=${currentModel}, attempt=${attempt}): ${axiosError.message}`,
+            );
 
-              // 404: remove model permanently from current app session.
-              if (status === 404) {
-                this.removeModelForSession(currentModel);
-                break;
-              }
+            // 404: remove model permanently from current app session.
+            if (status === 404) {
+              this.removeModelForSession(currentModel);
+              break;
+            }
 
-              // 429: put model on cooldown for 60s and move to next model.
-              if (status === 429) {
-                this.markModelCooldown(currentModel);
-                break;
-              }
+            // 429: put model on cooldown for 60s and move to next model.
+            if (status === 429) {
+              this.markModelCooldown(currentModel);
+              break;
+            }
 
-              if (attempt < this.maxRetries) {
-                await this.sleep(this.retryDelay * attempt);
-              }
+            if (attempt < this.maxRetries) {
+              await this.sleep(this.retryDelay * attempt);
             }
           }
         }
@@ -295,53 +285,50 @@ export class GrokService {
 
     const endpoint = this.getGroqCompletionUrl();
     let lastError = previousError;
+    const apiKey = this.groqApiKeys[0];
 
-    for (let keyIndex = 0; keyIndex < this.groqApiKeys.length; keyIndex++) {
-      const apiKey = this.groqApiKeys[keyIndex];
-
-      for (let attempt = 1; attempt <= this.maxRetries; attempt++) {
-        try {
-          const response = await axios.post<GrokChatCompletionsResponse>(
-            endpoint,
-            {
-              model: this.groqTextModel,
-              messages,
-              temperature,
-              max_tokens: maxTokens,
+    for (let attempt = 1; attempt <= this.maxRetries; attempt++) {
+      try {
+        const response = await axios.post<GrokChatCompletionsResponse>(
+          endpoint,
+          {
+            model: this.groqTextModel,
+            messages,
+            temperature,
+            max_tokens: maxTokens,
+          },
+          {
+            timeout: 120000,
+            headers: {
+              Authorization: `Bearer ${apiKey}`,
+              'Content-Type': 'application/json',
             },
-            {
-              timeout: 120000,
-              headers: {
-                Authorization: `Bearer ${apiKey}`,
-                'Content-Type': 'application/json',
-              },
-            },
+          },
+        );
+
+        const content = response.data?.choices?.[0]?.message?.content;
+        if (content) {
+          this.logger.log(
+            `Groq fallback succeeded (model=${this.groqTextModel})`,
           );
-
-          const content = response.data?.choices?.[0]?.message?.content;
-          if (content) {
-            this.logger.log(
-              `Groq fallback succeeded (model=${this.groqTextModel}, key#${keyIndex + 1})`,
-            );
-            return content;
-          }
-
-          throw new Error('Empty response from Groq');
-        } catch (error) {
-          lastError = error;
-          const axiosError = error as AxiosError;
-          const status = axiosError.response?.status;
-          this.logger.warn(
-            `Groq request failed (model=${this.groqTextModel}, key#${keyIndex + 1}, attempt=${attempt}): ${axiosError.message}`,
-          );
-
-          if (attempt < this.maxRetries && (status === 429 || status === 500 || status === 503)) {
-            await this.sleep(this.retryDelay * attempt);
-            continue;
-          }
-
-          break;
+          return content;
         }
+
+        throw new Error('Empty response from Groq');
+      } catch (error) {
+        lastError = error;
+        const axiosError = error as AxiosError;
+        const status = axiosError.response?.status;
+        this.logger.warn(
+          `Groq request failed (model=${this.groqTextModel}, attempt=${attempt}): ${axiosError.message}`,
+        );
+
+        if (attempt < this.maxRetries && (status === 429 || status === 500 || status === 503)) {
+          await this.sleep(this.retryDelay * attempt);
+          continue;
+        }
+
+        break;
       }
     }
 

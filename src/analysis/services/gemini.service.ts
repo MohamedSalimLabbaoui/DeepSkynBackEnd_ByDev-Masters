@@ -70,10 +70,6 @@ export interface CosmeticProductAnalysisResult {
 @Injectable()
 export class GeminiService {
   private readonly logger = new Logger(GeminiService.name);
-  private readonly vertexApiKeys: string[];
-  private readonly vertexModels: string[];
-  private readonly vertexBaseUrl =
-    'https://aiplatform.googleapis.com/v1/publishers/google/models';
   private readonly geminiApiKeys: string[];
   private readonly geminiModels: string[];
   private readonly geminiBaseUrl =
@@ -83,41 +79,22 @@ export class GeminiService {
   private readonly grokService: GrokService;
 
   constructor(private readonly configService: ConfigService) {
-    this.vertexApiKeys = this.loadApiKeys('VERTEX_API_KEY');
-    this.vertexModels = [
-      this.configService.get<string>('VERTEX_PRIMARY_MODEL') || 'gemini-2.5-pro',
-      this.configService.get<string>('VERTEX_FALLBACK_MODEL') || 'gemini-2.0-flash',
-    ].filter((value, index, arr) => !!value && arr.indexOf(value) === index);
-
     this.geminiApiKeys = this.loadApiKeys('GEMINI_API_KEY');
     this.geminiModels = [
       this.configService.get<string>('GEMINI_PRIMARY_MODEL') || 'gemini-2.5-flash',
       this.configService.get<string>('GEMINI_FALLBACK_MODEL') || 'gemini-1.5-flash',
     ].filter((value, index, arr) => !!value && arr.indexOf(value) === index);
 
-    if (this.vertexApiKeys.length < 2) {
-      this.logger.warn(
-        'Vertex AI resilience is limited. Configure at least VERTEX_API_KEY and VERTEX_API_KEY_2.',
-      );
-    }
-
-    if (this.geminiApiKeys.length < 2) {
-      this.logger.warn(
-        'Gemini fallback resilience is limited. Configure at least GEMINI_API_KEY and GEMINI_API_KEY_2.',
-      );
+    if (this.geminiApiKeys.length === 0) {
+      this.logger.warn('Gemini is not configured. Set GEMINI_API_KEY.');
     }
 
     this.grokService = new GrokService(configService);
   }
 
   private loadApiKeys(baseName: string): string[] {
-    const keys = [
-      this.configService.get<string>(baseName),
-      this.configService.get<string>(`${baseName}_2`),
-      this.configService.get<string>(`${baseName}_3`),
-    ].filter((key): key is string => !!key && key.trim().length > 0);
-
-    return Array.from(new Set(keys));
+    const key = this.configService.get<string>(baseName);
+    return key && key.trim().length > 0 ? [key.trim()] : [];
   }
 
   /**
@@ -131,117 +108,51 @@ export class GeminiService {
     return status === 429 || status === 500 || status === 503;
   }
 
-  private async requestVertexWithFallback(
-    requestBody: Record<string, any>,
-    options?: { timeout?: number },
-  ): Promise<GeminiResponse> {
-    if (this.vertexApiKeys.length === 0) {
-      throw new Error('No Vertex AI API key configured');
-    }
-
-    const timeout = options?.timeout ?? 60000;
-    const errors: string[] = [];
-
-    for (const model of this.vertexModels) {
-      for (let keyIndex = 0; keyIndex < this.vertexApiKeys.length; keyIndex++) {
-        const apiKey = this.vertexApiKeys[keyIndex];
-        const url = `${this.vertexBaseUrl}/${model}:generateContent?key=${apiKey}`;
-
-        for (let attempt = 1; attempt <= this.maxRetries; attempt++) {
-          try {
-            this.logger.debug(
-              `Vertex request with model=${model}, key#${keyIndex + 1}, attempt=${attempt}`,
-            );
-
-            const response = await axios.post<GeminiResponse>(url, requestBody, {
-              headers: { 'Content-Type': 'application/json' },
-              timeout,
-            });
-
-            return response.data;
-          } catch (error) {
-            const axiosError = error as AxiosError;
-            const status = axiosError.response?.status;
-            const canRetry = this.isRetryableStatus(status);
-
-            this.logger.warn(
-              `Vertex failed (model=${model}, key#${keyIndex + 1}, status=${status ?? 'n/a'}, attempt=${attempt}/${this.maxRetries})`,
-            );
-
-            if (canRetry && attempt < this.maxRetries) {
-              await this.sleep(this.retryDelay * attempt);
-              continue;
-            }
-
-            errors.push(
-              `vertex:model=${model}, key#${keyIndex + 1}, status=${status ?? 'n/a'}`,
-            );
-            break;
-          }
-        }
-      }
-    }
-
-    throw new Error(`All Vertex candidates failed: ${errors.join(' | ')}`);
-  }
-
   private async requestGeminiWithFallback(
     requestBody: Record<string, any>,
     options?: { timeout?: number },
   ): Promise<GeminiResponse> {
-    if (this.vertexApiKeys.length === 0 && this.geminiApiKeys.length === 0) {
-      throw new Error('No Vertex/Gemini API key configured');
+    if (this.geminiApiKeys.length === 0) {
+      throw new Error('No Gemini API key configured');
     }
 
     const timeout = options?.timeout ?? 60000;
     const errors: string[] = [];
 
-    if (this.vertexApiKeys.length > 0) {
-      try {
-        return await this.requestVertexWithFallback(requestBody, { timeout });
-      } catch (error) {
-        errors.push((error as Error).message);
-      }
-    }
+    const apiKey = this.geminiApiKeys[0];
+    for (const model of this.geminiModels) {
+      const url = `${this.geminiBaseUrl}/${model}:generateContent?key=${apiKey}`;
 
-    if (this.geminiApiKeys.length > 0) {
-      for (const model of this.geminiModels) {
-        for (let keyIndex = 0; keyIndex < this.geminiApiKeys.length; keyIndex++) {
-          const apiKey = this.geminiApiKeys[keyIndex];
-          const url = `${this.geminiBaseUrl}/${model}:generateContent?key=${apiKey}`;
+      for (let attempt = 1; attempt <= this.maxRetries; attempt++) {
+        try {
+          this.logger.debug(
+            `Gemini request with model=${model}, attempt=${attempt}`,
+          );
 
-          for (let attempt = 1; attempt <= this.maxRetries; attempt++) {
-            try {
-              this.logger.debug(
-                `Gemini request with model=${model}, key#${keyIndex + 1}, attempt=${attempt}`,
-              );
+          const response = await axios.post<GeminiResponse>(url, requestBody, {
+            headers: { 'Content-Type': 'application/json' },
+            timeout,
+          });
 
-              const response = await axios.post<GeminiResponse>(url, requestBody, {
-                headers: { 'Content-Type': 'application/json' },
-                timeout,
-              });
+          return response.data;
+        } catch (error) {
+          const axiosError = error as AxiosError;
+          const status = axiosError.response?.status;
+          const canRetry = this.isRetryableStatus(status);
 
-              return response.data;
-            } catch (error) {
-              const axiosError = error as AxiosError;
-              const status = axiosError.response?.status;
-              const canRetry = this.isRetryableStatus(status);
+          this.logger.warn(
+            `Gemini failed (model=${model}, status=${status ?? 'n/a'}, attempt=${attempt}/${this.maxRetries})`,
+          );
 
-              this.logger.warn(
-                `Gemini failed (model=${model}, key#${keyIndex + 1}, status=${status ?? 'n/a'}, attempt=${attempt}/${this.maxRetries})`,
-              );
-
-              if (canRetry && attempt < this.maxRetries) {
-                await this.sleep(this.retryDelay * attempt);
-                continue;
-              }
-
-              errors.push(
-                `gemini:model=${model}, key#${keyIndex + 1}, status=${status ?? 'n/a'}`,
-              );
-              break;
-            }
+          if (canRetry && attempt < this.maxRetries) {
+            await this.sleep(this.retryDelay * attempt);
+            continue;
           }
+
+          errors.push(
+            `gemini:model=${model}, status=${status ?? 'n/a'}`,
+          );
+          break;
         }
       }
     }
