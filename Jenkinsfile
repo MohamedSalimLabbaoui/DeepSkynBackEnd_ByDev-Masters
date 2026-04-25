@@ -25,7 +25,7 @@ pipeline {
 
     stage('Install') {
       steps {
-        sh 'npm ci'
+        sh 'npm ci || npm install --no-audit --no-fund'
       }
     }
 
@@ -35,21 +35,23 @@ pipeline {
       }
     }
 
-    stage('SonarQube Analysis') {
+   stage('SonarQube Analysis') {
       steps {
         withSonarQubeEnv('SonarQube') {
           withEnv(["PATH+SONAR=${tool 'SonarScanner'}/bin"]) {
-          sh '''
-            sonar-scanner \
-              -Dsonar.projectKey=backend \
-              -Dsonar.sources=src \
-              -Dsonar.tests=src \
-              -Dsonar.test.inclusions=**/*.spec.ts \
-              -Dsonar.typescript.lcov.reportPaths=coverage/lcov.info
-          '''
+            sh '''
+              sonar-scanner \
+                -Dsonar.projectKey=backend \
+                -Dsonar.sources=src \
+                -Dsonar.tests=src \
+                -Dsonar.test.inclusions=**/*.spec.ts \
+                -Dsonar.typescript.lcov.reportPaths=coverage/lcov.info
+            '''
+          }
         }
       }
     }
+
 
     stage('Quality Gate') {
       steps {
