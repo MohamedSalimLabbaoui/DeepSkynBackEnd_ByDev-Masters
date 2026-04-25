@@ -1,7 +1,12 @@
-import { Injectable, BadRequestException } from '@nestjs/common';
+import { Injectable, BadRequestException, UnauthorizedException, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { SupabaseService } from '../analysis/services/supabase.service';
 import * as crypto from 'crypto';
+import * as path from 'path';
+import * as faceapi from 'face-api.js';
+import * as tf from '@tensorflow/tfjs';
+import * as jpeg from 'jpeg-js';
+import { PNG } from 'pngjs';
 
 export interface FaceVerificationResult {
   verified: boolean;
@@ -18,12 +23,113 @@ export interface FaceDescriptor {
 export class FaceVerificationService {
   // Seuil de similarité pour considérer que c'est le même visage (0-1)
   // Distance euclidienne < 0.6 = même visage pour face-api.js
-  private readonly SIMILARITY_THRESHOLD = 0.5;
+  private readonly SIMILARITY_THRESHOLD = 0.42;
+  private readonly logger = new Logger(FaceVerificationService.name);
+  private static faceModelsLoadPromise: Promise<void> | null = null;
 
   constructor(
     private prisma: PrismaService,
     private supabaseService: SupabaseService,
   ) {}
+
+  private async ensureFaceModelsLoaded(): Promise<void> {
+    if (!FaceVerificationService.faceModelsLoadPromise) {
+      const modelPath = path.join(process.cwd(), 'public', 'models');
+      FaceVerificationService.faceModelsLoadPromise = Promise.all([
+        faceapi.nets.ssdMobilenetv1.loadFromDisk(modelPath),
+        faceapi.nets.faceLandmark68Net.loadFromDisk(modelPath),
+        faceapi.nets.faceRecognitionNet.loadFromDisk(modelPath),
+      ]).then(() => undefined);
+    }
+
+    try {
+      await FaceVerificationService.faceModelsLoadPromise;
+    } catch (error: any) {
+      this.logger.error(`FaceID model loading failed: ${error?.message || 'unknown error'}`);
+      FaceVerificationService.faceModelsLoadPromise = null;
+      throw new UnauthorizedException('Modeles FaceID indisponibles');
+    }
+  }
+
+  private normalizeBase64(input: string): string {
+    if (input.startsWith('data:')) {
+      const match = input.match(/^data:[^;]+;base64,(.+)$/);
+      if (!match) {
+        throw new BadRequestException('Format image base64 invalide');
+      }
+      return match[1];
+    }
+    return input;
+  }
+
+  private decodeImageToTensor(imageBuffer: Buffer): tf.Tensor3D {
+    const isPng = imageBuffer.length >= 8 && imageBuffer[0] === 0x89 && imageBuffer[1] === 0x50 && imageBuffer[2] === 0x4e && imageBuffer[3] === 0x47;
+    const isJpeg = imageBuffer.length >= 3 && imageBuffer[0] === 0xff && imageBuffer[1] === 0xd8 && imageBuffer[2] === 0xff;
+
+    let width = 0;
+    let height = 0;
+    let rgbaData: Uint8Array;
+
+    if (isPng) {
+      const decoded = PNG.sync.read(imageBuffer);
+      width = decoded.width;
+      height = decoded.height;
+      rgbaData = decoded.data;
+    } else if (isJpeg) {
+      const decoded = jpeg.decode(imageBuffer, { useTArray: true });
+      width = decoded.width;
+      height = decoded.height;
+      rgbaData = decoded.data;
+    } else {
+      throw new BadRequestException('Format image non supporte (PNG/JPEG attendu)');
+    }
+
+    const rgbData = new Uint8Array(width * height * 3);
+    for (let i = 0, j = 0; i < rgbaData.length; i += 4, j += 3) {
+      rgbData[j] = rgbaData[i];
+      rgbData[j + 1] = rgbaData[i + 1];
+      rgbData[j + 2] = rgbaData[i + 2];
+    }
+
+    return tf.tensor3d(rgbData, [height, width, 3], 'int32');
+  }
+
+  private async extractDescriptorFromImageBase64(imageBase64: string): Promise<number[]> {
+    await this.ensureFaceModelsLoaded();
+
+    let imageBuffer: Buffer;
+    try {
+      imageBuffer = Buffer.from(this.normalizeBase64(imageBase64), 'base64');
+    } catch {
+      throw new BadRequestException('Image base64 invalide');
+    }
+
+    let tensor: tf.Tensor3D;
+    try {
+      tensor = this.decodeImageToTensor(imageBuffer);
+    } catch (error) {
+      if (error instanceof BadRequestException) {
+        throw error;
+      }
+      throw new BadRequestException('Image faciale illisible');
+    }
+
+    let detection: any;
+    try {
+      detection = await faceapi
+        .detectSingleFace(tensor as any, new faceapi.SsdMobilenetv1Options({ minConfidence: 0.3 }))
+        .withFaceLandmarks()
+        .withFaceDescriptor();
+    } finally {
+      tensor.dispose();
+    }
+
+    if (!detection) {
+      throw new BadRequestException('Aucun visage detecte dans la capture');
+    }
+
+    return Array.from(detection.descriptor);
+  }
 
   /**
    * Vérifie si le visage correspond à la photo de profil de l'utilisateur
@@ -31,9 +137,17 @@ export class FaceVerificationService {
    */
   async verifyFace(
     userId: string,
-    faceDescriptor: number[],
+    faceDescriptor?: number[],
     imageBase64?: string,
   ): Promise<FaceVerificationResult> {
+    if (!faceDescriptor && !imageBase64) {
+      throw new BadRequestException('Vous devez fournir soit le descripteur facial, soit l\'image en base64');
+    }
+
+    let finalDescriptor = faceDescriptor;
+    if (!finalDescriptor || finalDescriptor.length === 0) {
+      finalDescriptor = await this.extractDescriptorFromImageBase64(imageBase64!);
+    }
     // Récupérer les infos de l'utilisateur avec sa photo de profil
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
@@ -70,7 +184,7 @@ export class FaceVerificationService {
 
     // Comparer le visage avec la référence
     const storedDescriptor = faceReference.descriptor as number[];
-    const similarity = this.calculateSimilarity(faceDescriptor, storedDescriptor);
+    const similarity = this.calculateSimilarity(finalDescriptor, storedDescriptor);
 
     if (similarity >= this.SIMILARITY_THRESHOLD) {
       return {
@@ -126,9 +240,18 @@ export class FaceVerificationService {
    */
   async registerFaceReference(
     userId: string,
-    descriptor: number[],
+    descriptor?: number[],
     imageBase64?: string,
   ): Promise<void> {
+    if (!descriptor && !imageBase64) {
+      throw new BadRequestException('Vous devez fournir soit le descripteur facial, soit l\'image en base64');
+    }
+
+    let finalDescriptor = descriptor;
+    if (!finalDescriptor || finalDescriptor.length === 0) {
+      finalDescriptor = await this.extractDescriptorFromImageBase64(imageBase64!);
+    }
+
     let imageUrl: string | null = null;
 
     // Si une image est fournie, la stocker sur Supabase
@@ -149,13 +272,13 @@ export class FaceVerificationService {
     await this.prisma.faceReference.upsert({
       where: { userId },
       update: {
-        descriptor: descriptor,
+        descriptor: finalDescriptor,
         imageUrl: imageUrl || '',
         updatedAt: new Date(),
       },
       create: {
         userId,
-        descriptor: descriptor,
+        descriptor: finalDescriptor,
         imageUrl: imageUrl || '',
       },
     });

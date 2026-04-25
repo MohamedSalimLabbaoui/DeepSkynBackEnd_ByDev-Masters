@@ -7,10 +7,11 @@ export class VerifyFaceDto {
     type: [Number],
     example: [0.1, -0.2, 0.3],
   })
+  @IsOptional()
   @IsArray()
   @ArrayMinSize(128)
   @IsNumber({}, { each: true })
-  descriptor: number[];
+  descriptor?: number[];
 
   @ApiPropertyOptional({
     description: "Image encodée en Base64 (optionnel, pour stocker l'image de référence)",

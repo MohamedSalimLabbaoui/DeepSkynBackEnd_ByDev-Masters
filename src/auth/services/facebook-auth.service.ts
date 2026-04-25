@@ -37,6 +37,13 @@ export class FacebookAuthService {
                 data: {
                     avatar: profile.avatar || user.avatar,
                     lastActivity: new Date(),
+                    ...(user.twoFactorEnabled
+                        ? {}
+                        : {
+                            sessionCount: {
+                                increment: 1,
+                            },
+                        }),
                 },
             });
 
@@ -62,6 +69,13 @@ export class FacebookAuthService {
                         facebookId: profile.facebookId,
                         avatar: profile.avatar || existingByEmail.avatar,
                         lastActivity: new Date(),
+                        ...(existingByEmail.twoFactorEnabled
+                            ? {}
+                            : {
+                                sessionCount: {
+                                    increment: 1,
+                                },
+                            }),
                     } as any,
                 });
 
@@ -86,6 +100,8 @@ export class FacebookAuthService {
                 emailVerified: !!profile.email,
                 onboardingComplete: false,
                 role: 'user',
+                lastActivity: new Date(),
+                sessionCount: 1,
             } as any,
         });
 

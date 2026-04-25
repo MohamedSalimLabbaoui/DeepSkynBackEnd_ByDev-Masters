@@ -982,6 +982,16 @@ export class AuthController {
       throw new UnauthorizedException('Vérification faciale échouée');
     }
 
+    await this.prisma.user.update({
+      where: { id: user.id },
+      data: {
+        lastActivity: new Date(),
+        sessionCount: {
+          increment: 1,
+        },
+      },
+    });
+
     const accessToken = this.googleAuthService.generateToken(user);
 
     return {

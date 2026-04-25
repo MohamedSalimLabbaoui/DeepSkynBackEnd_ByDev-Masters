@@ -104,6 +104,13 @@ export class GoogleAuthService {
         data: {
           avatar: profile.avatar || user.avatar,
           lastActivity: new Date(),
+          ...(user.twoFactorEnabled
+            ? {}
+            : {
+                sessionCount: {
+                  increment: 1,
+                },
+              }),
         },
       });
 
@@ -129,6 +136,13 @@ export class GoogleAuthService {
           avatar: profile.avatar || existingByEmail.avatar,
           emailVerified: true,
           lastActivity: new Date(),
+          ...(existingByEmail.twoFactorEnabled
+            ? {}
+            : {
+                sessionCount: {
+                  increment: 1,
+                },
+              }),
         },
       });
 
@@ -150,6 +164,8 @@ export class GoogleAuthService {
         emailVerified: profile.emailVerified,
         onboardingComplete: false,
         role: 'user',
+        lastActivity: new Date(),
+        sessionCount: 1,
       },
     });
 
