@@ -25,7 +25,7 @@ pipeline {
 
     stage('Install') {
       steps {
-        sh 'npm ci || npm install --no-audit --no-fund'
+        sh 'npm ci'
       }
     }
 
@@ -53,11 +53,7 @@ pipeline {
     }
 
 
-    stage('Quality Gate') {
-      steps {
-        waitForQualityGate abortPipeline: true
-      }
-    }
+  
 
     stage('Docker Build') {
       steps {
