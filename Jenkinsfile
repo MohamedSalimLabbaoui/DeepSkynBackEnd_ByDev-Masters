@@ -38,6 +38,7 @@ pipeline {
     stage('SonarQube Analysis') {
       steps {
         withSonarQubeEnv('SonarQube') {
+          withEnv(["PATH+SONAR=${tool 'SonarScanner'}/bin"]) {
           sh '''
             sonar-scanner \
               -Dsonar.projectKey=backend \
