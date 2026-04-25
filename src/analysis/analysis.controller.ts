@@ -279,4 +279,13 @@ export class AnalysisController {
   ): Promise<void> {
     await this.analysisService.remove(id, userId);
   }
+
+  @Post('hair-recommendation')
+  async hairRecommendation(
+    @CurrentUser('userId') userId: string,
+    @Body('image') image: string,
+    @Body('mimeType') mimeType: string,
+  ): Promise<{ title: string; description: string; imageUrl: string }> {
+    return this.analysisService.recommendHair(userId, image, mimeType);
+  }
 }

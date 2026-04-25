@@ -1147,4 +1147,13 @@ export class AnalysisService {
       },
     };
   }
+
+  async recommendHair(
+    userId: string,
+    image: string,
+    mimeType: string = 'image/jpeg',
+  ): Promise<{ title: string; description: string; imageUrl: string }> {
+    // Optionally check quotas here if needed
+    return this.geminiService.analyzeHairAndRecommend(image, mimeType);
+  }
 }
