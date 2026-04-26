@@ -2,7 +2,7 @@ pipeline {
   agent any
 
   environment {
-    IMAGE_NAME = "your-dockerhub-username/backend"
+    IMAGE_NAME = "hamza1200/backend"
     IMAGE_TAG  = "${env.GIT_COMMIT[0..7]}"
   }
 
