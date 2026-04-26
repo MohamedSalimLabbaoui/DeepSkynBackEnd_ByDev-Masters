@@ -36,21 +36,24 @@ pipeline {
     }
 
    stage('SonarQube Analysis') {
-      steps {
-        withSonarQubeEnv('SonarQube') {
-          withEnv(["PATH+SONAR=${tool 'SonarScanner'}/bin"]) {
-            sh '''
-              sonar-scanner \
-                -Dsonar.projectKey=backend \
-                -Dsonar.sources=src \
-                -Dsonar.tests=src \
-                -Dsonar.test.inclusions=**/*.spec.ts \
-                -Dsonar.typescript.lcov.reportPaths=coverage/lcov.info
-            '''
-          }
-        }
+  steps {
+    withSonarQubeEnv('SonarQube') {
+      withEnv(["PATH+SONAR=${tool 'SonarScanner'}/bin"]) {
+        sh '''
+          sonar-scanner \
+            -Dsonar.projectKey=backend \
+            -Dsonar.sources=src \
+            -Dsonar.tests=src \
+            -Dsonar.test.inclusions=src/**/*.spec.ts \
+            -Dsonar.exclusions=node_modules/**,dist/**,coverage/**,**/*.js \
+            -Dsonar.typescript.lcov.reportPaths=coverage/lcov.info \
+            -Dsonar.typescript.tsconfigPath=tsconfig.json \
+            -Dsonar.sourceEncoding=UTF-8
+        '''
       }
     }
+  }
+}
 
 
   
