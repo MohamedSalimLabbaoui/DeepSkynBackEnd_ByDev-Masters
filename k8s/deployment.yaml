@@ -1,0 +1,233 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: deepskyn-backend
+  namespace: deepskyn
+  labels:
+    app: deepskyn-backend
+    version: "1.0"
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: deepskyn-backend
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0       # Zero-downtime deploy
+  template:
+    metadata:
+      labels:
+        app: deepskyn-backend
+      annotations:
+        # Prometheus auto-scrape
+        prometheus.io/scrape: "true"
+        prometheus.io/path: "/metrics"
+        prometheus.io/port: "3000"
+    spec:
+      # ── Security context ──────────────────────────────
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1001
+        fsGroup: 1001
+
+      # ── Init container: wait for Postgres ─────────────
+      initContainers:
+        - name: wait-for-postgres
+          image: busybox:1.36
+          command:
+            - sh
+            - -c
+            - |
+              until nc -z $DB_HOST $DB_PORT; do
+                echo "Waiting for PostgreSQL at $DB_HOST:$DB_PORT...";
+                sleep 3;
+              done;
+              echo "PostgreSQL is ready."
+          env:
+            - name: DB_HOST
+              value: "postgres-service"
+            - name: DB_PORT
+              value: "5432"
+
+      containers:
+        - name: deepskyn-backend
+          # Replace with your Docker Hub image
+          image: YOUR_DOCKERHUB_USERNAME/deepskyn-backend:latest
+          imagePullPolicy: Always
+          ports:
+            - name: http
+              containerPort: 3000
+              protocol: TCP
+
+          # ── Liveness & Readiness ───────────────────────
+          livenessProbe:
+            httpGet:
+              path: /api
+              port: 3000
+            initialDelaySeconds: 45
+            periodSeconds: 15
+            failureThreshold: 3
+            timeoutSeconds: 5
+
+          readinessProbe:
+            httpGet:
+              path: /api
+              port: 3000
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            failureThreshold: 3
+            timeoutSeconds: 5
+
+          # ── Resource limits ────────────────────────────
+          resources:
+            requests:
+              cpu: "200m"
+              memory: "512Mi"
+            limits:
+              cpu: "1000m"
+              memory: "1Gi"
+
+          # ── Environment from ConfigMap (non-secret) ────
+          envFrom:
+            - configMapRef:
+                name: deepskyn-backend-config
+
+          # ── Environment from Secret ────────────────────
+          env:
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: deepskyn-backend-secret
+                  key: DATABASE_URL
+            - name: KEYCLOAK_AUTH_SERVER_URL
+              valueFrom:
+                secretKeyRef:
+                  name: deepskyn-backend-secret
+                  key: KEYCLOAK_AUTH_SERVER_URL
+            - name: KEYCLOAK_REALM
+              valueFrom:
+                secretKeyRef:
+                  name: deepskyn-backend-secret
+                  key: KEYCLOAK_REALM
+            - name: KEYCLOAK_RESOURCE
+              valueFrom:
+                secretKeyRef:
+                  name: deepskyn-backend-secret
+                  key: KEYCLOAK_RESOURCE
+            - name: KEYCLOAK_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: deepskyn-backend-secret
+                  key: KEYCLOAK_SECRET
+            - name: KEYCLOAK_ADMIN_USER
+              valueFrom:
+                secretKeyRef:
+                  name: deepskyn-backend-secret
+                  key: KEYCLOAK_ADMIN_USER
+            - name: KEYCLOAK_ADMIN_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: deepskyn-backend-secret
+                  key: KEYCLOAK_ADMIN_PASSWORD
+            - name: SUPABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: deepskyn-backend-secret
+                  key: SUPABASE_URL
+            - name: SUPABASE_ANON_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: deepskyn-backend-secret
+                  key: SUPABASE_ANON_KEY
+            - name: SUPABASE_SERVICE_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: deepskyn-backend-secret
+                  key: SUPABASE_SERVICE_KEY
+            - name: GEMINI_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: deepskyn-backend-secret
+                  key: GEMINI_API_KEY
+            - name: OPENROUTER_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: deepskyn-backend-secret
+                  key: OPENROUTER_API_KEY
+            - name: GROQ_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: deepskyn-backend-secret
+                  key: GROQ_API_KEY
+            - name: HUGGINGFACE_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: deepskyn-backend-secret
+                  key: HUGGINGFACE_API_KEY
+            - name: JWT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: deepskyn-backend-secret
+                  key: JWT_SECRET
+            - name: GOOGLE_CLIENT_ID
+              valueFrom:
+                secretKeyRef:
+                  name: deepskyn-backend-secret
+                  key: GOOGLE_CLIENT_ID
+            - name: GOOGLE_CLIENT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: deepskyn-backend-secret
+                  key: GOOGLE_CLIENT_SECRET
+            - name: FACEBOOK_APP_ID
+              valueFrom:
+                secretKeyRef:
+                  name: deepskyn-backend-secret
+                  key: FACEBOOK_APP_ID
+            - name: FACEBOOK_APP_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: deepskyn-backend-secret
+                  key: FACEBOOK_APP_SECRET
+            - name: MAIL_USER
+              valueFrom:
+                secretKeyRef:
+                  name: deepskyn-backend-secret
+                  key: MAIL_USER
+            - name: MAIL_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: deepskyn-backend-secret
+                  key: MAIL_PASSWORD
+            - name: STRIPE_SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: deepskyn-backend-secret
+                  key: STRIPE_SECRET_KEY
+            - name: STRIPE_WEBHOOK_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: deepskyn-backend-secret
+                  key: STRIPE_WEBHOOK_SECRET
+            - name: STRIPE_PRICE_ID_PREMIUM_MONTHLY
+              valueFrom:
+                secretKeyRef:
+                  name: deepskyn-backend-secret
+                  key: STRIPE_PRICE_ID_PREMIUM_MONTHLY
+            - name: STRIPE_PRICE_ID_PREMIUM_YEARLY
+              valueFrom:
+                secretKeyRef:
+                  name: deepskyn-backend-secret
+                  key: STRIPE_PRICE_ID_PREMIUM_YEARLY
+            - name: SIGN_TRANSLATION_SERVICE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: deepskyn-backend-secret
+                  key: SIGN_TRANSLATION_SERVICE_URL
+
+      # ── Graceful termination ───────────────────────────
+      terminationGracePeriodSeconds: 30
+
+      restartPolicy: Always

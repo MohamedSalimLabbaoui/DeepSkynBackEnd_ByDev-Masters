@@ -1,0 +1,36 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: deepskyn-backend-config
+  namespace: deepskyn
+data:
+  NODE_ENV: "production"
+  PORT: "3000"
+  # Keycloak (non-secret config)
+  KEYCLOAK_SSL_REQUIRED: "external"
+  KEYCLOAK_ADMIN_CLIENT_ID: "admin-cli"
+  # AI models (non-secret)
+  GEMINI_PRIMARY_MODEL: "gemini-2.5-flash"
+  GEMINI_FALLBACK_MODEL: "gemini-1.5-flash"
+  OPENROUTER_BASE_URL: "https://openrouter.ai/api/v1"
+  OPENROUTER_TEXT_MODEL: "google/gemma-3-27b-it:free"
+  OPENROUTER_VISION_MODEL: "nvidia/nemotron-nano-12b-v2-vl:free"
+  GROQ_BASE_URL: "https://api.groq.com/openai/v1"
+  GROQ_TEXT_MODEL: "llama-3.3-70b-versatile"
+  # Mail
+  MAIL_HOST: "smtp.gmail.com"
+  MAIL_PORT: "587"
+  MAIL_FROM: '"DeepSkyn <noreply@deepskyn.com>"'
+  # Recaptcha (public key)
+  RECAPTCHA_SECRET_KEY: "6LeIxAcTAAAAAGG-vFI1TnRWxMZNFuojJ4WifJWe"
+  # JWT
+  JWT_EXPIRATION: "7d"
+  # LSF timeouts
+  TRANSLATION_SERVICE_TIMEOUT: "30000"
+  TRANSLATION_MAX_RETRIES: "3"
+  TRANSLATION_RETRY_DELAY: "1000"
+  SUPPORTED_LANGUAGES: "fr,en"
+  LOG_LEVEL: "info"
+  ENABLE_PROMETHEUS: "true"
+  # Supabase bucket (non-secret)
+  SUPABASE_BUCKET: "deepskyn-images"

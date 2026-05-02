@@ -1,0 +1,63 @@
+global:
+  scrape_interval: 15s        # How often to scrape targets
+  evaluation_interval: 15s    # How often to evaluate rules
+  scrape_timeout: 10s
+
+# ── Alerting ──────────────────────────────────────────────────────────────────
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets: []           # Add alertmanager:9093 when configured
+
+# ── Rules ─────────────────────────────────────────────────────────────────────
+rule_files:
+  - "alert.rules.yml"
+
+# ── Scrape configs ─────────────────────────────────────────────────────────────
+scrape_configs:
+
+  # Prometheus itself
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+
+  # ── DeepSkyn NestJS Backend ───────────────────────────────────────────────
+  - job_name: 'deepskyn-backend'
+    metrics_path: '/metrics'
+    scrape_interval: 10s
+    static_configs:
+      - targets: ['deepskyn-backend:3000']
+        labels:
+          service: 'nestjs-backend'
+          env: 'production'
+
+  # ── PostgreSQL (via postgres_exporter) ────────────────────────────────────
+  - job_name: 'postgres'
+    static_configs:
+      - targets: ['postgres-exporter:9187']
+        labels:
+          service: 'postgresql'
+
+  # ── Keycloak ─────────────────────────────────────────────────────────────
+  - job_name: 'keycloak'
+    metrics_path: '/metrics'
+    static_configs:
+      - targets: ['keycloak:8181']
+        labels:
+          service: 'keycloak'
+
+  # ── Python LSF (spoken-to-signed) ─────────────────────────────────────────
+  - job_name: 'python-lsf'
+    metrics_path: '/metrics'
+    scrape_interval: 30s
+    static_configs:
+      - targets: ['python-lsf:8000']
+        labels:
+          service: 'spoken-to-signed'
+
+  # ── Node (host machine) via node_exporter ─────────────────────────────────
+  - job_name: 'node-exporter'
+    static_configs:
+      - targets: ['node-exporter:9100']
+        labels:
+          service: 'host-metrics'

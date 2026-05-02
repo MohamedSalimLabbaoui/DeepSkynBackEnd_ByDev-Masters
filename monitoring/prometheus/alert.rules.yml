@@ -1,0 +1,110 @@
+groups:
+  # ── Backend Availability ──────────────────────────────────────────────────
+  - name: deepskyn_backend
+    rules:
+
+      - alert: BackendDown
+        expr: up{job="deepskyn-backend"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "🚨 DeepSkyn Backend is DOWN"
+          description: "The NestJS backend has been unreachable for more than 1 minute."
+
+      - alert: HighErrorRate
+        expr: |
+          rate(http_requests_total{job="deepskyn-backend", status=~"5.."}[5m])
+          /
+          rate(http_requests_total{job="deepskyn-backend"}[5m]) > 0.05
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "⚠️ High HTTP 5xx error rate (>5%)"
+          description: "Error rate is {{ humanizePercentage $value }} over the last 5m."
+
+      - alert: SlowResponseTime
+        expr: |
+          histogram_quantile(0.95,
+            rate(http_request_duration_seconds_bucket{job="deepskyn-backend"}[5m])
+          ) > 2
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "⚠️ P95 response time > 2s"
+          description: "95th percentile response time is {{ $value }}s."
+
+  # ── Memory & CPU ──────────────────────────────────────────────────────────
+  - name: resource_usage
+    rules:
+
+      - alert: HighMemoryUsage
+        expr: |
+          (node_memory_MemTotal_bytes - node_memory_MemAvailable_bytes)
+          / node_memory_MemTotal_bytes > 0.90
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "⚠️ Host memory usage above 90%"
+          description: "Memory usage is at {{ humanizePercentage $value }}."
+
+      - alert: HighCPUUsage
+        expr: |
+          100 - (avg by (instance) (rate(node_cpu_seconds_total{mode="idle"}[5m])) * 100) > 85
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "⚠️ Host CPU usage above 85%"
+          description: "CPU usage is at {{ $value }}%."
+
+  # ── PostgreSQL ────────────────────────────────────────────────────────────
+  - name: postgres
+    rules:
+
+      - alert: PostgresDown
+        expr: up{job="postgres"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "🚨 PostgreSQL is DOWN"
+          description: "The PostgreSQL database has been unreachable for more than 1 minute."
+
+      - alert: TooManyConnections
+        expr: pg_stat_database_numbackends > 80
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "⚠️ PostgreSQL has too many connections (>80)"
+          description: "Current connections: {{ $value }}"
+
+  # ── Keycloak ──────────────────────────────────────────────────────────────
+  - name: keycloak
+    rules:
+
+      - alert: KeycloakDown
+        expr: up{job="keycloak"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "🚨 Keycloak is DOWN"
+          description: "The Keycloak auth server has been unreachable for more than 1 minute."
+
+  # ── Python LSF Service ────────────────────────────────────────────────────
+  - name: python_lsf
+    rules:
+
+      - alert: PythonLSFDown
+        expr: up{job="python-lsf"} == 0
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "⚠️ Python LSF (spoken-to-signed) is DOWN"
+          description: "The Python translation service has been down for 2+ minutes. Sign language translation is unavailable."

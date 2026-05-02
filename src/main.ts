@@ -23,7 +23,7 @@ async function bootstrap() {
 
   app.enableCors({
     origin: [
-      process.env.FRONTEND_URL || 'http://localhost:5173',
+      process.env.FRONTEND_URL || 'http://localhost:5173', "http://localhost:4173",
       'http://localhost:8081',
       'http://localhost:19006',
       'http://localhost:4200',

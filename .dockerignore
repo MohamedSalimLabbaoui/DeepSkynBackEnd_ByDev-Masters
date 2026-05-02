@@ -1,0 +1,9 @@
+.env
+node_modules/
+dist/
+coverage/
+*.log
+.DS_Store
+scraped-data/
+tash
+backup-*.patch

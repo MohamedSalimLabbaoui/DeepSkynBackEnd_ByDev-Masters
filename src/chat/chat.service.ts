@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { GeminiService } from '../analysis/services/gemini.service';
+import { AnalysisService } from '../analysis/analysis.service';
 import { SkinProfileService } from '../skin-profile/skin-profile.service';
 import { SubscriptionService } from '../subscription/subscription.service';
 import { CrawlingService } from '../crawling/crawling.service';
@@ -42,6 +43,7 @@ export class ChatService {
     private readonly skinProfileService: SkinProfileService,
     private readonly subscriptionService: SubscriptionService,
     private readonly crawlingService: CrawlingService,
+    private readonly analysisService: AnalysisService,
   ) { }
 
   /**
@@ -91,6 +93,97 @@ export class ChatService {
 
     const messages = (chat.messages as unknown as ChatMessage[]) || [];
     messages.push(userMessage);
+
+    // If the user explicitly asks about their score or analysis details, answer deterministically
+    const userText = (sendMessageDto.message || '').toLowerCase();
+    const isScoreQuery = /\b(score|mon score|combien|quel est mon score|sant[eé]?)\b/i.test(userText);
+    const analysisDetailKeywords = ['hydrat', 'texture', 'pores', 'pigment', 'acn', 'ride', 'rougeur', 'elastic', 'age cutan', 'âge cutan'];
+    const isAnalysisDetailQuery = analysisDetailKeywords.some(k => userText.includes(k));
+
+    if (isScoreQuery || isAnalysisDetailQuery) {
+      try {
+        // try fetch latest analysis for user
+        const latest = await this.analysisService.findLatest(userId);
+
+        if (isScoreQuery) {
+          const score = latest?.healthScore ?? (context.skinProfile?.healthScore ?? null);
+          if (typeof score === 'number') {
+            const interpretation =
+              score >= 80 ? 'Excellent' : score >= 60 ? 'Bon' : score >= 40 ? 'Moyen' : 'A améliorer';
+            const content = `Votre score de santé cutanée est ${Math.round(score)}/100. Interprétation: ${interpretation}.`;
+
+            const assistantMessage: ChatMessage = {
+              role: MessageRole.ASSISTANT,
+              content,
+              timestamp: new Date().toISOString(),
+            };
+
+            messages.push(assistantMessage);
+            await this.prisma.chatHistory.update({ where: { id: chat.id }, data: { messages: messages as any, context: context as any } });
+
+            return { chatId: chat.id, message: assistantMessage, isNewChat, products: [] };
+          }
+        }
+
+        if (isAnalysisDetailQuery && latest) {
+          // try to pull detailedAnalysis
+          const results: any = latest.results || {};
+          const detailed = results.detailedAnalysis || (results.detailedAnalysis === undefined ? null : results.detailedAnalysis);
+
+          // map keywords to fields
+          const mapping: Record<string, string> = {
+            hydrat: 'hydration',
+            texture: 'texture',
+            pores: 'pores',
+            pigment: 'pigmentation',
+            acn: 'acne',
+            ride: 'wrinkles',
+            rougeur: 'redness',
+            elastic: 'elasticity',
+            'age cutan': 'skinAge',
+            'âge cutan': 'skinAge',
+          };
+
+          let foundField: string | null = null;
+          for (const k of Object.keys(mapping)) {
+            if (userText.includes(k)) { foundField = mapping[k]; break; }
+          }
+
+          let content = '';
+          if (foundField) {
+            if (foundField === 'skinAge') {
+              const age = latest.skinAge ?? results.skinAge ?? null;
+              if (typeof age === 'number') content = `Votre âge cutané estimé est ${Math.round(age)} ans.`;
+            } else if (detailed && detailed[foundField]) {
+              const item = detailed[foundField];
+              if (typeof item === 'object' && ('score' in item || 'description' in item || 'score' in item)) {
+                const scoreText = item.score !== undefined ? `Score: ${item.score}/100.` : '';
+                const desc = item.description ? ` ${item.description}` : '';
+                content = `${scoreText}${desc}`.trim();
+              } else if (typeof item === 'number') {
+                content = `Valeur: ${item}`;
+              } else if (typeof item === 'string') {
+                content = item;
+              }
+            }
+          }
+
+          if (content) {
+            const assistantMessage: ChatMessage = {
+              role: MessageRole.ASSISTANT,
+              content,
+              timestamp: new Date().toISOString(),
+            };
+            messages.push(assistantMessage);
+            await this.prisma.chatHistory.update({ where: { id: chat.id }, data: { messages: messages as any, context: context as any } });
+            return { chatId: chat.id, message: assistantMessage, isNewChat, products: [] };
+          }
+        }
+      } catch (err) {
+        // if deterministic handling fails, fall back to normal AI flow
+        this.logger.warn('Deterministic answer handler failed, falling back to AI', err?.message || err);
+      }
+    }
 
     // Générer la réponse AI
     const aiResponse = await this.generateAIResponse(
@@ -304,6 +397,26 @@ export class ChatService {
       // Pas de profil de peau, continuer sans
     }
 
+    // Attach latest analysis summary if available (helps answering detail questions deterministically)
+    try {
+      const latestAnalysis = await this.analysisService.findLatest(userId);
+      if (latestAnalysis) {
+        const results = (latestAnalysis.results as any) || {};
+        context.latestAnalysis = {
+          id: latestAnalysis.id,
+          createdAt: latestAnalysis.createdAt,
+          healthScore: latestAnalysis.healthScore ?? results.healthScore ?? null,
+          skinAge: latestAnalysis.skinAge ?? results.skinAge ?? null,
+          skinType: results.skinType || null,
+          detailed: results.detailedAnalysis || results.detailed || null,
+          recommendations: results.recommendations || null,
+          summary: results.summary || null,
+        };
+      }
+    } catch {
+      // ignore analysis fetch failures
+    }
+
     return context;
   }
 
@@ -369,7 +482,17 @@ Règles de style:
 
     if (context.skinProfile) {
       prompt += `\nProfil utilisateur: Type ${context.skinProfile.skinType || 'normal'}, Fitzpatrick ${context.skinProfile.fitzpatrickType || 3}, Préoccupations: ${context.skinProfile.concerns?.join(', ') || 'aucune'}.`;
+
+      if (typeof context.skinProfile.healthScore === 'number') {
+        prompt += `\nScore de santé actuel: ${context.skinProfile.healthScore}/100.`;
+      }
+
+      if (typeof context.skinProfile.skinAge === 'number') {
+        prompt += `\nÂge cutané estimé: ${context.skinProfile.skinAge} ans.`;
+      }
     }
+
+    prompt += `\nRègle importante: si l'utilisateur demande son score, son score de santé, ou "combien" il a, réponds directement avec le score exact en /100 si disponible, puis une courte interprétation. N'utilise jamais une réponse vague comme "non".`;
 
     if (isPremium) {
       prompt += `\nMode Premium activé: Tu peux recommander des produits spécifiques et des routines complètes.`;
