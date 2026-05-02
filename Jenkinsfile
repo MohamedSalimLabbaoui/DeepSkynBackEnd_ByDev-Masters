@@ -4,12 +4,10 @@ pipeline {
   environment {
     NEXUS_REGISTRY = "192.168.32.128:8082"
     IMAGE_NAME     = "192.168.32.128:8082/backend"
-    IMAGE_TAG = "${env.GIT_COMMIT}"
+    IMAGE_TAG = "${env.GIT_COMMIT[0..7]}"
   }
 
-  tools {
-    nodejs 'NodeJS-20'
-  }
+ 
 
   stages {
 
