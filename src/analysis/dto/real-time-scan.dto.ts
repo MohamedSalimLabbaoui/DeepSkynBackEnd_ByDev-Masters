@@ -1,5 +1,5 @@
 import { IsString, IsOptional, IsBoolean, IsIn, IsArray, IsObject } from 'class-validator';
-import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { ApiPropertyOptional } from '@nestjs/swagger';
 import { GeminiAnalysisResult } from '../services/gemini.service';
 
 export type ScanFaceAngle = 'front' | 'left' | 'right';

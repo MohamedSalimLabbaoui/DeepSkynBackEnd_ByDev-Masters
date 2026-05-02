@@ -26,7 +26,6 @@ import {
 import {
   AuthService,
   KeycloakTokenResponse,
-  KeycloakUserInfo,
   LoginResponse,
 } from './auth.service';
 import { TwoFactorService } from './services/two-factor.service';
@@ -39,7 +38,6 @@ import { FacebookAuthGuard } from './guards/facebook-auth.guard';
 import { CurrentUser } from './decorators/current-user.decorator';
 import { Roles } from './decorators/roles.decorator';
 import { RolesGuard } from './guards/roles.guard';
-import { LoginDto } from './dto/login.dto';
 import { Login2faDto } from './dto/login-2fa.dto';
 import { RefreshTokenDto } from './dto/refresh-token.dto';
 import { LogoutDto } from './dto/logout.dto';

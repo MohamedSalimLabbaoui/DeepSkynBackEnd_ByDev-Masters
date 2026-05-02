@@ -6,9 +6,7 @@ import {
   compressWhitespace,
   buildCompactAnalysisPrompt,
   buildUltraCompactScanPrompt,
-  buildMinimalScanPrompt,
 } from './prompt-compression.util';
-import { of } from 'rxjs';
 
 export interface GeminiAnalysisResult {
   skinType: string;

@@ -23,8 +23,6 @@ import {
   ApiBearerAuth,
   ApiConsumes,
   ApiBody,
-  ApiParam,
-  ApiQuery,
 } from '@nestjs/swagger';
 import { AnalysisService, AnalysisStats } from './analysis.service';
 import { CreateAnalysisDto } from './dto/create-analysis.dto';
