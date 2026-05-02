@@ -36,7 +36,6 @@ describe('AuthService', () => {
   let service: AuthService;
   let prismaService: jest.Mocked<PrismaService>;
   let twoFactorService: jest.Mocked<TwoFactorService>;
-  let configService: jest.Mocked<ConfigService>;
 
   const mockUser = {
     id: 'kc-user-uuid-123',
@@ -106,7 +105,6 @@ describe('AuthService', () => {
     service = module.get<AuthService>(AuthService);
     prismaService = module.get(PrismaService);
     twoFactorService = module.get(TwoFactorService);
-    configService = module.get(ConfigService);
 
     // Setup axios.isAxiosError to return false by default
     mockIsAxiosError(false);
@@ -167,13 +165,19 @@ describe('AuthService', () => {
   // ─────────────────────────────────────────────
   describe('hasRole', () => {
     it('should return true when user has the role', () => {
-      const payload = { realm_access: { roles: ['admin'] }, resource_access: {} };
+      const payload = {
+        realm_access: { roles: ['admin'] },
+        resource_access: {},
+      };
       const token = jwt.sign(payload, 'secret');
       expect(service.hasRole(token, 'admin')).toBe(true);
     });
 
     it('should return false when user does not have the role', () => {
-      const payload = { realm_access: { roles: ['user'] }, resource_access: {} };
+      const payload = {
+        realm_access: { roles: ['user'] },
+        resource_access: {},
+      };
       const token = jwt.sign(payload, 'secret');
       expect(service.hasRole(token, 'admin')).toBe(false);
     });
@@ -184,13 +188,19 @@ describe('AuthService', () => {
   // ─────────────────────────────────────────────
   describe('hasAnyRole', () => {
     it('should return true when user has at least one of the roles', () => {
-      const payload = { realm_access: { roles: ['user'] }, resource_access: {} };
+      const payload = {
+        realm_access: { roles: ['user'] },
+        resource_access: {},
+      };
       const token = jwt.sign(payload, 'secret');
       expect(service.hasAnyRole(token, ['admin', 'user'])).toBe(true);
     });
 
     it('should return false when user has none of the roles', () => {
-      const payload = { realm_access: { roles: ['guest'] }, resource_access: {} };
+      const payload = {
+        realm_access: { roles: ['guest'] },
+        resource_access: {},
+      };
       const token = jwt.sign(payload, 'secret');
       expect(service.hasAnyRole(token, ['admin', 'user'])).toBe(false);
     });
@@ -210,7 +220,10 @@ describe('AuthService', () => {
     });
 
     it('should return false when user is missing a role', () => {
-      const payload = { realm_access: { roles: ['user'] }, resource_access: {} };
+      const payload = {
+        realm_access: { roles: ['user'] },
+        resource_access: {},
+      };
       const token = jwt.sign(payload, 'secret');
       expect(service.hasAllRoles(token, ['admin', 'user'])).toBe(false);
     });
@@ -221,7 +234,9 @@ describe('AuthService', () => {
   // ─────────────────────────────────────────────
   describe('register', () => {
     it('should throw ConflictException if user already exists in Prisma', async () => {
-      (prismaService.user.findUnique as jest.Mock).mockResolvedValueOnce(mockUser);
+      (prismaService.user.findUnique as jest.Mock).mockResolvedValueOnce(
+        mockUser,
+      );
 
       await expect(
         service.register('test@deepskyn.com', 'Password123!', 'Test User'),
@@ -232,7 +247,9 @@ describe('AuthService', () => {
       (prismaService.user.findUnique as jest.Mock).mockResolvedValueOnce(null);
 
       // Both admin token strategies fail
-      mockedAxios.post = jest.fn().mockRejectedValue(new Error('network error'));
+      mockedAxios.post = jest
+        .fn()
+        .mockRejectedValue(new Error('network error'));
       mockIsAxiosError(false);
 
       await expect(
@@ -265,11 +282,15 @@ describe('AuthService', () => {
     });
 
     it('should return requiresTwoFactor=true when 2FA is enabled and no code given', async () => {
-      (prismaService.user.findUnique as jest.Mock).mockResolvedValueOnce(mockUser);
+      (prismaService.user.findUnique as jest.Mock).mockResolvedValueOnce(
+        mockUser,
+      );
       mockedAxios.post = jest.fn().mockResolvedValueOnce({
         data: mockKeycloakTokenResponse,
       });
-      (twoFactorService.isTwoFactorEnabled as jest.Mock).mockResolvedValueOnce(true);
+      (twoFactorService.isTwoFactorEnabled as jest.Mock).mockResolvedValueOnce(
+        true,
+      );
 
       const result = await service.login('test@deepskyn.com', 'Password123!');
       expect(result.requiresTwoFactor).toBe(true);
@@ -277,12 +298,18 @@ describe('AuthService', () => {
     });
 
     it('should throw UnauthorizedException when 2FA code is invalid', async () => {
-      (prismaService.user.findUnique as jest.Mock).mockResolvedValueOnce(mockUser);
+      (prismaService.user.findUnique as jest.Mock).mockResolvedValueOnce(
+        mockUser,
+      );
       mockedAxios.post = jest.fn().mockResolvedValueOnce({
         data: mockKeycloakTokenResponse,
       });
-      (twoFactorService.isTwoFactorEnabled as jest.Mock).mockResolvedValueOnce(true);
-      (twoFactorService.verifyCodeByEmail as jest.Mock).mockResolvedValueOnce(false);
+      (twoFactorService.isTwoFactorEnabled as jest.Mock).mockResolvedValueOnce(
+        true,
+      );
+      (twoFactorService.verifyCodeByEmail as jest.Mock).mockResolvedValueOnce(
+        false,
+      );
 
       await expect(
         service.login('test@deepskyn.com', 'Password123!', '000000'),
@@ -290,11 +317,15 @@ describe('AuthService', () => {
     });
 
     it('should return tokens on successful login without 2FA', async () => {
-      (prismaService.user.findUnique as jest.Mock).mockResolvedValueOnce(mockUser);
+      (prismaService.user.findUnique as jest.Mock).mockResolvedValueOnce(
+        mockUser,
+      );
       mockedAxios.post = jest.fn().mockResolvedValueOnce({
         data: mockKeycloakTokenResponse,
       });
-      (twoFactorService.isTwoFactorEnabled as jest.Mock).mockResolvedValueOnce(false);
+      (twoFactorService.isTwoFactorEnabled as jest.Mock).mockResolvedValueOnce(
+        false,
+      );
       (prismaService.user.update as jest.Mock).mockResolvedValueOnce(mockUser);
 
       const result = await service.login('test@deepskyn.com', 'Password123!');

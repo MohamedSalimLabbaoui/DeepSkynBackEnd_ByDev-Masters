@@ -10,12 +10,7 @@ import { AnalysisService } from '../analysis/analysis.service';
 import { SkinProfileService } from '../skin-profile/skin-profile.service';
 import { SubscriptionService } from '../subscription/subscription.service';
 import { CrawlingService } from '../crawling/crawling.service';
-import {
-  CreateChatDto,
-  SendMessageDto,
-  MessageRole,
-  ChatMessageDto,
-} from './dto';
+import { CreateChatDto, SendMessageDto, MessageRole } from './dto';
 import { ChatHistory } from '@prisma/client';
 
 export interface ChatMessage {
@@ -44,7 +39,7 @@ export class ChatService {
     private readonly subscriptionService: SubscriptionService,
     private readonly crawlingService: CrawlingService,
     private readonly analysisService: AnalysisService,
-  ) { }
+  ) {}
 
   /**
    * Envoyer un message et obtenir une réponse AI
@@ -96,9 +91,25 @@ export class ChatService {
 
     // If the user explicitly asks about their score or analysis details, answer deterministically
     const userText = (sendMessageDto.message || '').toLowerCase();
-    const isScoreQuery = /\b(score|mon score|combien|quel est mon score|sant[eé]?)\b/i.test(userText);
-    const analysisDetailKeywords = ['hydrat', 'texture', 'pores', 'pigment', 'acn', 'ride', 'rougeur', 'elastic', 'age cutan', 'âge cutan'];
-    const isAnalysisDetailQuery = analysisDetailKeywords.some(k => userText.includes(k));
+    const isScoreQuery =
+      /\b(score|mon score|combien|quel est mon score|sant[eé]?)\b/i.test(
+        userText,
+      );
+    const analysisDetailKeywords = [
+      'hydrat',
+      'texture',
+      'pores',
+      'pigment',
+      'acn',
+      'ride',
+      'rougeur',
+      'elastic',
+      'age cutan',
+      'âge cutan',
+    ];
+    const isAnalysisDetailQuery = analysisDetailKeywords.some((k) =>
+      userText.includes(k),
+    );
 
     if (isScoreQuery || isAnalysisDetailQuery) {
       try {
@@ -106,10 +117,17 @@ export class ChatService {
         const latest = await this.analysisService.findLatest(userId);
 
         if (isScoreQuery) {
-          const score = latest?.healthScore ?? (context.skinProfile?.healthScore ?? null);
+          const score =
+            latest?.healthScore ?? context.skinProfile?.healthScore ?? null;
           if (typeof score === 'number') {
             const interpretation =
-              score >= 80 ? 'Excellent' : score >= 60 ? 'Bon' : score >= 40 ? 'Moyen' : 'A améliorer';
+              score >= 80
+                ? 'Excellent'
+                : score >= 60
+                  ? 'Bon'
+                  : score >= 40
+                    ? 'Moyen'
+                    : 'A améliorer';
             const content = `Votre score de santé cutanée est ${Math.round(score)}/100. Interprétation: ${interpretation}.`;
 
             const assistantMessage: ChatMessage = {
@@ -119,16 +137,28 @@ export class ChatService {
             };
 
             messages.push(assistantMessage);
-            await this.prisma.chatHistory.update({ where: { id: chat.id }, data: { messages: messages as any, context: context as any } });
+            await this.prisma.chatHistory.update({
+              where: { id: chat.id },
+              data: { messages: messages as any, context: context as any },
+            });
 
-            return { chatId: chat.id, message: assistantMessage, isNewChat, products: [] };
+            return {
+              chatId: chat.id,
+              message: assistantMessage,
+              isNewChat,
+              products: [],
+            };
           }
         }
 
         if (isAnalysisDetailQuery && latest) {
           // try to pull detailedAnalysis
           const results: any = latest.results || {};
-          const detailed = results.detailedAnalysis || (results.detailedAnalysis === undefined ? null : results.detailedAnalysis);
+          const detailed =
+            results.detailedAnalysis ||
+            (results.detailedAnalysis === undefined
+              ? null
+              : results.detailedAnalysis);
 
           // map keywords to fields
           const mapping: Record<string, string> = {
@@ -146,18 +176,26 @@ export class ChatService {
 
           let foundField: string | null = null;
           for (const k of Object.keys(mapping)) {
-            if (userText.includes(k)) { foundField = mapping[k]; break; }
+            if (userText.includes(k)) {
+              foundField = mapping[k];
+              break;
+            }
           }
 
           let content = '';
           if (foundField) {
             if (foundField === 'skinAge') {
               const age = latest.skinAge ?? results.skinAge ?? null;
-              if (typeof age === 'number') content = `Votre âge cutané estimé est ${Math.round(age)} ans.`;
+              if (typeof age === 'number')
+                content = `Votre âge cutané estimé est ${Math.round(age)} ans.`;
             } else if (detailed && detailed[foundField]) {
               const item = detailed[foundField];
-              if (typeof item === 'object' && ('score' in item || 'description' in item || 'score' in item)) {
-                const scoreText = item.score !== undefined ? `Score: ${item.score}/100.` : '';
+              if (
+                typeof item === 'object' &&
+                ('score' in item || 'description' in item || 'score' in item)
+              ) {
+                const scoreText =
+                  item.score !== undefined ? `Score: ${item.score}/100.` : '';
                 const desc = item.description ? ` ${item.description}` : '';
                 content = `${scoreText}${desc}`.trim();
               } else if (typeof item === 'number') {
@@ -175,13 +213,24 @@ export class ChatService {
               timestamp: new Date().toISOString(),
             };
             messages.push(assistantMessage);
-            await this.prisma.chatHistory.update({ where: { id: chat.id }, data: { messages: messages as any, context: context as any } });
-            return { chatId: chat.id, message: assistantMessage, isNewChat, products: [] };
+            await this.prisma.chatHistory.update({
+              where: { id: chat.id },
+              data: { messages: messages as any, context: context as any },
+            });
+            return {
+              chatId: chat.id,
+              message: assistantMessage,
+              isNewChat,
+              products: [],
+            };
           }
         }
       } catch (err) {
         // if deterministic handling fails, fall back to normal AI flow
-        this.logger.warn('Deterministic answer handler failed, falling back to AI', err?.message || err);
+        this.logger.warn(
+          'Deterministic answer handler failed, falling back to AI',
+          err?.message || err,
+        );
       }
     }
 
@@ -228,19 +277,19 @@ export class ChatService {
   private async detectProducts(text: string): Promise<any[]> {
     const productRegex = /\[PRODUCT:\s*([^\]]+)\]/gi;
     const matches = [...text.matchAll(productRegex)];
-    
+
     if (matches.length === 0) return [];
 
     const products = [];
     for (const match of matches) {
       const productName = match[1].trim();
-      
+
       const foundProduct = await this.prisma.productScan.findFirst({
         where: {
           productName: { contains: productName, mode: 'insensitive' },
-          imageUrl: { not: null }
+          imageUrl: { not: null },
         },
-        orderBy: { createdAt: 'desc' }
+        orderBy: { createdAt: 'desc' },
       });
 
       if (foundProduct) {
@@ -255,12 +304,13 @@ export class ChatService {
         products.push({
           name: productName,
           brand: 'Skincare',
-          imageUrl: 'https://images.unsplash.com/photo-1556228720-195a672e8a03?q=80&w=200&h=200&auto=format&fit=crop',
+          imageUrl:
+            'https://images.unsplash.com/photo-1556228720-195a672e8a03?q=80&w=200&h=200&auto=format&fit=crop',
         });
       }
     }
 
-    return Array.from(new Map(products.map(p => [p.name, p])).values());
+    return Array.from(new Map(products.map((p) => [p.name, p])).values());
   }
 
   /**
@@ -405,7 +455,8 @@ export class ChatService {
         context.latestAnalysis = {
           id: latestAnalysis.id,
           createdAt: latestAnalysis.createdAt,
-          healthScore: latestAnalysis.healthScore ?? results.healthScore ?? null,
+          healthScore:
+            latestAnalysis.healthScore ?? results.healthScore ?? null,
           skinAge: latestAnalysis.skinAge ?? results.skinAge ?? null,
           skinType: results.skinType || null,
           detailed: results.detailedAnalysis || results.detailed || null,
@@ -432,13 +483,22 @@ export class ChatService {
 
     let relevantArticles: any[] = [];
     try {
-      relevantArticles = await this.crawlingService.getRelevantArticles(lastUserMessage, 2);
+      relevantArticles = await this.crawlingService.getRelevantArticles(
+        lastUserMessage,
+        2,
+      );
     } catch (error) {
       this.logger.warn('Failed to fetch relevant articles', error.message);
     }
 
-    const systemPrompt = this.buildSystemPrompt(context, isPremium, relevantArticles);
-    const conversationHistory = this.formatConversationHistory(messages.slice(0, -1));
+    const systemPrompt = this.buildSystemPrompt(
+      context,
+      isPremium,
+      relevantArticles,
+    );
+    const conversationHistory = this.formatConversationHistory(
+      messages.slice(0, -1),
+    );
 
     try {
       const response = await this.geminiService.chat(
@@ -474,7 +534,7 @@ Règles de style:
 
     if (articles.length > 0) {
       prompt += `\nSources dermatologiques pertinentes:\n`;
-      articles.forEach(art => {
+      articles.forEach((art) => {
         prompt += `- ${art.title}: ${art.summary}\n`;
       });
       prompt += `\nUtilise ces informations pour renforcer ta réponse.\n`;

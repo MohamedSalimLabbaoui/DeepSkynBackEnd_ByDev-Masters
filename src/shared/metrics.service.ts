@@ -1,5 +1,11 @@
 import { Injectable } from '@nestjs/common';
-import { Registry, Counter, Histogram, Gauge, collectDefaultMetrics } from 'prom-client';
+import {
+  Registry,
+  Counter,
+  Histogram,
+  Gauge,
+  collectDefaultMetrics,
+} from 'prom-client';
 
 @Injectable()
 export class MetricsService {
@@ -61,7 +67,7 @@ export class MetricsService {
     this.keycloakAuthTotal = new Counter({
       name: 'deepskyn_keycloak_auth_total',
       help: 'Total number of Keycloak authentication attempts',
-      labelNames: ['action', 'status'],   // action: login|register|refresh
+      labelNames: ['action', 'status'], // action: login|register|refresh
       registers: [this.registry],
     });
   }

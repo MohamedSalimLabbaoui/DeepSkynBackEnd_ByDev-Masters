@@ -175,7 +175,8 @@ export class GrokService {
     mode: 'text' | 'vision',
     requestedModel?: string,
   ): string[] {
-    const primary = mode === 'vision' ? this.visionRotationBase : this.textRotationBase;
+    const primary =
+      mode === 'vision' ? this.visionRotationBase : this.textRotationBase;
     const configured = mode === 'vision' ? this.visionModel : this.textModel;
 
     // Dynamic rotation list: request-specific + configured + base order.
@@ -203,7 +204,9 @@ export class GrokService {
     const modelCandidates = this.getRotationModels(mode, model);
 
     if (modelCandidates.length === 0 && mode === 'vision') {
-      throw new Error('No available OpenRouter vision models (all disabled or cooling down)');
+      throw new Error(
+        'No available OpenRouter vision models (all disabled or cooling down)',
+      );
     }
 
     let lastError: unknown;
@@ -267,7 +270,12 @@ export class GrokService {
     }
 
     if (mode === 'text') {
-      return this.requestGroqCompletion(messages, temperature, maxTokens, lastError);
+      return this.requestGroqCompletion(
+        messages,
+        temperature,
+        maxTokens,
+        lastError,
+      );
     }
 
     throw lastError || new Error('OpenRouter request failed after all retries');
@@ -323,7 +331,10 @@ export class GrokService {
           `Groq request failed (model=${this.groqTextModel}, attempt=${attempt}): ${axiosError.message}`,
         );
 
-        if (attempt < this.maxRetries && (status === 429 || status === 500 || status === 503)) {
+        if (
+          attempt < this.maxRetries &&
+          (status === 429 || status === 500 || status === 503)
+        ) {
           await this.sleep(this.retryDelay * attempt);
           continue;
         }
@@ -351,7 +362,13 @@ export class GrokService {
       content: m.content,
     }));
 
-    return this.requestCompletion(model || this.textModel, normalized, 0.7, 2048, 'text');
+    return this.requestCompletion(
+      model || this.textModel,
+      normalized,
+      0.7,
+      2048,
+      'text',
+    );
   }
 
   async analyzeImage(

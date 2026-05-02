@@ -4,7 +4,6 @@ import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { AppModule } from './app.module';
 import { json, urlencoded } from 'express';
 
-
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
 
@@ -23,7 +22,8 @@ async function bootstrap() {
 
   app.enableCors({
     origin: [
-      process.env.FRONTEND_URL || 'http://localhost:5173', "http://localhost:4173",
+      process.env.FRONTEND_URL || 'http://localhost:5173',
+      'http://localhost:4173',
       'http://localhost:8081',
       'http://localhost:19006',
       'http://localhost:4200',

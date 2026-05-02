@@ -11,12 +11,15 @@ export function compressWhitespace(text: string): string {
     .trim();
 }
 
-export function buildCompactWeatherContext(weather: {
-  uvIndex: number;
-  aqi?: number | null;
-  humidity?: number | null;
-  temperature?: number | null;
-}, city?: string): string {
+export function buildCompactWeatherContext(
+  weather: {
+    uvIndex: number;
+    aqi?: number | null;
+    humidity?: number | null;
+    temperature?: number | null;
+  },
+  city?: string,
+): string {
   const parts: string[] = [];
   parts.push(`uv:${weather.uvIndex}`);
   if (weather.aqi != null) parts.push(`aq:${weather.aqi}`);
@@ -26,15 +29,19 @@ export function buildCompactWeatherContext(weather: {
   return parts.join('|');
 }
 
-export function buildCompactSkinProfile(profile: {
-  skinType?: string;
-  concerns?: string[];
-  fitzpatrickType?: number;
-} | null): string {
+export function buildCompactSkinProfile(
+  profile: {
+    skinType?: string;
+    concerns?: string[];
+    fitzpatrickType?: number;
+  } | null,
+): string {
   if (!profile) return '-';
   const parts: string[] = [];
-  if (profile.skinType) parts.push(`st:${profile.skinType.charAt(0).toUpperCase()}`);
-  if (profile.concerns?.length) parts.push(`c:${profile.concerns.slice(0, 3).join(',')}`);
+  if (profile.skinType)
+    parts.push(`st:${profile.skinType.charAt(0).toUpperCase()}`);
+  if (profile.concerns?.length)
+    parts.push(`c:${profile.concerns.slice(0, 3).join(',')}`);
   if (profile.fitzpatrickType) parts.push(`f:${profile.fitzpatrickType}`);
   return parts.join('|') || '-';
 }

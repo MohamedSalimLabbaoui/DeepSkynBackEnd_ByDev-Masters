@@ -39,7 +39,9 @@ export class CommentsService {
         where: { id: createCommentDto.parentId },
       });
       if (!parent) {
-        throw new NotFoundException(`Commentaire parent ${createCommentDto.parentId} non trouvé`);
+        throw new NotFoundException(
+          `Commentaire parent ${createCommentDto.parentId} non trouvé`,
+        );
       }
     }
 
@@ -65,7 +67,13 @@ export class CommentsService {
     page: number = 1,
     limit: number = 20,
     currentUserId?: string,
-  ): Promise<{ data: CommentWithUser[]; total: number; page: number; limit: number; totalPages: number }> {
+  ): Promise<{
+    data: CommentWithUser[];
+    total: number;
+    page: number;
+    limit: number;
+    totalPages: number;
+  }> {
     const post = await this.prisma.post.findUnique({ where: { id: postId } });
     if (!post) {
       throw new NotFoundException(`Post ${postId} non trouvé`);
@@ -88,25 +96,25 @@ export class CommentsService {
             include: {
               user: { select: { id: true, name: true, avatar: true } },
               _count: { select: { likes: true } },
-            }
-          }
+            },
+          },
         },
       }),
       this.prisma.comment.count({ where: { postId, parentId: null } }),
     ]);
 
-    const data = comments.map(c => ({
+    const data = comments.map((c) => ({
       ...c,
       isLiked: currentUserId ? c.likes?.length > 0 : false,
       likes: undefined,
     }));
 
-    return { 
-      data, 
+    return {
+      data,
       total,
       page,
       limit,
-      totalPages: Math.ceil(total / limit)
+      totalPages: Math.ceil(total / limit),
     };
   }
 
@@ -127,7 +135,7 @@ export class CommentsService {
       },
     });
 
-    return replies.map(r => ({
+    return replies.map((r) => ({
       ...r,
       isLiked: currentUserId ? r.likes?.length > 0 : false,
       likes: undefined,
@@ -161,7 +169,10 @@ export class CommentsService {
   /**
    * Liker / Unliker un commentaire
    */
-  async toggleLike(commentId: string, userId: string): Promise<{ liked: boolean }> {
+  async toggleLike(
+    commentId: string,
+    userId: string,
+  ): Promise<{ liked: boolean }> {
     const existing = await this.prisma.commentLike.findUnique({
       where: { userId_commentId: { userId, commentId } },
     });

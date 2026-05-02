@@ -19,7 +19,7 @@ describe('SkinProfileService', () => {
     sensitivities: ['fragrance'],
     skinAge: 28,
     healthScore: 72,
-    lastAnalysisAt: new Date('2026-01-15'),  // Prisma returns Date
+    lastAnalysisAt: new Date('2026-01-15'), // Prisma returns Date
     createdAt: new Date(),
     updatedAt: new Date(),
   };
@@ -31,7 +31,7 @@ describe('SkinProfileService', () => {
     sensitivities: ['fragrance'],
     skinAge: 28,
     healthScore: 72,
-    lastAnalysisAt: '2026-01-15T00:00:00.000Z',  // DTO expects ISO string
+    lastAnalysisAt: '2026-01-15T00:00:00.000Z', // DTO expects ISO string
   };
 
   beforeEach(async () => {
@@ -287,10 +287,27 @@ describe('SkinProfileService', () => {
   describe('getStatistics', () => {
     it('should return aggregated statistics', async () => {
       const profiles = [
-        { ...mockProfile, skinType: 'oily', healthScore: 70, skinAge: 25, concerns: ['acne'], sensitivities: ['fragrance'] },
-        { ...mockProfile, id: 'p2', skinType: 'dry', healthScore: 80, skinAge: 35, concerns: ['dryness'], sensitivities: [] },
+        {
+          ...mockProfile,
+          skinType: 'oily',
+          healthScore: 70,
+          skinAge: 25,
+          concerns: ['acne'],
+          sensitivities: ['fragrance'],
+        },
+        {
+          ...mockProfile,
+          id: 'p2',
+          skinType: 'dry',
+          healthScore: 80,
+          skinAge: 35,
+          concerns: ['dryness'],
+          sensitivities: [],
+        },
       ];
-      (prismaService.skinProfile.findMany as jest.Mock).mockResolvedValueOnce(profiles);
+      (prismaService.skinProfile.findMany as jest.Mock).mockResolvedValueOnce(
+        profiles,
+      );
 
       const stats = await service.getStatistics();
       expect(stats.totalProfiles).toBe(2);

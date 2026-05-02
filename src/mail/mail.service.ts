@@ -132,7 +132,11 @@ export class MailService {
       ),
       to,
       subject: 'DeepSkyn - Code de verification inscription',
-      html: this.getSignupVerificationTemplate(userName, code, expiresInMinutes),
+      html: this.getSignupVerificationTemplate(
+        userName,
+        code,
+        expiresInMinutes,
+      ),
     };
 
     try {

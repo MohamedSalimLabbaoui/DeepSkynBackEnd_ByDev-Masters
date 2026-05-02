@@ -14,9 +14,6 @@ import { MetricsMiddleware } from './metrics.middleware';
 export class SharedModule implements NestModule {
   configure(consumer: MiddlewareConsumer) {
     // Apply HTTP metrics middleware to all routes except /metrics itself
-    consumer
-      .apply(MetricsMiddleware)
-      .exclude('metrics')
-      .forRoutes('*');
+    consumer.apply(MetricsMiddleware).exclude('metrics').forRoutes('*');
   }
 }

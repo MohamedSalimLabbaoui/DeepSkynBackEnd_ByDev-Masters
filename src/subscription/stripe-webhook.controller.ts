@@ -74,12 +74,17 @@ export class StripeWebhookController {
     switch (event.type) {
       case 'checkout.session.completed': {
         const session = event.data.object as Stripe.Checkout.Session;
-        const userId = (session.metadata?.userId as string) || (session.client_reference_id as string);
+        const userId =
+          (session.metadata?.userId as string) ||
+          (session.client_reference_id as string);
         const planCodeRaw =
           (session.metadata?.planCode as string | undefined) ||
           (session.metadata?.plan as string | undefined);
-        const couponCode = (session.metadata?.couponCode as string | undefined) || '';
-        const planCode = String(planCodeRaw || '').trim().toLowerCase();
+        const couponCode =
+          (session.metadata?.couponCode as string | undefined) || '';
+        const planCode = String(planCodeRaw || '')
+          .trim()
+          .toLowerCase();
 
         if (!userId) {
           this.logger.warn('checkout.session.completed missing userId');
@@ -109,7 +114,9 @@ export class StripeWebhookController {
         }
 
         const stripeSubscriptionId =
-          typeof session.subscription === 'string' ? session.subscription : null;
+          typeof session.subscription === 'string'
+            ? session.subscription
+            : null;
 
         // Stripe sends amount_total in the smallest currency unit (e.g. cents).
         const chargedAmount =

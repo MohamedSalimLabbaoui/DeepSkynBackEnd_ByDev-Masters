@@ -1,5 +1,12 @@
 // Contrôleur backend pour la météo
-import { Controller, Post, Body, HttpCode, HttpStatus, UseGuards } from '@nestjs/common';
+import {
+  Controller,
+  Post,
+  Body,
+  HttpCode,
+  HttpStatus,
+  UseGuards,
+} from '@nestjs/common';
 import { WeatherService } from './weather.service';
 import { KeycloakAuthGuard } from '../auth/guards/keycloak-auth.guard';
 

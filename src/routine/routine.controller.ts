@@ -252,7 +252,8 @@ export class RoutineController {
   @Post(':id/advise')
   @ApiOperation({
     summary: 'Avis IA sur modification',
-    description: "Obtient un avis expert de l'IA sur une modification de routine",
+    description:
+      "Obtient un avis expert de l'IA sur une modification de routine",
   })
   @ApiParam({ name: 'id', description: 'ID de la routine' })
   @ApiResponse({ status: 200, description: 'Avis IA retourné' })

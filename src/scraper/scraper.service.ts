@@ -123,7 +123,8 @@ export class ScraperService {
             const bodyText = document.body.innerText;
 
             // Récupérer le titre principal du produit
-            const title = document.querySelector('h1, h2')?.textContent?.trim() || '';
+            const title =
+              document.querySelector('h1, h2')?.textContent?.trim() || '';
             if (title) {
               attrs['title'] = title;
             }
@@ -135,6 +136,7 @@ export class ScraperService {
             }
 
             // Récupérer les attributs du produit (contenance, etc.)
+            // eslint-disable-next-line @typescript-eslint/no-unused-vars
             const productInfo: { [key: string]: string } = {};
 
             // Chercher les patterns courants
@@ -215,7 +217,7 @@ export class ScraperService {
             const jsonLdScripts = document.querySelectorAll(
               'script[type="application/ld+json"]',
             );
-            jsonLdScripts.forEach((script, index) => {
+            jsonLdScripts.forEach((script) => {
               try {
                 const jsonData = JSON.parse(script.textContent || '{}');
                 if (jsonData.name) attrs[`structured_name`] = jsonData.name;
@@ -223,7 +225,7 @@ export class ScraperService {
                   attrs[`structured_description`] = jsonData.description;
                 if (jsonData.offers?.[0]?.price)
                   attrs[`structured_price`] = jsonData.offers[0].price;
-              } catch (e) {
+              } catch {
                 // Ignorer les erreurs de parsing
               }
             });

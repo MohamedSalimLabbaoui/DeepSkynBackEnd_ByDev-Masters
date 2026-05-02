@@ -1,4 +1,9 @@
-import { Injectable, Logger, NotFoundException, BadRequestException } from '@nestjs/common';
+import {
+  Injectable,
+  Logger,
+  NotFoundException,
+  BadRequestException,
+} from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateSkinLogDto, WeatherAlertQueryDto } from './dto';
@@ -62,12 +67,16 @@ export class ContextualAnalysisService {
   ) {
     this.geminiApiKeys = this.loadApiKeys('GEMINI_API_KEY');
     this.geminiModels = [
-      this.configService.get<string>('GEMINI_PRIMARY_MODEL') || 'gemini-2.5-flash',
-      this.configService.get<string>('GEMINI_FALLBACK_MODEL') || 'gemini-1.5-flash',
+      this.configService.get<string>('GEMINI_PRIMARY_MODEL') ||
+        'gemini-2.5-flash',
+      this.configService.get<string>('GEMINI_FALLBACK_MODEL') ||
+        'gemini-1.5-flash',
     ].filter((value, index, arr) => !!value && arr.indexOf(value) === index);
 
     if (this.geminiApiKeys.length === 0) {
-      this.logger.warn('Contextual analysis Gemini is not configured. Set GEMINI_API_KEY.');
+      this.logger.warn(
+        'Contextual analysis Gemini is not configured. Set GEMINI_API_KEY.',
+      );
     }
 
     this.grokService = new GrokService(configService);
@@ -110,7 +119,8 @@ export class ContextualAnalysisService {
             { timeout: 15000, headers: { 'Content-Type': 'application/json' } },
           );
 
-          const text = response.data?.candidates?.[0]?.content?.parts?.[0]?.text;
+          const text =
+            response.data?.candidates?.[0]?.content?.parts?.[0]?.text;
           if (text) {
             return text;
           }
@@ -191,8 +201,11 @@ export class ContextualAnalysisService {
         aiAdvice,
       };
     } catch (error) {
-      this.logger.error('Weather alert service failed, returning fallback', error);
-      
+      this.logger.error(
+        'Weather alert service failed, returning fallback',
+        error,
+      );
+
       // Return fallback response instead of 500
       const { latitude, longitude, city, country } = query;
       const fallbackWeather: WeatherData = {
@@ -206,7 +219,8 @@ export class ContextualAnalysisService {
         alert: {
           id: 'fallback',
           type: 'info',
-          message: 'Les données météo sont temporairement indisponibles. Appliquez une protection solaire par précaution.',
+          message:
+            'Les données météo sont temporairement indisponibles. Appliquez une protection solaire par précaution.',
           severity: 'medium',
           date: new Date(),
         },
@@ -222,7 +236,11 @@ export class ContextualAnalysisService {
    */
   private async generateAIAdvice(
     weather: WeatherData,
-    skinProfile: { skinType?: string; concerns?: string[]; fitzpatrickType?: number } | null,
+    skinProfile: {
+      skinType?: string;
+      concerns?: string[];
+      fitzpatrickType?: number;
+    } | null,
     city?: string,
   ): Promise<AIAdvice> {
     if (this.geminiApiKeys.length === 0) {
@@ -255,14 +273,17 @@ Court, français.`);
       const parsed = JSON.parse(jsonMatch[0]) as AIAdvice;
       return parsed;
     } catch (error) {
-      this.logger.error('Gemini AI advice generation failed, trying OpenRouter fallback', error);
-      
+      this.logger.error(
+        'Gemini AI advice generation failed, trying OpenRouter fallback',
+        error,
+      );
+
       try {
         const isGrokAvailable = await this.grokService.isAvailable();
         if (isGrokAvailable) {
           this.logger.log('Using OpenRouter fallback for AI advice');
           const grokResponse = await this.grokService.generate(prompt);
-          
+
           const jsonMatch = grokResponse.match(/\{[\s\S]*\}/);
           if (jsonMatch) {
             const parsed = JSON.parse(jsonMatch[0]) as AIAdvice;
@@ -273,7 +294,7 @@ Court, français.`);
       } catch (grokError) {
         this.logger.error('OpenRouter fallback also failed', grokError);
       }
-      
+
       return this.getFallbackAdvice(weather);
     }
   }
@@ -291,11 +312,13 @@ Court, français.`);
     // UV-based recommendations
     if (uvLevel >= 8) {
       protectionLevel = 'extreme';
-      skinCareRoutine.push('Applique une protection solaire SPF 50+ généreusement');
+      skinCareRoutine.push(
+        'Applique une protection solaire SPF 50+ généreusement',
+      );
       skinCareRoutine.push('Réapplique toutes les 2 heures');
-      productsToUse.push('Écran solaire SPF 50+ résistant à l\'eau');
+      productsToUse.push("Écran solaire SPF 50+ résistant à l'eau");
       productsToUse.push('Sérum antioxydant (Vitamine C)');
-      warnings.push('Évite l\'exposition directe entre 11h et 16h');
+      warnings.push("Évite l'exposition directe entre 11h et 16h");
     } else if (uvLevel >= 6) {
       protectionLevel = 'high';
       skinCareRoutine.push('Applique une protection solaire SPF 50+');
@@ -310,7 +333,9 @@ Court, français.`);
     // Humidity-based recommendations
     if (weather.humidity !== null) {
       if (weather.humidity < 30) {
-        skinCareRoutine.push('Utilise un sérum hydratant à l\'acide hyaluronique');
+        skinCareRoutine.push(
+          "Utilise un sérum hydratant à l'acide hyaluronique",
+        );
         productsToUse.push('Sérum hydratant');
         productsToUse.push('Crème riche et occlusive');
       } else if (weather.humidity > 80) {
@@ -325,7 +350,7 @@ Court, français.`);
       productsToUse.push('Huile démaquillante');
       productsToUse.push('Sérum anti-pollution aux antioxydants');
       if (weather.aqi > 100) {
-        warnings.push('Qualité de l\'air très dégradée - limite les sorties');
+        warnings.push("Qualité de l'air très dégradée - limite les sorties");
       }
     }
 
@@ -333,8 +358,14 @@ Court, français.`);
 
     return {
       personalizedMessage,
-      skinCareRoutine: skinCareRoutine.length > 0 ? skinCareRoutine : ['Continue ta routine habituelle'],
-      productsToUse: productsToUse.length > 0 ? productsToUse : ['Ta crème hydratante habituelle'],
+      skinCareRoutine:
+        skinCareRoutine.length > 0
+          ? skinCareRoutine
+          : ['Continue ta routine habituelle'],
+      productsToUse:
+        productsToUse.length > 0
+          ? productsToUse
+          : ['Ta crème hydratante habituelle'],
       warnings,
       protectionLevel,
     };
@@ -347,7 +378,9 @@ Court, français.`);
     const parts: string[] = [];
 
     if (weather.uvIndex >= 6) {
-      parts.push(`Attention, indice UV élevé (${weather.uvIndex}/11) aujourd'hui`);
+      parts.push(
+        `Attention, indice UV élevé (${weather.uvIndex}/11) aujourd'hui`,
+      );
     }
     if (weather.aqi !== null && weather.aqi > 75) {
       parts.push(`qualité de l'air dégradée (AQI: ${weather.aqi})`);
@@ -357,7 +390,7 @@ Court, français.`);
     }
 
     if (parts.length === 0) {
-      return 'Conditions météo favorables pour ta peau. N\'oublie pas ta protection solaire quotidienne !';
+      return "Conditions météo favorables pour ta peau. N'oublie pas ta protection solaire quotidienne !";
     }
 
     return `${parts.join(', ')}. Adapte ta routine en conséquence.`;
@@ -382,8 +415,10 @@ Court, français.`);
     longitude: number,
   ): Promise<WeatherData> {
     try {
-      this.logger.log(`Fetching weather data for lat: ${latitude}, lon: ${longitude}`);
-      
+      this.logger.log(
+        `Fetching weather data for lat: ${latitude}, lon: ${longitude}`,
+      );
+
       // Fetch UV index
       const uvResponse = await axios.get(
         `https://api.open-meteo.com/v1/forecast`,
@@ -417,7 +452,9 @@ Court, français.`);
           },
         );
         aqi = aqiResponse.data?.current?.european_aqi ?? null;
-        this.logger.log(`AQI API Response: ${JSON.stringify(aqiResponse.data)}`);
+        this.logger.log(
+          `AQI API Response: ${JSON.stringify(aqiResponse.data)}`,
+        );
       } catch (aqiError) {
         this.logger.warn('Failed to fetch AQI data', aqiError);
       }
@@ -433,7 +470,7 @@ Court, français.`);
     } catch (error) {
       this.logger.error('Failed to fetch weather data', error);
       this.logger.log('Returning fallback weather data');
-      
+
       // Return fallback data instead of throwing
       return {
         uvIndex: 5, // Medium UV as precaution
@@ -535,11 +572,11 @@ Court, français.`);
     } else if (uvIndex >= 6) {
       severity = 'medium';
       recommendation =
-        "applique SPF 50+ et un sérum antioxydant (vitamine C) avant de sortir";
+        'applique SPF 50+ et un sérum antioxydant (vitamine C) avant de sortir';
     } else {
       severity = 'low';
       recommendation =
-        "applique SPF 30 pour protéger ta peau des rayons UV cumulés";
+        'applique SPF 30 pour protéger ta peau des rayons UV cumulés';
     }
 
     const location = city ? ` à ${city}` : '';
@@ -561,15 +598,15 @@ Court, français.`);
     if (aqi > 100) {
       severity = 'high';
       recommendation =
-        "nettoie ta peau en profondeur ce soir avec un double nettoyage et applique un sérum anti-pollution riche en antioxydants";
+        'nettoie ta peau en profondeur ce soir avec un double nettoyage et applique un sérum anti-pollution riche en antioxydants';
     } else if (aqi > 75) {
       severity = 'medium';
       recommendation =
-        "protège ta peau avec une crème barrière anti-pollution et pense à un nettoyage en profondeur ce soir";
+        'protège ta peau avec une crème barrière anti-pollution et pense à un nettoyage en profondeur ce soir';
     } else {
       severity = 'low';
       recommendation =
-        "un nettoyage doux ce soir suffira pour éliminer les particules accumulées";
+        'un nettoyage doux ce soir suffira pour éliminer les particules accumulées';
     }
 
     const location = city ? ` à ${city}` : '';
@@ -811,9 +848,20 @@ Court, français.`);
    */
   private generatePrediction(
     currentMonth: number,
-    currentPattern: { avgConditionScore: number; dominantIssue: string | null } | null,
-    lastYearPattern: { avgConditionScore: number; dominantIssue: string | null } | null,
-    historicalPatterns: Array<{ month: number; avgConditionScore: number; dominantIssue: string | null }>,
+    currentPattern: {
+      avgConditionScore: number;
+      dominantIssue: string | null;
+    } | null,
+    lastYearPattern: {
+      avgConditionScore: number;
+      dominantIssue: string | null;
+    } | null,
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    _historicalPatterns: Array<{
+      month: number;
+      avgConditionScore: number;
+      dominantIssue: string | null;
+    }>,
   ): { message: string; recommendations: string[]; trend: string } {
     const monthName = this.getMonthName(currentMonth);
     const recommendations: string[] = [];
@@ -830,7 +878,8 @@ Court, français.`);
     }
 
     if (lastYearPattern && currentPattern) {
-      const diff = currentPattern.avgConditionScore - lastYearPattern.avgConditionScore;
+      const diff =
+        currentPattern.avgConditionScore - lastYearPattern.avgConditionScore;
 
       if (diff > 1) {
         trend = 'improving';
@@ -904,33 +953,33 @@ Court, français.`);
   private getRecommendationsForConcern(concern: string): string[] {
     const recommendations: Record<string, string[]> = {
       acne: [
-        "Utilise un nettoyant à base de BHA (acide salicylique)",
-        "Évite les produits comédogènes",
+        'Utilise un nettoyant à base de BHA (acide salicylique)',
+        'Évite les produits comédogènes',
         "N'oublie pas d'hydrater malgré les imperfections",
       ],
       dryness: [
         "Applique un sérum à l'acide hyaluronique sur peau humide",
-        "Utilise une crème riche matin et soir",
-        "Évite les nettoyants agressifs",
+        'Utilise une crème riche matin et soir',
+        'Évite les nettoyants agressifs',
       ],
       redness: [
-        "Utilise des produits apaisants à la centella asiatica",
+        'Utilise des produits apaisants à la centella asiatica',
         "Évite les parfums et l'alcool dans tes produits",
-        "Protège-toi du froid et du vent",
+        'Protège-toi du froid et du vent',
       ],
       oiliness: [
-        "Utilise un nettoyant doux (évite de décaper)",
-        "Applique un sérum au niacinamide pour réguler le sébum",
-        "Hydrate avec une texture légère gel ou fluide",
+        'Utilise un nettoyant doux (évite de décaper)',
+        'Applique un sérum au niacinamide pour réguler le sébum',
+        'Hydrate avec une texture légère gel ou fluide',
       ],
       sensitivity: [
-        "Simplifie ta routine (moins de produits)",
-        "Teste chaque nouveau produit sur une petite zone",
-        "Privilégie les formules sans parfum",
+        'Simplifie ta routine (moins de produits)',
+        'Teste chaque nouveau produit sur une petite zone',
+        'Privilégie les formules sans parfum',
       ],
       pigmentation: [
-        "Utilise un sérum à la vitamine C le matin",
-        "SPF 50+ est indispensable tous les jours",
+        'Utilise un sérum à la vitamine C le matin',
+        'SPF 50+ est indispensable tous les jours',
         "Considère des soins à l'arbutine ou au niacinamide",
       ],
     };

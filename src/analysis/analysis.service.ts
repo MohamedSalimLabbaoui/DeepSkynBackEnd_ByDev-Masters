@@ -87,19 +87,20 @@ export class AnalysisService {
   private sanitizePreocupent(preocupent?: string[] | null): string[] {
     if (!Array.isArray(preocupent)) return [];
 
-    return [...new Set(
-      preocupent
-        .map((item) => (typeof item === 'string' ? item.trim() : ''))
-        .filter((item) => item.length > 0),
-    )];
+    return [
+      ...new Set(
+        preocupent
+          .map((item) => (typeof item === 'string' ? item.trim() : ''))
+          .filter((item) => item.length > 0),
+      ),
+    ];
   }
 
   private buildRealtimeFallbackAnalysis(
     previousAnalysis?: Analysis | null,
   ): GeminiAnalysisResult {
     const previousResults =
-      previousAnalysis?.results &&
-      typeof previousAnalysis.results === 'object'
+      previousAnalysis?.results && typeof previousAnalysis.results === 'object'
         ? (previousAnalysis.results as any)
         : null;
 
@@ -138,21 +139,33 @@ export class AnalysisService {
         products: Array.isArray(previousResults?.recommendations?.products)
           ? previousResults.recommendations.products
           : ['Nettoyant doux', 'Hydratant quotidien', 'SPF 50+'],
-        ingredients: Array.isArray(previousResults?.recommendations?.ingredients)
+        ingredients: Array.isArray(
+          previousResults?.recommendations?.ingredients,
+        )
           ? previousResults.recommendations.ingredients
           : ['Niacinamide', 'Acide hyaluronique'],
         lifestyle: Array.isArray(previousResults?.recommendations?.lifestyle)
           ? previousResults.recommendations.lifestyle
-          : ['Hydratez-vous régulièrement', 'Dormez au moins 7h', 'Protection solaire quotidienne'],
+          : [
+              'Hydratez-vous régulièrement',
+              'Dormez au moins 7h',
+              'Protection solaire quotidienne',
+            ],
         warnings: [
           'Analyse effectuee en mode resilient: les services IA externes sont temporairement indisponibles.',
         ],
       },
       detailedAnalysis: {
-        hydration: { score: 70, description: 'Hydratation globalement correcte' },
+        hydration: {
+          score: 70,
+          description: 'Hydratation globalement correcte',
+        },
         texture: { score: 70, description: 'Texture relativement homogene' },
         pores: { score: 68, description: 'Pores moderes' },
-        pigmentation: { score: 69, description: 'Pigmentation globalement stable' },
+        pigmentation: {
+          score: 69,
+          description: 'Pigmentation globalement stable',
+        },
         wrinkles: { score: 72, description: 'Signes legers de rides' },
         acne: { score: 71, description: 'Imperfections legeres a moderees' },
         redness: { score: 70, description: 'Rougeurs limitees' },
@@ -160,7 +173,10 @@ export class AnalysisService {
       },
       fitzpatrickType:
         typeof previousResults?.fitzpatrickType === 'number'
-          ? Math.max(1, Math.min(6, Math.round(previousResults.fitzpatrickType)))
+          ? Math.max(
+              1,
+              Math.min(6, Math.round(previousResults.fitzpatrickType)),
+            )
           : 3,
       summary:
         'Analyse retournee en mode de secours. Les fournisseurs IA externes sont momentanement indisponibles; reessayez plus tard pour une lecture complete.',
@@ -172,7 +188,11 @@ export class AnalysisService {
     current: GeminiAnalysisResult;
   }): AnalysisEvolutionRemark {
     const { previous, current } = params;
-    if (!previous || previous.healthScore === null || previous.skinAge === null) {
+    if (
+      !previous ||
+      previous.healthScore === null ||
+      previous.skinAge === null
+    ) {
       return {
         hasHistory: false,
         trend: 'stable',
@@ -185,13 +205,18 @@ export class AnalysisService {
       };
     }
 
-    const healthScoreChange = (current.healthScore ?? 0) - (previous.healthScore ?? 0);
+    const healthScoreChange =
+      (current.healthScore ?? 0) - (previous.healthScore ?? 0);
     const skinAgeChange = (current.skinAge ?? 0) - (previous.skinAge ?? 0);
 
     const previousConditions = new Set(previous.conditions || []);
     const currentConditions = new Set(current.conditions || []);
-    const newConditions = [...currentConditions].filter((c) => !previousConditions.has(c));
-    const resolvedConditions = [...previousConditions].filter((c) => !currentConditions.has(c));
+    const newConditions = [...currentConditions].filter(
+      (c) => !previousConditions.has(c),
+    );
+    const resolvedConditions = [...previousConditions].filter(
+      (c) => !currentConditions.has(c),
+    );
 
     const trend: AnalysisEvolutionRemark['trend'] =
       healthScoreChange >= 3 || skinAgeChange <= -1
@@ -424,7 +449,8 @@ export class AnalysisService {
     const normalizedPreocupent = this.sanitizePreocupent(
       realTimeScanDto.preocupent,
     );
-    const normalizedScanInput = this.normalizeRealTimeScanInput(realTimeScanDto);
+    const normalizedScanInput =
+      this.normalizeRealTimeScanInput(realTimeScanDto);
 
     if (realTimeScanDto.saveAnalysis) {
       await this.enforceAnalysisAccess(userId);
@@ -460,10 +486,12 @@ export class AnalysisService {
       } else {
         try {
           result = await this.geminiService.analyzeRealTimeMultiAngleScan(
-            (Object.entries(normalizedScanInput) as [
-              ScanFaceAngle,
-              { image: string; mimeType: string },
-            ][]).map(([, data]) => data),
+            (
+              Object.entries(normalizedScanInput) as [
+                ScanFaceAngle,
+                { image: string; mimeType: string },
+              ][]
+            ).map(([, data]) => data),
           );
         } catch (analysisError) {
           const reason =
@@ -499,9 +527,9 @@ export class AnalysisService {
 
       // Create analysis record if requested
       if (realTimeScanDto.saveAnalysis) {
-        const savedImageUrls = (Object.values(imageUrlsByAngle) as string[]).filter(
-          Boolean,
-        );
+        const savedImageUrls = (
+          Object.values(imageUrlsByAngle) as string[]
+        ).filter(Boolean);
         await this.prisma.analysis.create({
           data: {
             userId,
@@ -519,7 +547,7 @@ export class AnalysisService {
 
         // Update skin profile
         await this.updateSkinProfile(userId, result);
-        
+
         // 📸 AUTO-CAPTURE SNAPSHOT for Digital Twin
         try {
           await this.captureDigitalTwinSnapshot(
@@ -528,7 +556,9 @@ export class AnalysisService {
             imageUrlsByAngle.front ?? null,
           );
         } catch (error) {
-          this.logger.warn(`Failed to capture Digital Twin snapshot: ${error.message}`);
+          this.logger.warn(
+            `Failed to capture Digital Twin snapshot: ${error.message}`,
+          );
           // Don't fail the analysis if snapshot capture fails
         }
       }
@@ -562,7 +592,8 @@ export class AnalysisService {
       if (error instanceof BadRequestException) {
         throw error;
       }
-      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      const errorMessage =
+        error instanceof Error ? error.message : 'Unknown error';
       throw new BadRequestException(`Failed to process scan: ${errorMessage}`);
     }
   }
@@ -662,14 +693,16 @@ export class AnalysisService {
 
       // Update user's skin profile
       await this.updateSkinProfile(userId, result);
-      
+
       // 📸 AUTO-CAPTURE SNAPSHOT for Digital Twin
       try {
         // Get first image URL from analysis
         const imageUrl = imageUrls.length > 0 ? imageUrls[0] : null;
         await this.captureDigitalTwinSnapshot(userId, result, imageUrl);
       } catch (error) {
-        this.logger.warn(`Failed to capture Digital Twin snapshot: ${error.message}`);
+        this.logger.warn(
+          `Failed to capture Digital Twin snapshot: ${error.message}`,
+        );
         // Don't fail the analysis if snapshot capture fails
       }
 
@@ -751,10 +784,8 @@ export class AnalysisService {
       const conditions: Record<string, any> = {};
       Object.entries(result.detailedAnalysis || {}).forEach(([key, value]) => {
         if (value && typeof value === 'object' && 'score' in value) {
-          const severity = 
-            value.score >= 70 ? 'low' : 
-            value.score >= 40 ? 'medium' : 
-            'high';
+          const severity =
+            value.score >= 70 ? 'low' : value.score >= 40 ? 'medium' : 'high';
           conditions[key] = { severity, score: value.score };
         }
       });
@@ -779,7 +810,10 @@ export class AnalysisService {
 
       this.logger.log(`Digital Twin snapshot captured for user ${userId}`);
     } catch (error) {
-      this.logger.error(`Failed to capture Digital Twin snapshot: ${error.message}`, error);
+      this.logger.error(
+        `Failed to capture Digital Twin snapshot: ${error.message}`,
+        error,
+      );
       throw error;
     }
   }
@@ -826,8 +860,12 @@ export class AnalysisService {
       ...(options.minScore !== undefined || options.maxScore !== undefined
         ? {
             healthScore: {
-              ...(options.minScore !== undefined ? { gte: options.minScore } : {}),
-              ...(options.maxScore !== undefined ? { lte: options.maxScore } : {}),
+              ...(options.minScore !== undefined
+                ? { gte: options.minScore }
+                : {}),
+              ...(options.maxScore !== undefined
+                ? { lte: options.maxScore }
+                : {}),
             },
           }
         : {}),
@@ -951,7 +989,9 @@ export class AnalysisService {
       startTime,
     );
 
-    return this.prisma.analysis.findUnique({ where: { id } }) as Promise<Analysis>;
+    return this.prisma.analysis.findUnique({
+      where: { id },
+    }) as Promise<Analysis>;
   }
 
   /**

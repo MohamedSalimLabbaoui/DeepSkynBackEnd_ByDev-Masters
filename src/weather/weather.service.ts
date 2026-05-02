@@ -28,8 +28,10 @@ export class WeatherService {
   constructor(private readonly configService: ConfigService) {
     this.geminiApiKeys = this.loadApiKeys('GEMINI_API_KEY');
     this.geminiModels = [
-      this.configService.get<string>('GEMINI_PRIMARY_MODEL') || 'gemini-2.5-flash',
-      this.configService.get<string>('GEMINI_FALLBACK_MODEL') || 'gemini-1.5-flash',
+      this.configService.get<string>('GEMINI_PRIMARY_MODEL') ||
+        'gemini-2.5-flash',
+      this.configService.get<string>('GEMINI_FALLBACK_MODEL') ||
+        'gemini-1.5-flash',
     ].filter((value, index, arr) => !!value && arr.indexOf(value) === index);
 
     if (this.geminiApiKeys.length === 0) {
@@ -79,7 +81,8 @@ export class WeatherService {
             },
           );
 
-          const text = response.data?.candidates?.[0]?.content?.parts?.[0]?.text;
+          const text =
+            response.data?.candidates?.[0]?.content?.parts?.[0]?.text;
           if (text) {
             return text;
           }
@@ -134,9 +137,8 @@ export class WeatherService {
     }
   }
 
-
   /**
-  * Générer un conseil météo personnalisé via Gemini -> OpenRouter
+   * Générer un conseil météo personnalisé via Gemini -> OpenRouter
    */
   async generateWeatherAdvice(data: WeatherAdviceInput): Promise<{
     advice: string;
@@ -159,7 +161,10 @@ export class WeatherService {
           urgency: urgencyLevel,
         };
       } catch (geminiError) {
-        this.logger.warn('Gemini weather advice failed, trying OpenRouter', geminiError);
+        this.logger.warn(
+          'Gemini weather advice failed, trying OpenRouter',
+          geminiError,
+        );
       }
     }
 
@@ -170,7 +175,7 @@ export class WeatherService {
         this.logger.log('Using OpenRouter for weather advice');
         const grokResponse = await this.grokService.generate(prompt);
         const parsed = this.parseAdviceResponse(grokResponse);
-        
+
         return {
           advice: parsed.advice,
           emoji: parsed.emoji,
@@ -219,7 +224,9 @@ Le conseil doit:
   /**
    * Calculer le niveau d'urgence basé sur les conditions
    */
-  private calculateUrgency(data: WeatherAdviceInput): 'low' | 'medium' | 'high' {
+  private calculateUrgency(
+    data: WeatherAdviceInput,
+  ): 'low' | 'medium' | 'high' {
     let urgencyScore = 0;
 
     // Température extrême

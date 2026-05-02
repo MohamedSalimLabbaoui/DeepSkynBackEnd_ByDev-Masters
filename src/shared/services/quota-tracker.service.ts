@@ -23,18 +23,18 @@ export class QuotaTracker {
         return null;
       }
 
-      const quotaFailures = errorData.details?.find(
-        (detail: any) => detail['@type']?.includes('QuotaFailure')
+      const quotaFailures = errorData.details?.find((detail: any) =>
+        detail['@type']?.includes('QuotaFailure'),
       );
 
-      const retryInfo = errorData.details?.find(
-        (detail: any) => detail['@type']?.includes('RetryInfo')
+      const retryInfo = errorData.details?.find((detail: any) =>
+        detail['@type']?.includes('RetryInfo'),
       );
 
       if (quotaFailures?.violations?.[0]) {
         const violation = quotaFailures.violations[0];
         const retryDelay = retryInfo?.retryDelay;
-        
+
         // Parse retry delay (e.g., "50s" -> 50 seconds)
         let retryAfterSeconds: number | undefined;
         if (retryDelay) {
@@ -47,13 +47,17 @@ export class QuotaTracker {
         const quotaInfo: QuotaInfo = {
           isExhausted: true,
           quotaMetric: violation.quotaMetric,
-          dailyLimit: violation.quotaValue ? parseInt(violation.quotaValue, 10) : undefined,
+          dailyLimit: violation.quotaValue
+            ? parseInt(violation.quotaValue, 10)
+            : undefined,
           retryAfterSeconds,
-          resetTime: retryAfterSeconds ? new Date(Date.now() + retryAfterSeconds * 1000) : undefined,
+          resetTime: retryAfterSeconds
+            ? new Date(Date.now() + retryAfterSeconds * 1000)
+            : undefined,
         };
 
         this.logger.warn(
-          `Quota exhausted: ${quotaInfo.quotaMetric}, limit: ${quotaInfo.dailyLimit}, retry in: ${retryAfterSeconds}s`
+          `Quota exhausted: ${quotaInfo.quotaMetric}, limit: ${quotaInfo.dailyLimit}, retry in: ${retryAfterSeconds}s`,
         );
 
         return quotaInfo;
@@ -70,7 +74,7 @@ export class QuotaTracker {
    */
   recordQuotaExhaustion(serviceKey: string, quotaInfo: QuotaInfo): void {
     this.quotaStates.set(serviceKey, quotaInfo);
-    
+
     // Auto-clear after reset time
     if (quotaInfo.resetTime) {
       const timeUntilReset = quotaInfo.resetTime.getTime() - Date.now();

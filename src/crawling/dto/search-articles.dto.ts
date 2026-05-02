@@ -4,7 +4,10 @@ import { Type } from 'class-transformer';
 import { CrawlSource } from './crawl-articles.dto';
 
 export class SearchArticlesDto {
-  @ApiPropertyOptional({ description: 'Terme de recherche', example: 'acne treatment' })
+  @ApiPropertyOptional({
+    description: 'Terme de recherche',
+    example: 'acne treatment',
+  })
   @IsOptional()
   @IsString()
   query?: string;

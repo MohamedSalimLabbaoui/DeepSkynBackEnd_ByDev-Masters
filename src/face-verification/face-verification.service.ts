@@ -1,4 +1,9 @@
-import { Injectable, BadRequestException, UnauthorizedException, Logger } from '@nestjs/common';
+import {
+  Injectable,
+  BadRequestException,
+  UnauthorizedException,
+  Logger,
+} from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { SupabaseService } from '../analysis/services/supabase.service';
 import * as crypto from 'crypto';
@@ -45,7 +50,9 @@ export class FaceVerificationService {
     try {
       await FaceVerificationService.faceModelsLoadPromise;
     } catch (error: any) {
-      this.logger.error(`FaceID model loading failed: ${error?.message || 'unknown error'}`);
+      this.logger.error(
+        `FaceID model loading failed: ${error?.message || 'unknown error'}`,
+      );
       FaceVerificationService.faceModelsLoadPromise = null;
       throw new UnauthorizedException('Modeles FaceID indisponibles');
     }
@@ -63,8 +70,17 @@ export class FaceVerificationService {
   }
 
   private decodeImageToTensor(imageBuffer: Buffer): tf.Tensor3D {
-    const isPng = imageBuffer.length >= 8 && imageBuffer[0] === 0x89 && imageBuffer[1] === 0x50 && imageBuffer[2] === 0x4e && imageBuffer[3] === 0x47;
-    const isJpeg = imageBuffer.length >= 3 && imageBuffer[0] === 0xff && imageBuffer[1] === 0xd8 && imageBuffer[2] === 0xff;
+    const isPng =
+      imageBuffer.length >= 8 &&
+      imageBuffer[0] === 0x89 &&
+      imageBuffer[1] === 0x50 &&
+      imageBuffer[2] === 0x4e &&
+      imageBuffer[3] === 0x47;
+    const isJpeg =
+      imageBuffer.length >= 3 &&
+      imageBuffer[0] === 0xff &&
+      imageBuffer[1] === 0xd8 &&
+      imageBuffer[2] === 0xff;
 
     let width = 0;
     let height = 0;
@@ -81,7 +97,9 @@ export class FaceVerificationService {
       height = decoded.height;
       rgbaData = decoded.data;
     } else {
-      throw new BadRequestException('Format image non supporte (PNG/JPEG attendu)');
+      throw new BadRequestException(
+        'Format image non supporte (PNG/JPEG attendu)',
+      );
     }
 
     const rgbData = new Uint8Array(width * height * 3);
@@ -94,7 +112,9 @@ export class FaceVerificationService {
     return tf.tensor3d(rgbData, [height, width, 3], 'int32');
   }
 
-  private async extractDescriptorFromImageBase64(imageBase64: string): Promise<number[]> {
+  private async extractDescriptorFromImageBase64(
+    imageBase64: string,
+  ): Promise<number[]> {
     await this.ensureFaceModelsLoaded();
 
     let imageBuffer: Buffer;
@@ -117,7 +137,10 @@ export class FaceVerificationService {
     let detection: any;
     try {
       detection = await faceapi
-        .detectSingleFace(tensor as any, new faceapi.SsdMobilenetv1Options({ minConfidence: 0.3 }))
+        .detectSingleFace(
+          tensor as any,
+          new faceapi.SsdMobilenetv1Options({ minConfidence: 0.3 }),
+        )
         .withFaceLandmarks()
         .withFaceDescriptor();
     } finally {
@@ -141,12 +164,16 @@ export class FaceVerificationService {
     imageBase64?: string,
   ): Promise<FaceVerificationResult> {
     if (!faceDescriptor && !imageBase64) {
-      throw new BadRequestException('Vous devez fournir soit le descripteur facial, soit l\'image en base64');
+      throw new BadRequestException(
+        "Vous devez fournir soit le descripteur facial, soit l'image en base64",
+      );
     }
 
     let finalDescriptor = faceDescriptor;
     if (!finalDescriptor || finalDescriptor.length === 0) {
-      finalDescriptor = await this.extractDescriptorFromImageBase64(imageBase64!);
+      finalDescriptor = await this.extractDescriptorFromImageBase64(
+        imageBase64!,
+      );
     }
     // Récupérer les infos de l'utilisateur avec sa photo de profil
     const user = await this.prisma.user.findUnique({
@@ -184,7 +211,10 @@ export class FaceVerificationService {
 
     // Comparer le visage avec la référence
     const storedDescriptor = faceReference.descriptor as number[];
-    const similarity = this.calculateSimilarity(finalDescriptor, storedDescriptor);
+    const similarity = this.calculateSimilarity(
+      finalDescriptor,
+      storedDescriptor,
+    );
 
     if (similarity >= this.SIMILARITY_THRESHOLD) {
       return {
@@ -217,7 +247,9 @@ export class FaceVerificationService {
     });
 
     if (!user?.avatar) {
-      throw new BadRequestException('Vous devez d\'abord définir une photo de profil');
+      throw new BadRequestException(
+        "Vous devez d'abord définir une photo de profil",
+      );
     }
 
     await this.prisma.faceReference.upsert({
@@ -244,12 +276,16 @@ export class FaceVerificationService {
     imageBase64?: string,
   ): Promise<void> {
     if (!descriptor && !imageBase64) {
-      throw new BadRequestException('Vous devez fournir soit le descripteur facial, soit l\'image en base64');
+      throw new BadRequestException(
+        "Vous devez fournir soit le descripteur facial, soit l'image en base64",
+      );
     }
 
     let finalDescriptor = descriptor;
     if (!finalDescriptor || finalDescriptor.length === 0) {
-      finalDescriptor = await this.extractDescriptorFromImageBase64(imageBase64!);
+      finalDescriptor = await this.extractDescriptorFromImageBase64(
+        imageBase64!,
+      );
     }
 
     let imageUrl: string | null = null;
@@ -258,7 +294,7 @@ export class FaceVerificationService {
     if (imageBase64) {
       const buffer = Buffer.from(imageBase64, 'base64');
       const filename = `face-reference-${userId}-${crypto.randomUUID()}.jpg`;
-      
+
       const file = {
         originalname: filename,
         buffer,
@@ -290,7 +326,9 @@ export class FaceVerificationService {
    */
   private calculateSimilarity(desc1: number[], desc2: number[]): number {
     if (desc1.length !== desc2.length) {
-      throw new BadRequestException('Les descripteurs de visage ont des dimensions différentes');
+      throw new BadRequestException(
+        'Les descripteurs de visage ont des dimensions différentes',
+      );
     }
 
     // Distance euclidienne
@@ -304,7 +342,7 @@ export class FaceVerificationService {
     // Pour face-api.js, une distance < 0.6 = même visage
     // On convertit en score de similarité (0-1)
     const maxExpectedDistance = 1.2;
-    const similarity = Math.max(0, 1 - (euclideanDistance / maxExpectedDistance));
+    const similarity = Math.max(0, 1 - euclideanDistance / maxExpectedDistance);
 
     return similarity;
   }
@@ -323,11 +361,13 @@ export class FaceVerificationService {
    * Supprime la référence faciale d'un utilisateur (pour réinitialisation)
    */
   async deleteFaceReference(userId: string): Promise<void> {
-    await this.prisma.faceReference.delete({
-      where: { userId },
-    }).catch(() => {
-      // Ignorer si la référence n'existe pas
-    });
+    await this.prisma.faceReference
+      .delete({
+        where: { userId },
+      })
+      .catch(() => {
+        // Ignorer si la référence n'existe pas
+      });
   }
 
   /**

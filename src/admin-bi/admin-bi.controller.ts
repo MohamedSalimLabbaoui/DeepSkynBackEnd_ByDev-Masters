@@ -1,5 +1,10 @@
 import { Controller, Get, UseGuards } from '@nestjs/common';
-import { ApiBearerAuth, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
+import {
+  ApiBearerAuth,
+  ApiOperation,
+  ApiResponse,
+  ApiTags,
+} from '@nestjs/swagger';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { KeycloakAuthGuard } from '../auth/guards/keycloak-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
@@ -16,7 +21,8 @@ export class AdminBiController {
   @Get('dashboard')
   @ApiOperation({
     summary: 'Advanced BI dashboard data',
-    description: 'Returns aggregated business metrics for the admin BI dashboard.',
+    description:
+      'Returns aggregated business metrics for the admin BI dashboard.',
   })
   @ApiResponse({ status: 200, description: 'BI dashboard payload returned' })
   async getDashboard() {

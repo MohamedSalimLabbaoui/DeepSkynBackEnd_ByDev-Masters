@@ -55,7 +55,8 @@ export class AnalysisController {
         questionnaire: { type: 'string', description: 'Questionnaire JSON' },
         preocupent: {
           type: 'string',
-          description: 'JSON array of selected face zones (ex: ["nez","joues"])',
+          description:
+            'JSON array of selected face zones (ex: ["nez","joues"])',
         },
         saveAnalysis: {
           type: 'string',

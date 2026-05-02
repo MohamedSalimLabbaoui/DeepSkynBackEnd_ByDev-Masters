@@ -53,7 +53,9 @@ export class PrismaService
     });
   }
 
-  private extractUserIdsFromParams(params: Prisma.MiddlewareParams): Set<string> {
+  private extractUserIdsFromParams(
+    params: Prisma.MiddlewareParams,
+  ): Set<string> {
     const ids = new Set<string>();
 
     const payloads: unknown[] = [];
@@ -102,7 +104,11 @@ export class PrismaService
 
     const user = record.user as Record<string, unknown> | undefined;
     const connect = user?.connect as Record<string, unknown> | undefined;
-    if (connect && typeof connect.id === 'string' && connect.id.trim().length > 0) {
+    if (
+      connect &&
+      typeof connect.id === 'string' &&
+      connect.id.trim().length > 0
+    ) {
       ids.add(connect.id);
     }
 

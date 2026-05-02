@@ -1,4 +1,15 @@
-import { Body, Controller, Delete, Get, HttpCode, HttpStatus, Param, Patch, Post, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  HttpCode,
+  HttpStatus,
+  Param,
+  Patch,
+  Post,
+  UseGuards,
+} from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { KeycloakAuthGuard } from '../auth/guards/keycloak-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
@@ -44,7 +55,10 @@ export class CouponsController {
   @Patch('admin/:id')
   @UseGuards(KeycloakAuthGuard, RolesGuard)
   @Roles('admin')
-  async adminUpdateCoupon(@Param('id') id: string, @Body() dto: UpdateCouponDto) {
+  async adminUpdateCoupon(
+    @Param('id') id: string,
+    @Body() dto: UpdateCouponDto,
+  ) {
     return this.couponsService.adminUpdateCoupon(id, dto);
   }
 

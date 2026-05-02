@@ -118,7 +118,9 @@ export class GoogleAuthService {
         user: this.sanitizeUser(user),
         isNewUser: false,
         requiresTwoFactor: user.twoFactorEnabled,
-        accessToken: user.twoFactorEnabled ? undefined : this.generateToken(user),
+        accessToken: user.twoFactorEnabled
+          ? undefined
+          : this.generateToken(user),
       };
     }
 
@@ -150,7 +152,9 @@ export class GoogleAuthService {
         user: this.sanitizeUser(user),
         isNewUser: false,
         requiresTwoFactor: user.twoFactorEnabled,
-        accessToken: user.twoFactorEnabled ? undefined : this.generateToken(user),
+        accessToken: user.twoFactorEnabled
+          ? undefined
+          : this.generateToken(user),
       };
     }
 
@@ -193,6 +197,7 @@ export class GoogleAuthService {
    * Supprimer les champs sensibles de l'utilisateur
    */
   private sanitizeUser(user: User): Partial<User> {
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const { password, refreshToken, twoFactorSecret, ...safeUser } = user;
     return safeUser;
   }

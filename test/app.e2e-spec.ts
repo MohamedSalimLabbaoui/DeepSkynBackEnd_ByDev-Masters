@@ -22,7 +22,11 @@ import { MetricsController } from '../src/shared/metrics.controller';
 class HealthController {
   @Get('health')
   health() {
-    return { status: 'ok', service: 'deepskyn-backend', timestamp: new Date().toISOString() };
+    return {
+      status: 'ok',
+      service: 'deepskyn-backend',
+      timestamp: new Date().toISOString(),
+    };
   }
 
   @Get()

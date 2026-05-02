@@ -32,7 +32,9 @@ import { MailModule } from '../mail/mail.module';
       inject: [ConfigService],
       useFactory: (config: ConfigService) => ({
         secret: config.get<string>('JWT_SECRET'),
-        signOptions: { expiresIn: (config.get<string>('JWT_EXPIRATION') || '7d') as any },
+        signOptions: {
+          expiresIn: (config.get<string>('JWT_EXPIRATION') || '7d') as any,
+        },
       }),
     }),
   ],
@@ -69,4 +71,4 @@ import { MailModule } from '../mail/mail.module';
     RolesGuard,
   ],
 })
-export class AuthModule { }
+export class AuthModule {}
