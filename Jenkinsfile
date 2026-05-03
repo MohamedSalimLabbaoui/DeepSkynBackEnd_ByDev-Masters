@@ -3,8 +3,9 @@ pipeline {
   agent any
 
   environment {
-    IMAGE_NAME = "hamza1200/backend"
-    IMAGE_TAG  = "${env.GIT_COMMIT[0..7]}"
+    NEXUS_REGISTRY = "192.168.37.128:8082"
+    IMAGE_NAME     = "192.168.37.128:8082/backend"
+    IMAGE_TAG      = "${env.GIT_COMMIT[0..7]}"
   }
 
   stages {
@@ -107,5 +108,5 @@ pipeline {
     }
   }
 }
-}       
+      
 ```
