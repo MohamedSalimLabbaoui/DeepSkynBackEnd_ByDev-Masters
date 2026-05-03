@@ -1,10 +1,10 @@
-```groovy
+
 pipeline {
   agent any
 
   environment {
-    NEXUS_REGISTRY = "192.168.37.128:8082"
-    IMAGE_NAME     = "192.168.37.128:8082/backend"
+    NEXUS_REGISTRY = "192.168.32.128:8082"
+    IMAGE_NAME     = "192.168.32.128:8082/backend"
     IMAGE_TAG      = "${env.GIT_COMMIT[0..7]}"
   }
 
@@ -56,11 +56,7 @@ pipeline {
     }
   }
 }
-
-
-  
-
-      stage('Docker Build') {
+ stage('Docker Build') {
       steps {
         timeout(time: 20, unit: 'MINUTES') {
           sh "docker build -t ${IMAGE_NAME}:${IMAGE_TAG} ."
@@ -108,5 +104,7 @@ pipeline {
     }
   }
 }
-      
-```
+
+  
+
+ 
