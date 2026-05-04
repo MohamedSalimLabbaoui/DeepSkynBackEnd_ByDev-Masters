@@ -127,7 +127,11 @@
       "^qrcode$": "<rootDir>/../test/__mocks__/qrcode.js"
     },
     "collectCoverageFrom": [
-      "**/*.(t|j)s"
+      "**/*.(t|j)s",
+      "!**/*.spec.ts",
+      "!**/*.e2e-spec.ts",
+      "!**/main.ts",
+      "!**/index.ts"
     ],
     "coverageReporters": [
       "text",
