@@ -42,7 +42,9 @@ export class AdminBiService {
     ] = await Promise.all([
       this.prisma.user.count(),
       this.prisma.user.count({ where: { createdAt: { gte: days30Ago } } }),
-      this.prisma.user.count({ where: { createdAt: { gte: days60Ago, lt: days30Ago } } }),
+      this.prisma.user.count({
+        where: { createdAt: { gte: days60Ago, lt: days30Ago } },
+      }),
       this.prisma.user.count({ where: { onboardingComplete: true } }),
       this.prisma.user.count({
         where: {
@@ -161,11 +163,18 @@ export class AdminBiService {
       ].filter((value): value is Date => value instanceof Date);
 
       if (latestCandidates.length > 0) {
-        const latestTimestamp = Math.max(...latestCandidates.map((value) => value.getTime()));
+        const latestTimestamp = Math.max(
+          ...latestCandidates.map((value) => value.getTime()),
+        );
         activityWindowEnd = new Date(latestTimestamp);
         activityWindowStart = this.subDays(activityWindowEnd, 13);
 
-        const [fallbackAnalyses, fallbackChats, fallbackPosts, fallbackSignups] = await Promise.all([
+        const [
+          fallbackAnalyses,
+          fallbackChats,
+          fallbackPosts,
+          fallbackSignups,
+        ] = await Promise.all([
           this.prisma.analysis.findMany({
             where: {
               createdAt: {
@@ -225,17 +234,27 @@ export class AdminBiService {
       .filter((s) => s.createdAt < days30Ago)
       .reduce((sum, s) => sum + (s.amount || 0), 0);
 
-    const userGrowthRate = this.safeRate(usersLast30 - usersPrev30, usersPrev30 || 1);
-    const revenueGrowthRate = this.safeRate(revenue30 - revenuePrev30, revenuePrev30 || 1);
+    const userGrowthRate = this.safeRate(
+      usersLast30 - usersPrev30,
+      usersPrev30 || 1,
+    );
+    const revenueGrowthRate = this.safeRate(
+      revenue30 - revenuePrev30,
+      revenuePrev30 || 1,
+    );
     const conversionRate = this.safeRate(paidUsersCount, totalUsers || 1);
     const arpu = totalUsers > 0 ? mrr / totalUsers : 0;
 
-    const activitySeries = this.buildDailySeries(activityWindowStart, activityWindowEnd, {
-      analyses: analysesPoints,
-      chats: chatsPoints,
-      posts: postsPoints,
-      signups: signupsPoints,
-    });
+    const activitySeries = this.buildDailySeries(
+      activityWindowStart,
+      activityWindowEnd,
+      {
+        analyses: analysesPoints,
+        chats: chatsPoints,
+        posts: postsPoints,
+        signups: signupsPoints,
+      },
+    );
 
     const riskDistribution = this.getRiskDistribution(churnRiskUsers);
     let topConcerns = this.getTopConcerns(analysesConditions, 6);
@@ -276,7 +295,9 @@ export class AdminBiService {
       },
       engagement: {
         activitySeries,
-        avgAnalysisProcessingTimeMs: Math.round(analysisPerf._avg.processingTime || 0),
+        avgAnalysisProcessingTimeMs: Math.round(
+          analysisPerf._avg.processingTime || 0,
+        ),
         analysesLast30: analysisPerf._count._all || 0,
       },
       churn: {
@@ -313,7 +334,9 @@ export class AdminBiService {
     const buckets: Record<string, number> = {};
 
     const pushConcern = (value: unknown) => {
-      const normalized = String(value || '').trim().toLowerCase();
+      const normalized = String(value || '')
+        .trim()
+        .toLowerCase();
       if (!normalized) return;
       buckets[normalized] = (buckets[normalized] || 0) + 1;
     };
@@ -331,7 +354,10 @@ export class AdminBiService {
       }
 
       // Fallback for legacy payloads where concerns are embedded in detailedAnalysis object keys.
-      if (analysis.results?.detailedAnalysis && typeof analysis.results.detailedAnalysis === 'object') {
+      if (
+        analysis.results?.detailedAnalysis &&
+        typeof analysis.results.detailedAnalysis === 'object'
+      ) {
         for (const key of Object.keys(analysis.results.detailedAnalysis)) {
           pushConcern(key);
         }
@@ -383,7 +409,11 @@ export class AdminBiService {
   ): DailyPoint[] {
     const days: DailyPoint[] = [];
 
-    for (let cursor = this.startOfDay(from); cursor <= to; cursor = this.addDays(cursor, 1)) {
+    for (
+      let cursor = this.startOfDay(from);
+      cursor <= to;
+      cursor = this.addDays(cursor, 1)
+    ) {
       days.push({
         date: this.dateKey(cursor),
         analyses: 0,

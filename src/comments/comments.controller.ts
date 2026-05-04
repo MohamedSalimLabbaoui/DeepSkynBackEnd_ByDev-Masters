@@ -59,7 +59,12 @@ export class CommentsController {
     @Query('page') page?: number,
     @Query('limit') limit?: number,
   ) {
-    return this.commentsService.findByPost(postId, page || 1, limit || 20, userId);
+    return this.commentsService.findByPost(
+      postId,
+      page || 1,
+      limit || 20,
+      userId,
+    );
   }
 
   @Get(':id/replies')
@@ -91,10 +96,7 @@ export class CommentsController {
     summary: "Détail d'un commentaire",
     description: 'Récupère un commentaire par ID',
   })
-  async findOne(
-    @CurrentUser('sub') userId: string,
-    @Param('id') id: string,
-  ) {
+  async findOne(@CurrentUser('sub') userId: string, @Param('id') id: string) {
     return this.commentsService.findOne(id, userId);
   }
 

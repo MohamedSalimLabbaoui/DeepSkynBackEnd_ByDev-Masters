@@ -23,7 +23,7 @@ export function compressWeatherForecast(daily: {
 }): string {
   const entries: string[] = [];
   const dayNames = ['L', 'Ma', 'Me', 'J', 'V', 'S', 'D'];
-  
+
   for (let i = 0; i < Math.min(daily.time.length, 7); i++) {
     const date = new Date(daily.time[i]);
     const dayIdx = date.getDay();
@@ -38,8 +38,16 @@ export function compressWeatherForecast(daily: {
 
 export function abbrevSkinType(skinType: string): string {
   const map: Record<string, string> = {
-    'oily': 'O', 'dry': 'D', 'combination': 'C', 'normal': 'N', 'sensitive': 'S',
-    'grasse': 'O', 'sèche': 'D', 'mixte': 'C', 'normale': 'N', 'sensible': 'S',
+    oily: 'O',
+    dry: 'D',
+    combination: 'C',
+    normal: 'N',
+    sensitive: 'S',
+    grasse: 'O',
+    sèche: 'D',
+    mixte: 'C',
+    normale: 'N',
+    sensible: 'S',
   };
   return map[skinType.toLowerCase()] || skinType.charAt(0).toUpperCase();
 }

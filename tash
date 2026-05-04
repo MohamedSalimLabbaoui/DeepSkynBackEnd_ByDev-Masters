@@ -1,0 +1,374 @@
+[33mcommit 1450d8987cb763d17cc26f9dbd717c18b38d3952[m[33m ([m[1;31morigin/azizsaid[m[33m)[m
+Author: aziz <saidazizz132@gmail.com>
+Date:   Thu Apr 16 15:55:55 2026 +0100
+
+    analysis_fixv1
+
+[33mcommit 2d64e72ae45af92da4a5869724af3f822c9bc852[m
+Author: aziz <saidazizz132@gmail.com>
+Date:   Wed Apr 8 22:48:29 2026 +0100
+
+    scan-product_fix_api
+
+[33mcommit 95599008392c254b8b29ab0cc635af0dd84a7ee2[m
+Author: aziz <saidazizz132@gmail.com>
+Date:   Wed Apr 8 19:19:50 2026 +0100
+
+    scan-product
+
+[33mcommit af06038f16d7fe0bde28bfc60bf1608ec4032a42[m
+Author: aziz <saidazizz132@gmail.com>
+Date:   Wed Apr 8 02:06:06 2026 +0100
+
+    deepskyn_v0.0.0.0
+
+[33mcommit bcb8afeecaaafbef20a54abfb8d48acfc7d72994[m
+Author: aziz <saidazizz132@gmail.com>
+Date:   Tue Apr 7 22:43:05 2026 +0100
+
+    fallback_ai_3_ways_
+
+[33mcommit 843080c093f073e680266ccf57e5f4b7a0c5abf2[m
+Merge: 2dbff76 94c65b4
+Author: sahlihamza <sehli7hama@gmail.com>
+Date:   Tue Apr 7 18:26:01 2026 +0100
+
+    Merge branch 'azizsaid' of https://github.com/MohamedSalimLabbaoui/DeepSkynBackEnd_ByDev-Masters into hamzasahli
+
+[33mcommit 94c65b4082457231380c6b08123bc1ddf6a2b620[m
+Author: aziz <saidazizz132@gmail.com>
+Date:   Tue Apr 7 18:01:22 2026 +0100
+
+    readmefile
+
+[33mcommit 4bfbe4b8d060d5c6e9f890a3021c817239dc2988[m
+Author: aziz <saidazizz132@gmail.com>
+Date:   Tue Apr 7 17:54:19 2026 +0100
+
+    fallback_ai_3_ways
+
+[33mcommit 2dbff76fd68b99ec110cc9ab47373c0d00c4bade[m
+Merge: 533b105 87123a0
+Author: sahlihamza <sehli7hama@gmail.com>
+Date:   Tue Apr 7 13:27:54 2026 +0100
+
+    Merge branch 'azizsaid' of https://github.com/MohamedSalimLabbaoui/DeepSkynBackEnd_ByDev-Masters into hamzasahli
+
+[33mcommit 533b10551b698e508eea32609aae57eccf2c8535[m
+Author: sahlihamza <sehli7hama@gmail.com>
+Date:   Tue Apr 7 00:49:00 2026 +0100
+
+    feat(community): wire new social endpoints and fix profile/archive(users search, global feed, reactions list and archived posts )
+
+[33mcommit 87123a0b077208dd4ca9faddb5459f85d878dc4d[m
+Author: aziz <saidazizz132@gmail.com>
+Date:   Mon Apr 6 23:56:56 2026 +0100
+
+    n8n_workflow_reclamation
+
+[33mcommit 8b62ee717a2d38697f607b9acef651677b0b66c4[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mSalimBranch[m[33m, [m[1;31morigin/SalimBranch[m[33m)[m
+Author: Salim1312 <mohamedsalim.labbaoui@esprit.tn>
+Date:   Mon Apr 6 12:02:29 2026 +0100
+
+    Fix: Correct import references after merge (buildUltraCompactScanPrompt)
+
+[33mcommit df4f26eb3321f4ec8bc388092021a24b8beb7353[m
+Merge: 450940f 89580a8
+Author: Salim1312 <mohamedsalim.labbaoui@esprit.tn>
+Date:   Mon Apr 6 11:52:32 2026 +0100
+
+    Merge fix2.0.0 from azizsaid with Digital Twin visual simulation
+    
+    Integrated changes:
+    - fix2.0.0: Migrated from OllamaService to GrokService for better AI fallback
+    - buildconfig: Updated build configuration
+    - Digital Twin: Real-time analysis and digital twin foundation (from 15f0ee5)
+    - Digital Twin: Visual simulation with Canvas-based image processing (from 450940f)
+    - Visual filters: Amplified effects (2-3x) for visible skin improvements
+    - Advanced skin detection: Multi-algorithm approach (RGB, YCbCr, HSV)
+    - Smart filters: Smoothness, brightness, redness reduction, hydration, acne reduction
+    - Product simulation: Intelligent filter generation based on ingredients and category
+    
+    All conflicts resolved by accepting GrokService migration (fix2.0.0).
+    Digital Twin enhancements preserved and functional.
+
+[33mcommit 450940ff2dd819d67ff909e9da52c0d6c77a4464[m[33m ([m[1;32mbackup-before-merge-20260406-114850[m[33m)[m
+Author: Salim1312 <mohamedsalim.labbaoui@esprit.tn>
+Date:   Mon Apr 6 11:31:52 2026 +0100
+
+    digital twin fixed
+
+[33mcommit 15f0ee5e95070e8c80a2cbc432c977b4e4f7411a[m
+Author: Salim1312 <mohamedsalim.labbaoui@esprit.tn>
+Date:   Mon Apr 6 10:01:38 2026 +0100
+
+    added analyse realtime and digital twin
+
+[33mcommit 89580a88ed5f73e046ec6e6fc9586ff8cc5fc4d9[m
+Author: aziz <saidazizz132@gmail.com>
+Date:   Sat Apr 4 16:28:44 2026 +0100
+
+    fix2.0.0
+
+[33mcommit 63dcfae6f90b66053a080f7514e27d4b25ae084b[m
+Author: aziz <saidazizz132@gmail.com>
+Date:   Sat Apr 4 04:03:27 2026 +0100
+
+    buildconfig
+
+[33mcommit 359a73092f8e3bfedef998fd1d5195296517e001[m
+Merge: 26e4dec ff072d2
+Author: sahlihamza <sehli7hama@gmail.com>
+Date:   Thu Apr 2 23:17:30 2026 +0100
+
+    Merge origin/azizsaid into hamzasahli
+
+[33mcommit ff072d2a7bd033f63702857b2f93ed3f12404ba9[m
+Author: aziz <saidazizz132@gmail.com>
+Date:   Thu Apr 2 17:59:53 2026 +0100
+
+    accessibility_fix_synthese
+
+[33mcommit 26e4decb8fbf00ec7144531387328d972a34bce4[m
+Author: sahlihamza <sehli7hama@gmail.com>
+Date:   Thu Apr 2 00:56:36 2026 +0100
+
+    feat(subscription): coupons Stripe auto, renew via checkout, historique paiements/factures, lastPaidPlan
+
+[33mcommit b3f0928254b35094855dbac10a2e95a8b2821420[m
+Merge: f7e177f c3deca9
+Author: aziz <saidazizz132@gmail.com>
+Date:   Wed Apr 1 23:34:53 2026 +0100
+
+    Merge remote-tracking branch 'origin/SalimBranch' into azizsaid
+
+[33mcommit c3deca97b759fa433d1af76c0d9dea986db7e638[m
+Author: Salim1312 <mohamedsalim.labbaoui@esprit.tn>
+Date:   Wed Apr 1 23:21:47 2026 +0100
+
+    modified predictive routine +face verification
+
+[33mcommit 003fe21e24324b7ba5bc533f745501dcb9c0e8f8[m
+Author: aziz <saidazizz132@gmail.com>
+Date:   Wed Apr 1 18:18:23 2026 +0100
+
+    ai_compressed_fix
+
+[33mcommit f7e177f8d72358fc976ddec9ae7de18dbee432f3[m
+Author: aziz <saidazizz132@gmail.com>
+Date:   Wed Apr 1 18:18:23 2026 +0100
+
+    ai_compressed_fix
+
+[33mcommit ee1c053a0884db422e61628456bba0e9d0b625b9[m
+Author: aziz <saidazizz132@gmail.com>
+Date:   Wed Apr 1 15:48:57 2026 +0100
+
+    ollama fallback
+
+[33mcommit 6dcf9e0d53f02fd40dd904e47ab5d90e3eafae38[m
+Author: Salim1312 <mohamedsalim.labbaoui@esprit.tn>
+Date:   Wed Apr 1 14:00:35 2026 +0100
+
+    modified analyse
+
+[33mcommit 5765847da0b3bad0d2e2a32105caf5dab1543524[m
+Merge: 1d7e1bd b2b2aa9
+Author: sahlihamza <sehli7hama@gmail.com>
+Date:   Tue Mar 31 00:26:35 2026 +0100
+
+    Merge remote-tracking branch 'origin/azizsaid' into hamzasahli
+
+[33mcommit 1d7e1bd9a68e6921ebbbce52c1ce51a8a7e67d4b[m
+Author: sahlihamza <sehli7hama@gmail.com>
+Date:   Tue Mar 31 00:26:17 2026 +0100
+
+    feat: subscription plans db + quota window improvements
+
+[33mcommit b2b2aa9d58d7288c3204b79b05f5e3a7a469590b[m[33m ([m[1;32mazizsaid[m[33m)[m
+Author: aziz <saidazizz132@gmail.com>
+Date:   Sun Mar 29 22:49:41 2026 +0100
+
+    landingpage-fix
+
+[33mcommit d2cb529b8f4323a07c26051c38958cb353ad0cdf[m
+Author: sahlihamza <sehli7hama@gmail.com>
+Date:   Sun Mar 29 02:07:55 2026 +0100
+
+    add benefits for each subscription plan
+
+[33mcommit 61765c2330bd2a0693b6ef7698bd96a0d780ba32[m
+Merge: 8310a46 98124de
+Author: sahlihamza <sehli7hama@gmail.com>
+Date:   Sat Mar 28 22:42:44 2026 +0100
+
+    Merge remote-tracking branch 'origin/azizsaid' into hamzasahli
+
+[33mcommit 98124de20250a40127e0e735dec22628e8a451ed[m
+Author: aziz <saidazizz132@gmail.com>
+Date:   Sat Mar 28 04:19:44 2026 +0100
+
+    config resetpass
+
+[33mcommit 8310a46f91a6d6549e0c11017249c06640a732ed[m
+Merge: 05d2060 2cc504e
+Author: sahlihamza <sehli7hama@gmail.com>
+Date:   Sat Mar 28 03:42:10 2026 +0100
+
+    Merge branch 'salim' of https://github.com/MohamedSalimLabbaoui/DeepSkynBackEnd_ByDev-Masters into hamzasahli
+
+[33mcommit 05d206011a09e316a2c831d6bb05edd78e68c08a[m
+Author: sahlihamza <sehli7hama@gmail.com>
+Date:   Sat Mar 28 03:40:29 2026 +0100
+
+    add subscription plans and payment integration with stripe
+
+[33mcommit 2cc504ec118d598d051df2a6c1036de048fbfd8c[m[33m ([m[1;31morigin/salim[m[33m, [m[1;31morigin/main[m[33m)[m
+Author: aziz <saidazizz132@gmail.com>
+Date:   Fri Mar 27 19:35:24 2026 +0100
+
+    final lsf translation backend sync
+
+[33mcommit d90a7786723c7428f52702212f6b34c57a996b0b[m
+Author: aziz <saidazizz132@gmail.com>
+Date:   Fri Mar 27 18:43:49 2026 +0100
+
+    Lsf-traduction
+
+[33mcommit 0a726d51efec6f7cdacb7844cccde6025bfc17b5[m
+Author: aziz <saidazizz132@gmail.com>
+Date:   Fri Mar 27 03:16:18 2026 +0100
+
+    3d_config
+
+[33mcommit 0e400f3207ef07cd6d987e7f84b37ca9ca5763cc[m
+Author: aziz <saidazizz132@gmail.com>
+Date:   Thu Mar 26 21:58:37 2026 +0100
+
+    routine_communaute
+
+[33mcommit 9c3c6e7c3d7d9c406a2941fa2500a0782086956d[m
+Author: aziz <saidazizz132@gmail.com>
+Date:   Thu Mar 26 18:58:42 2026 +0100
+
+    storiestimeline
+
+[33mcommit 6b87ceb9a87a4a83d35e32b8646343c00a41d5bc[m
+Author: aziz <saidazizz132@gmail.com>
+Date:   Thu Mar 26 03:31:48 2026 +0100
+
+    fix 1.0
+
+[33mcommit b38aef5ea00f7fa1a13c800a2ad251c2cf11e975[m
+Author: aziz <saidazizz132@gmail.com>
+Date:   Wed Mar 25 22:34:46 2026 +0100
+
+    accessibility v4.0
+
+[33mcommit ad9157dee3659368643bf954f291ddd086071c10[m
+Author: aziz <saidazizz132@gmail.com>
+Date:   Wed Mar 25 16:03:22 2026 +0100
+
+    confidentialite 1.0
+
+[33mcommit 0fea611ae51d7539089378ee70a64fd8004c2ee5[m
+Author: aziz <saidazizz132@gmail.com>
+Date:   Tue Mar 24 18:22:19 2026 +0100
+
+    update config 3.0
+
+[33mcommit db97a733d75f6a1b6ead8609b23f3eea08feac9f[m
+Author: aziz <saidazizz132@gmail.com>
+Date:   Tue Mar 24 17:32:10 2026 +0100
+
+    config-configroutine
+
+[33mcommit f31bb5cbbe6ae286d6c4583d496c72c7dbbdd86b[m
+Author: aziz <saidazizz132@gmail.com>
+Date:   Tue Mar 24 00:52:23 2026 +0100
+
+    update config 2.0
+
+[33mcommit f34dd2181de5ce05e9142f0d382256813248f69a[m
+Author: aziz <saidazizz132@gmail.com>
+Date:   Mon Mar 23 17:46:52 2026 +0100
+
+    communaute fix
+
+[33mcommit ad0520c1b1fd285a8f2b019ec7ab5a35b4ddaa2d[m
+Author: aziz <saidazizz132@gmail.com>
+Date:   Mon Mar 23 16:26:50 2026 +0100
+
+    configuartion parametre
+
+[33mcommit 488ecc553c20c24eae25e2c25db5d109d1f8df16[m
+Author: aziz <saidazizz132@gmail.com>
+Date:   Mon Mar 23 15:57:02 2026 +0100
+
+    configuartion parametre
+
+[33mcommit 1c244394ab9c1d5297d65b860800305fe301d571[m
+Author: aziz <saidazizz132@gmail.com>
+Date:   Wed Mar 18 13:13:38 2026 +0100
+
+    3D perso upload
+
+[33mcommit 45f55662798c86d1559d7dd3d333951697eb860b[m
+Author: aziz <saidazizz132@gmail.com>
+Date:   Wed Mar 18 12:35:38 2026 +0100
+
+    3D perso feature
+
+[33mcommit 789a0928296d479f64d80f017676b8917e1e6db0[m
+Author: aziz <saidazizz132@gmail.com>
+Date:   Tue Mar 17 15:27:11 2026 +0100
+
+    routine builder
+
+[33mcommit 4ee6d9b84234eaa6383ce0718a19b2539393fa67[m
+Author: Hamza Dalhoumi <hamza.dalhoumi@esprit.tn>
+Date:   Wed Mar 4 21:39:09 2026 +0100
+
+    feat: admin dashboard backend - admin endpoints, users module, analysis monitor, post moderation, subscription mgmt, churn retention, chat stats, secured guards
+
+[33mcommit f3cbc21e73ddd40fce6a09813b2cd97d7396fcdd[m
+Author: aziz <saidazizz132@gmail.com>
+Date:   Wed Mar 4 14:00:46 2026 +0100
+
+    crowling_module
+
+[33mcommit fb2947c2687a090ce2723f08f1da518ebd778d05[m[33m ([m[1;32msalim[m[33m, [m[1;32mnodesc[m[33m)[m
+Author: aziz <saidazizz132@gmail.com>
+Date:   Wed Feb 11 19:59:57 2026 +0100
+
+    v2
+
+[33mcommit b832488ce0b96e371b1fb8fb38490c1f9c2e4283[m
+Author: aziz <saidazizz132@gmail.com>
+Date:   Fri Jan 30 11:54:30 2026 +0100
+
+    postgresql_config
+
+[33mcommit c0ae36d7efd9ff1fa16ea18799be0c3de983e113[m
+Author: aziz <saidazizz132@gmail.com>
+Date:   Fri Jan 30 11:42:59 2026 +0100
+
+    webscrapping_review_product
+
+[33mcommit d8e2b37586c459d3ed987e15a467fe5ab65fcf36[m
+Author: aziz <saidazizz132@gmail.com>
+Date:   Fri Jan 30 11:30:55 2026 +0100
+
+    webscrapping_module_fix
+
+[33mcommit 1874677f1dc601e704e1575e7ffb55c57b889ced[m
+Author: aziz <saidazizz132@gmail.com>
+Date:   Fri Jan 30 11:30:02 2026 +0100
+
+    webscrapping_module_implementation
+
+[33mcommit 82ef92194055749277d13165fb27fe02673fb82f[m
+Author: aziz <saidazizz132@gmail.com>
+Date:   Wed Jan 28 22:19:41 2026 +0100
+
+    keycloak_integration

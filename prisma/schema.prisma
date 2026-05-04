@@ -189,6 +189,7 @@ model Analysis {
   healthScore     Int?
   skinAge         Int?
   conditions      String[]
+  preocupent      String[] @default([])
   recommendations Json?
   status          String   @default("pending")
   processingTime  Int?

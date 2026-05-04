@@ -1,9 +1,9 @@
 /**
  * Script de test pour l'API de traduction en langage des signes
- * 
+ *
  * Usage (depuis le dossier Git_DeepSkyn):
  *   npx tsx DeepSkynBackEnd_ByDev-Masters/src/sign-translation/test-api.ts
- * 
+ *
  * Pré-requis: Le serveur backend doit tourner sur localhost:3000
  */
 
@@ -21,7 +21,7 @@ interface TestResult {
 async function testTranslateText(): Promise<TestResult> {
   const start = Date.now();
   const testName = 'POST /sign-translation/translate';
-  
+
   try {
     const res = await fetch(`${API_URL}/sign-translation/translate`, {
       method: 'POST',
@@ -41,13 +41,19 @@ async function testTranslateText(): Promise<TestResult> {
     console.log(`Status: ${res.status} ${res.statusText}`);
     console.log(`Durée: ${duration}ms`);
     console.log(`\nRéponse (résumé):`);
-    
+
     if (data.frames) {
       console.log(`  ✅ frames: ${data.frames.length} frames`);
       if (data.frames[0]) {
-        console.log(`     - hand_right_keypoints: ${data.frames[0].hand_right_keypoints?.length || 0} points`);
-        console.log(`     - hand_left_keypoints: ${data.frames[0].hand_left_keypoints?.length || 0} points`);
-        console.log(`     - pose_keypoints: ${data.frames[0].pose_keypoints?.length || 0} points`);
+        console.log(
+          `     - hand_right_keypoints: ${data.frames[0].hand_right_keypoints?.length || 0} points`,
+        );
+        console.log(
+          `     - hand_left_keypoints: ${data.frames[0].hand_left_keypoints?.length || 0} points`,
+        );
+        console.log(
+          `     - pose_keypoints: ${data.frames[0].pose_keypoints?.length || 0} points`,
+        );
       }
     } else {
       console.log(`  ⚠️ Pas de frames dans la réponse`);
@@ -78,10 +84,12 @@ async function testTranslateText(): Promise<TestResult> {
     const duration = Date.now() - start;
     console.log(`\n❌ ${testName} - ERREUR`);
     console.log(`   ${error.message}`);
-    
+
     if (error.cause?.code === 'ECONNREFUSED') {
       console.log(`\n💡 Le serveur backend ne semble pas être démarré.`);
-      console.log(`   Lancer: cd DeepSkynBackEnd_ByDev-Masters && npm run start:dev`);
+      console.log(
+        `   Lancer: cd DeepSkynBackEnd_ByDev-Masters && npm run start:dev`,
+      );
     }
 
     return {
@@ -96,7 +104,7 @@ async function testTranslateText(): Promise<TestResult> {
 async function testTranslateEmpty(): Promise<TestResult> {
   const start = Date.now();
   const testName = 'POST /sign-translation/translate (texte vide)';
-  
+
   try {
     const res = await fetch(`${API_URL}/sign-translation/translate`, {
       method: 'POST',
@@ -137,7 +145,7 @@ async function testTranslateEmpty(): Promise<TestResult> {
 async function testHealthCheck(): Promise<TestResult> {
   const start = Date.now();
   const testName = 'GET / (health check)';
-  
+
   try {
     const res = await fetch(API_URL);
     const duration = Date.now() - start;
@@ -166,7 +174,9 @@ async function testHealthCheck(): Promise<TestResult> {
 
 // ── Main ──
 async function main() {
-  console.log(`\n🧪 Tests API Sign Translation - ${new Date().toLocaleString('fr-FR')}`);
+  console.log(
+    `\n🧪 Tests API Sign Translation - ${new Date().toLocaleString('fr-FR')}`,
+  );
   console.log(`${'─'.repeat(60)}`);
   console.log(`Serveur cible: ${API_URL}`);
 
@@ -185,19 +195,23 @@ async function main() {
   console.log(`\n\n${'═'.repeat(60)}`);
   console.log(`📊 RÉSUMÉ DES TESTS`);
   console.log(`${'═'.repeat(60)}`);
-  
-  const passed = results.filter(r => r.success).length;
-  const failed = results.filter(r => !r.success).length;
+
+  const passed = results.filter((r) => r.success).length;
+  const failed = results.filter((r) => !r.success).length;
 
   for (const r of results) {
     const icon = r.success ? '✅' : '❌';
-    console.log(`  ${icon} ${r.testName} ${r.status ? `(${r.status})` : ''} - ${r.duration}ms`);
+    console.log(
+      `  ${icon} ${r.testName} ${r.status ? `(${r.status})` : ''} - ${r.duration}ms`,
+    );
     if (r.error) {
       console.log(`     └─ ${r.error}`);
     }
   }
 
-  console.log(`\n  Total: ${passed} passés, ${failed} échoués sur ${results.length}`);
+  console.log(
+    `\n  Total: ${passed} passés, ${failed} échoués sur ${results.length}`,
+  );
   console.log(`${'═'.repeat(60)}\n`);
 
   process.exit(failed > 0 ? 1 : 0);

@@ -2,7 +2,7 @@
 /dist
 /node_modules
 /build
-
+.env.weather.example
 public/
 ml/data/
 ml/models/
@@ -57,3 +57,25 @@ pids
 
 # Diagnostic reports (https://nodejs.org/api/report.html)
 report.[0-9]*.[0-9]*.[0-9]*.[0-9]*.json
+
+# ── CI/CD & DevOps ────────────────────────────────────────
+# Never commit Kubernetes secrets with real values
+# (use the template k8s/secret.yaml only as a placeholder)
+k8s/secret.yaml
+
+# Test coverage output (uploaded as CI artifact instead)
+coverage/
+
+# Monitoring persistent data
+monitoring/grafana/data/
+monitoring/prometheus/data/
+
+# Docker build cache
+.docker/
+
+# SonarQube scanner cache
+.scannerwork/
+
+# Backup patches
+*.patch
+tash

@@ -21,7 +21,7 @@ export interface SkinProfileStats {
 
 @Injectable()
 export class SkinProfileService {
-  constructor(private readonly prisma: PrismaService) { }
+  constructor(private readonly prisma: PrismaService) {}
 
   /**
    * Create a new skin profile for a user
@@ -379,8 +379,8 @@ export class SkinProfileService {
     const averageHealthScore =
       healthScores.length > 0
         ? Math.round(
-          healthScores.reduce((a, b) => a + b, 0) / healthScores.length,
-        )
+            healthScores.reduce((a, b) => a + b, 0) / healthScores.length,
+          )
         : 0;
 
     // Average skin age

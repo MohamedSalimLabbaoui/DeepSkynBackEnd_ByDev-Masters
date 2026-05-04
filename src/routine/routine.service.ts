@@ -126,7 +126,7 @@ export class RoutineService {
     let skinProfile = null;
     try {
       skinProfile = await this.skinProfileService.findByUserId(userId);
-    } catch (error) {
+    } catch {
       this.logger.warn(`No skin profile found for user ${userId}`);
     }
 
@@ -201,7 +201,11 @@ export class RoutineService {
    * Reduces tokens by ~50% using abbreviations and compact format
    */
   private buildRoutinePrompt(context: any): string {
-    const typeMap: Record<string, string> = { 'AM': 'matin', 'PM': 'soir', 'weekly': 'hebdo' };
+    const typeMap: Record<string, string> = {
+      AM: 'matin',
+      PM: 'soir',
+      weekly: 'hebdo',
+    };
     const type = typeMap[context.routineType] || context.routineType;
     const st = abbrevSkinType(context.skinType);
     const c = abbrevConcerns(context.concerns);
@@ -705,7 +709,9 @@ Rép JSON:{name,type,steps:[{order,name,category,description,duration}],notes}
           sensitivities: skinProfile.sensitivities as string[],
         })
       : '-';
-    const stepsStr = adviseDto.currentSteps.map((s, i) => `${i + 1}.${s}`).join(',');
+    const stepsStr = adviseDto.currentSteps
+      .map((s, i) => `${i + 1}.${s}`)
+      .join(',');
 
     const prompt = compressWhitespace(`
 Dermato expert. Conseil modif routine.
@@ -721,7 +727,10 @@ Rép JSON:{advice,rating:good|neutral|caution,emoji}
         [prompt],
       );
 
-      const adviceText = typeof result === 'object' ? (result as any)?.advice || JSON.stringify(result) : String(result || '');
+      const adviceText =
+        typeof result === 'object'
+          ? (result as any)?.advice || JSON.stringify(result)
+          : String(result || '');
 
       try {
         const jsonMatch = adviceText.match(/\{[\s\S]*\}/);
@@ -787,22 +796,34 @@ Rép JSON:{advice,rating:good|neutral|caution,emoji}
 
     // Search crawled articles for relevant product info
     const searchQuery = `${dto.stepCategory} ${dto.stepName} ${skinType}`;
-    let relevantArticles: { title: string; summary: string; source: string; url: string }[] = [];
+    let relevantArticles: {
+      title: string;
+      summary: string;
+      source: string;
+      url: string;
+    }[] = [];
     try {
-      relevantArticles = await this.crawlingService.getRelevantArticles(searchQuery, 3);
+      relevantArticles = await this.crawlingService.getRelevantArticles(
+        searchQuery,
+        3,
+      );
     } catch {
       this.logger.warn('Failed to fetch relevant articles for recommendation');
     }
 
     // Compressed articles context (max 150 chars)
-    const articlesCtx = relevantArticles.length > 0
-      ? relevantArticles.slice(0, 2).map(a => a.title.substring(0, 50)).join(';')
-      : '-';
+    const articlesCtx =
+      relevantArticles.length > 0
+        ? relevantArticles
+            .slice(0, 2)
+            .map((a) => a.title.substring(0, 50))
+            .join(';')
+        : '-';
 
     // Compressed prompt - ~65% token reduction
     const st = abbrevSkinType(skinType);
     const c = abbrevConcerns(concerns as string[]);
-    
+
     const prompt = compressWhitespace(`
 Dermato. Recommande 1 produit.
 Étape:${dto.stepName}(${dto.stepCategory})${dto.stepDescription ? ` ${dto.stepDescription.substring(0, 50)}` : ''}
@@ -818,9 +839,10 @@ Français.`);
         [prompt],
       );
 
-      const adviceText = typeof result === 'object'
-        ? (result as any)?.advice || JSON.stringify(result)
-        : String(result || '');
+      const adviceText =
+        typeof result === 'object'
+          ? (result as any)?.advice || JSON.stringify(result)
+          : String(result || '');
 
       const jsonMatch = adviceText.match(/\{[\s\S]*\}/);
       if (jsonMatch) {
@@ -834,7 +856,9 @@ Français.`);
       productData = this.getFallbackProduct(dto.stepCategory, skinType);
     }
 
-    const purchaseUrl = productData.purchaseUrl || `https://www.sephora.fr/search?q=${encodeURIComponent(productData.productName || dto.stepName)}`;
+    const purchaseUrl =
+      productData.purchaseUrl ||
+      `https://www.sephora.fr/search?q=${encodeURIComponent(productData.productName || dto.stepName)}`;
     let qrCodeDataUrl = '';
     try {
       qrCodeDataUrl = await QRCode.toDataURL(purchaseUrl, {
@@ -850,14 +874,20 @@ Français.`);
     return {
       productName: productData.productName || `${dto.stepName} recommandé`,
       brand: productData.brand || 'Marque recommandée',
-      description: productData.description || `Produit idéal pour l'étape ${dto.stepName}`,
+      description:
+        productData.description || `Produit idéal pour l'étape ${dto.stepName}`,
       keyIngredients: productData.keyIngredients || [],
-      whyRecommended: productData.whyRecommended || `Ce produit est adapté à votre type de peau ${skinType}.`,
+      whyRecommended:
+        productData.whyRecommended ||
+        `Ce produit est adapté à votre type de peau ${skinType}.`,
       estimatedPrice: productData.estimatedPrice || '15-30€',
       purchaseUrl,
       qrCodeDataUrl,
       rating: productData.rating || 'good',
-      sourceArticles: relevantArticles.map((a) => ({ title: a.title, url: a.url })),
+      sourceArticles: relevantArticles.map((a) => ({
+        title: a.title,
+        url: a.url,
+      })),
     };
   }
 
@@ -869,7 +899,8 @@ Français.`);
       cleanser: {
         productName: 'CeraVe Hydrating Cleanser',
         brand: 'CeraVe',
-        description: 'Nettoyant hydratant doux pour le visage avec céramides et acide hyaluronique.',
+        description:
+          'Nettoyant hydratant doux pour le visage avec céramides et acide hyaluronique.',
         keyIngredients: ['Céramides', 'Acide Hyaluronique', 'MVE Technology'],
         whyRecommended: `Parfait pour les peaux ${skinType}. Nettoie sans déshydrater et respecte la barrière cutanée.`,
         estimatedPrice: '10-15€',
@@ -879,7 +910,8 @@ Français.`);
       serum: {
         productName: 'The Ordinary Niacinamide 10% + Zinc 1%',
         brand: 'The Ordinary',
-        description: 'Sérum concentré en niacinamide pour réduire les imperfections et affiner le grain de peau.',
+        description:
+          'Sérum concentré en niacinamide pour réduire les imperfections et affiner le grain de peau.',
         keyIngredients: ['Niacinamide 10%', 'Zinc PCA 1%'],
         whyRecommended: `Idéal pour les peaux ${skinType}. Régule le sébum et améliore la texture de la peau.`,
         estimatedPrice: '6-10€',
@@ -889,7 +921,8 @@ Français.`);
       moisturizer: {
         productName: 'La Roche-Posay Toleriane Double Repair',
         brand: 'La Roche-Posay',
-        description: 'Crème hydratante réparatrice qui restaure la barrière cutanée.',
+        description:
+          'Crème hydratante réparatrice qui restaure la barrière cutanée.',
         keyIngredients: ['Céramide-3', 'Niacinamide', 'Glycérine'],
         whyRecommended: `Excellent choix pour les peaux ${skinType}. Hydrate en profondeur sans laisser de film gras.`,
         estimatedPrice: '15-20€',
@@ -899,7 +932,8 @@ Français.`);
       sunscreen: {
         productName: 'La Roche-Posay Anthelios UVMune 400 SPF50+',
         brand: 'La Roche-Posay',
-        description: 'Protection solaire très haute à large spectre, fluide invisible.',
+        description:
+          'Protection solaire très haute à large spectre, fluide invisible.',
         keyIngredients: ['Mexoryl 400', 'Filtres UVA/UVB', 'Eau thermale'],
         whyRecommended: `Indispensable pour toutes les peaux. Protection maximale avec une texture ultra-légère.`,
         estimatedPrice: '15-22€',
@@ -907,9 +941,10 @@ Français.`);
         rating: 'excellent',
       },
       toner: {
-        productName: 'Paula\'s Choice Skin Perfecting 2% BHA',
-        brand: 'Paula\'s Choice',
-        description: 'Exfoliant liquide à l\'acide salicylique pour désobstruer les pores.',
+        productName: "Paula's Choice Skin Perfecting 2% BHA",
+        brand: "Paula's Choice",
+        description:
+          "Exfoliant liquide à l'acide salicylique pour désobstruer les pores.",
         keyIngredients: ['Acide Salicylique 2%', 'Thé vert', 'Glycérine'],
         whyRecommended: `Adapté aux peaux ${skinType}. Affine le grain de peau et prévient les imperfections.`,
         estimatedPrice: '15-35€',
@@ -918,16 +953,18 @@ Français.`);
       },
     };
 
-    return fallbacks[category] || {
-      productName: `Produit ${category} recommandé`,
-      brand: 'CeraVe',
-      description: `Produit adapté pour l'étape ${category} de votre routine skincare.`,
-      keyIngredients: ['Céramides', 'Acide Hyaluronique'],
-      whyRecommended: `Ce produit est recommandé pour les peaux ${skinType}.`,
-      estimatedPrice: '10-25€',
-      purchaseUrl: `https://www.amazon.fr/s?k=${encodeURIComponent(category)}+skincare`,
-      rating: 'good',
-    };
+    return (
+      fallbacks[category] || {
+        productName: `Produit ${category} recommandé`,
+        brand: 'CeraVe',
+        description: `Produit adapté pour l'étape ${category} de votre routine skincare.`,
+        keyIngredients: ['Céramides', 'Acide Hyaluronique'],
+        whyRecommended: `Ce produit est recommandé pour les peaux ${skinType}.`,
+        estimatedPrice: '10-25€',
+        purchaseUrl: `https://www.amazon.fr/s?k=${encodeURIComponent(category)}+skincare`,
+        rating: 'good',
+      }
+    );
   }
 
   /**
@@ -942,7 +979,10 @@ Français.`);
     const routine = await this.findOne(routineId, userId);
 
     // Format routine as an attractive post message
-    const postMessage = this.formatRoutineAsPost(routine, shareDto.customMessage);
+    const postMessage = this.formatRoutineAsPost(
+      routine,
+      shareDto.customMessage,
+    );
 
     // Create the post with the formatted routine
     const post = await this.postsService.create(userId, {
@@ -969,7 +1009,7 @@ Français.`);
     customMessage?: string,
   ): string {
     const steps = (routine.steps as unknown as RoutineStep[]) || [];
-    
+
     const typeEmoji = {
       AM: '🌅',
       PM: '🌙',
@@ -992,7 +1032,7 @@ Français.`);
     // Add steps summary with better formatting
     message += '📋 Étapes de la routine:\n';
     message += `━━━━━━━━━━━━━━━━━━━━━━\n\n`;
-    
+
     steps.slice(0, 5).forEach((step, index) => {
       const stepNum = index + 1;
       message += `${stepNum}️⃣ ${step.name}`;

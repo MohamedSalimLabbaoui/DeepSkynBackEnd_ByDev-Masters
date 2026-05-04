@@ -15,7 +15,9 @@ export function compressWhitespace(text: string): string {
  * Compressed analysis prompt for skin image analysis
  * Reduces ~50% tokens while maintaining all required output fields
  */
-export function buildCompactAnalysisPrompt(questionnaire?: Record<string, any>): string {
+export function buildCompactAnalysisPrompt(
+  questionnaire?: Record<string, any>,
+): string {
   const base = compressWhitespace(`
 Dermatologist AI. Analyze skin images.
 JSON only:{

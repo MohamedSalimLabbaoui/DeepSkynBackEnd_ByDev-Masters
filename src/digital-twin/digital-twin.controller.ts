@@ -10,7 +10,12 @@ import {
   Req,
 } from '@nestjs/common';
 import { DigitalTwinService } from './digital-twin.service';
-import { CreateSnapshotDto, SimulateProductDto, GetPredictionDto, UpdateSimulationDto } from './dto/twin.dto';
+import {
+  CreateSnapshotDto,
+  SimulateProductDto,
+  GetPredictionDto,
+  UpdateSimulationDto,
+} from './dto/twin.dto';
 import { KeycloakAuthGuard } from '../auth/guards/keycloak-auth.guard';
 
 @Controller('digital-twin')

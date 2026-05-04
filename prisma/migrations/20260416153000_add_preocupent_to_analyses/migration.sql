@@ -1,0 +1,2 @@
+ALTER TABLE "analyses"
+ADD COLUMN "preocupent" TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[];

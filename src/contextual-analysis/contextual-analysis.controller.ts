@@ -17,7 +17,10 @@ import {
   ApiBearerAuth,
   ApiQuery,
 } from '@nestjs/swagger';
-import { ContextualAnalysisService, AlertResult } from './contextual-analysis.service';
+import {
+  ContextualAnalysisService,
+  AlertResult,
+} from './contextual-analysis.service';
 import { CreateSkinLogDto, WeatherAlertQueryDto } from './dto';
 import { KeycloakAuthGuard } from '../auth/guards/keycloak-auth.guard';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
@@ -64,8 +67,7 @@ export class ContextualAnalysisController {
   @Get('alerts/all')
   @ApiOperation({
     summary: 'Obtenir toutes les alertes',
-    description:
-      "Récupère toutes les alertes de l'utilisateur avec pagination",
+    description: "Récupère toutes les alertes de l'utilisateur avec pagination",
   })
   @ApiQuery({ name: 'page', required: false, type: Number })
   @ApiQuery({ name: 'limit', required: false, type: Number })
@@ -89,7 +91,7 @@ export class ContextualAnalysisController {
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
     summary: 'Marquer une alerte comme lue',
-    description: "Marque une alerte spécifique comme lue",
+    description: 'Marque une alerte spécifique comme lue',
   })
   @ApiResponse({
     status: 200,
@@ -110,7 +112,8 @@ export class ContextualAnalysisController {
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
     summary: 'Marquer toutes les alertes comme lues',
-    description: "Marque toutes les alertes non lues de l'utilisateur comme lues",
+    description:
+      "Marque toutes les alertes non lues de l'utilisateur comme lues",
   })
   @ApiResponse({
     status: 200,
@@ -154,9 +157,8 @@ export class ContextualAnalysisController {
 
   @Get('skin-logs')
   @ApiOperation({
-    summary: 'Obtenir l\'historique des logs de peau',
-    description:
-      'Récupère les logs de condition de peau des X derniers jours',
+    summary: "Obtenir l'historique des logs de peau",
+    description: 'Récupère les logs de condition de peau des X derniers jours',
   })
   @ApiQuery({
     name: 'days',

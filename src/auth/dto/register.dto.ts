@@ -1,4 +1,10 @@
-import { IsString, IsNotEmpty, IsEmail, MinLength, IsOptional } from 'class-validator';
+import {
+  IsString,
+  IsNotEmpty,
+  IsEmail,
+  MinLength,
+  IsOptional,
+} from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 export class RegisterDto {
@@ -17,7 +23,9 @@ export class RegisterDto {
   })
   @IsString()
   @IsNotEmpty({ message: 'Le mot de passe est requis' })
-  @MinLength(6, { message: 'Le mot de passe doit contenir au moins 6 caractères' })
+  @MinLength(6, {
+    message: 'Le mot de passe doit contenir au moins 6 caractères',
+  })
   password: string;
 
   @ApiProperty({

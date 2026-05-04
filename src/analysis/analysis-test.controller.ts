@@ -11,7 +11,7 @@ import { FilesInterceptor, FileInterceptor } from '@nestjs/platform-express';
 import { AnalysisService } from './analysis.service';
 import { GeminiService, GeminiAnalysisResult } from './services/gemini.service';
 import { SupabaseService, UploadResult } from './services/supabase.service';
-import { RealTimeScanDto } from './dto/real-time-scan.dto';
+import { RealTimeScanDto, RealTimeScanResult } from './dto/real-time-scan.dto';
 import { Analysis } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 
@@ -126,7 +126,7 @@ export class AnalysisTestController implements OnModuleInit {
   @Post('scan')
   async testRealTimeScan(
     @Body() realTimeScanDto: RealTimeScanDto,
-  ): Promise<GeminiAnalysisResult> {
+  ): Promise<RealTimeScanResult> {
     return this.analysisService.processRealTimeScan(this.testUserId, {
       ...realTimeScanDto,
       saveImage: false,

@@ -3,7 +3,7 @@ import {
   BadRequestException,
   UnauthorizedException,
 } from '@nestjs/common';
-import { generateSecret, generateURI, verifySync, generateSync } from 'otplib';
+import { generateSecret, generateURI, verifySync } from 'otplib';
 import * as QRCode from 'qrcode';
 import { PrismaService } from '../../prisma/prisma.service';
 
@@ -17,7 +17,7 @@ export interface TwoFactorSetup {
 export class TwoFactorService {
   private readonly APP_NAME = 'DeepSkyn';
 
-  constructor(private readonly prisma: PrismaService) { }
+  constructor(private readonly prisma: PrismaService) {}
 
   /**
    * Verify a TOTP code against a secret

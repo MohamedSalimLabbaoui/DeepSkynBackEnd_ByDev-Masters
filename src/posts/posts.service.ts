@@ -62,7 +62,6 @@ export class PostsService {
       where.status = 'published';
     }
 
-
     const [posts, total] = await Promise.all([
       this.prisma.post.findMany({
         where,
@@ -70,10 +69,15 @@ export class PostsService {
         skip,
         take: limit,
         include: {
-          user: { select: { id: true, name: true, avatar: true, isPublic: true } },
+          user: {
+            select: { id: true, name: true, avatar: true, isPublic: true },
+          },
           _count: { select: { likes: true, comments: true } },
           likes: currentUserId
-            ? { where: { userId: currentUserId }, select: { id: true, type: true } }
+            ? {
+                where: { userId: currentUserId },
+                select: { id: true, type: true },
+              }
             : false,
         },
       }),
@@ -83,16 +87,17 @@ export class PostsService {
     const postsWithLiked = posts.map((post: any) => ({
       ...post,
       isLiked: currentUserId ? post.likes?.length > 0 : false,
-      reaction: (currentUserId && post.likes?.length > 0) ? post.likes[0].type : null,
+      reaction:
+        currentUserId && post.likes?.length > 0 ? post.likes[0].type : null,
       likes: undefined,
     }));
 
-    return { 
-      data: postsWithLiked, 
+    return {
+      data: postsWithLiked,
       total,
       page,
       limit,
-      totalPages: Math.ceil(total / limit)
+      totalPages: Math.ceil(total / limit),
     };
   }
 
@@ -114,10 +119,15 @@ export class PostsService {
         skip,
         take: limit,
         include: {
-          user: { select: { id: true, name: true, avatar: true, isPublic: true } },
+          user: {
+            select: { id: true, name: true, avatar: true, isPublic: true },
+          },
           _count: { select: { likes: true, comments: true } },
           likes: currentUserId
-            ? { where: { userId: currentUserId }, select: { id: true, type: true } }
+            ? {
+                where: { userId: currentUserId },
+                select: { id: true, type: true },
+              }
             : false,
         },
       }),
@@ -127,7 +137,8 @@ export class PostsService {
     const postsWithLiked = posts.map((post: any) => ({
       ...post,
       isLiked: currentUserId ? post.likes?.length > 0 : false,
-      reaction: (currentUserId && post.likes?.length > 0) ? post.likes[0].type : null,
+      reaction:
+        currentUserId && post.likes?.length > 0 ? post.likes[0].type : null,
       likes: undefined,
     }));
 
@@ -153,7 +164,7 @@ export class PostsService {
 
     const [posts, total] = await Promise.all([
       this.prisma.post.findMany({
-        where: { 
+        where: {
           userId,
           status: currentUserId === userId ? { not: 'deleted' } : 'published',
         },
@@ -164,31 +175,35 @@ export class PostsService {
           user: { select: { id: true, name: true, avatar: true } },
           _count: { select: { likes: true, comments: true } },
           likes: currentUserId
-            ? { where: { userId: currentUserId }, select: { id: true, type: true } }
+            ? {
+                where: { userId: currentUserId },
+                select: { id: true, type: true },
+              }
             : false,
         },
       }),
-      this.prisma.post.count({ 
-        where: { 
+      this.prisma.post.count({
+        where: {
           userId,
           status: currentUserId === userId ? { not: 'deleted' } : 'published',
-        } 
+        },
       }),
     ]);
 
     const postsWithLiked = posts.map((post: any) => ({
       ...post,
       isLiked: currentUserId ? post.likes?.length > 0 : false,
-      reaction: (currentUserId && post.likes?.length > 0) ? post.likes[0].type : null,
+      reaction:
+        currentUserId && post.likes?.length > 0 ? post.likes[0].type : null,
       likes: undefined,
     }));
 
-    return { 
-      data: postsWithLiked, 
+    return {
+      data: postsWithLiked,
       total,
       page,
       limit,
-      totalPages: Math.ceil(total / limit)
+      totalPages: Math.ceil(total / limit),
     };
   }
 
@@ -197,7 +212,7 @@ export class PostsService {
 
     const [posts, total] = await Promise.all([
       this.prisma.post.findMany({
-        where: { 
+        where: {
           userId,
           status: 'archived',
         },
@@ -210,11 +225,11 @@ export class PostsService {
           likes: { where: { userId }, select: { id: true, type: true } },
         },
       }),
-      this.prisma.post.count({ 
-        where: { 
+      this.prisma.post.count({
+        where: {
           userId,
           status: 'archived',
-        } 
+        },
       }),
     ]);
 
@@ -225,7 +240,7 @@ export class PostsService {
       likes: undefined,
     }));
 
-    return { 
+    return {
       data: postsWithLiked,
       total,
       page,
@@ -256,7 +271,10 @@ export class PostsService {
     return {
       ...post,
       isLiked: currentUserId ? (post as any).likes?.length > 0 : false,
-      reaction: (currentUserId && (post as any).likes?.length > 0) ? (post as any).likes[0].type : null,
+      reaction:
+        currentUserId && (post as any).likes?.length > 0
+          ? (post as any).likes[0].type
+          : null,
       likes: undefined as any,
     } as PostWithDetails;
   }

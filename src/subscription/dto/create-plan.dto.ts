@@ -27,7 +27,10 @@ export class CreatePlanDto {
   @IsOptional()
   currency?: string;
 
-  @ApiPropertyOptional({ example: 30, description: 'Durée en jours (-1 = illimité)' })
+  @ApiPropertyOptional({
+    example: 30,
+    description: 'Durée en jours (-1 = illimité)',
+  })
   @IsInt()
   @IsOptional()
   durationDays?: number;

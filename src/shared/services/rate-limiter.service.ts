@@ -9,11 +9,19 @@ export interface RateLimitConfig {
 @Injectable()
 export class RateLimiterService {
   private readonly logger = new Logger(RateLimiterService.name);
-  private requestQueue: Array<{ resolve: Function; reject: Function; key: string; requestFn: Function }> = [];
+  private requestQueue: Array<{
+    resolve: (value: any) => void;
+    reject: (reason?: any) => void;
+    key: string;
+    requestFn: () => Promise<any>;
+  }> = [];
   private processing = false;
   private lastRequestTime = 0;
-  private requestCounts = new Map<string, { count: number; windowStart: number }>();
-  
+  private requestCounts = new Map<
+    string,
+    { count: number; windowStart: number }
+  >();
+
   private readonly config: RateLimitConfig = {
     windowMs: 60 * 1000, // 1 minute window
     maxRequests: 15, // Conservative limit for Gemini free tier
@@ -26,11 +34,11 @@ export class RateLimiterService {
   async queueRequest<T>(
     key: string,
     requestFn: () => Promise<T>,
-    priority: 'high' | 'normal' | 'low' = 'normal'
+    priority: 'high' | 'normal' | 'low' = 'normal',
   ): Promise<T> {
     return new Promise((resolve, reject) => {
       const request = { resolve, reject, key, requestFn };
-      
+
       // Insert based on priority
       if (priority === 'high') {
         this.requestQueue.unshift(request);
@@ -41,7 +49,7 @@ export class RateLimiterService {
         const midPoint = Math.floor(this.requestQueue.length / 2);
         this.requestQueue.splice(midPoint, 0, request);
       }
-      
+
       this.processQueue();
     });
   }
@@ -63,7 +71,9 @@ export class RateLimiterService {
       try {
         // Check rate limit for this key
         if (!this.canMakeRequest(request.key)) {
-          this.logger.warn(`Rate limit exceeded for ${request.key}, queueing...`);
+          this.logger.warn(
+            `Rate limit exceeded for ${request.key}, queueing...`,
+          );
           // Re-queue at end
           this.requestQueue.push(request);
           await this.sleep(this.config.globalDelay);
@@ -82,10 +92,9 @@ export class RateLimiterService {
         // Make the request
         this.recordRequest(request.key);
         this.lastRequestTime = Date.now();
-        
+
         const result = await request.requestFn();
         request.resolve(result);
-        
       } catch (error) {
         request.reject(error);
       }
@@ -131,7 +140,11 @@ export class RateLimiterService {
   /**
    * Get current rate limit status
    */
-  getRateLimitStatus(): { queueSize: number; lastRequestTime: number; processing: boolean } {
+  getRateLimitStatus(): {
+    queueSize: number;
+    lastRequestTime: number;
+    processing: boolean;
+  } {
     return {
       queueSize: this.requestQueue.length,
       lastRequestTime: this.lastRequestTime,
@@ -152,6 +165,6 @@ export class RateLimiterService {
   }
 
   private sleep(ms: number): Promise<void> {
-    return new Promise(resolve => setTimeout(resolve, ms));
+    return new Promise((resolve) => setTimeout(resolve, ms));
   }
 }

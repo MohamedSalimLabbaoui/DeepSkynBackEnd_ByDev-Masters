@@ -3,7 +3,7 @@ import { ApiProperty } from '@nestjs/swagger';
 
 export class RecommendProductDto {
   @ApiProperty({
-    description: 'Nom de l\'étape de routine (ex: Nettoyant, Sérum)',
+    description: "Nom de l'étape de routine (ex: Nettoyant, Sérum)",
     example: 'Sérum Vitamine C',
   })
   @IsString()
@@ -26,7 +26,7 @@ export class RecommendProductDto {
   stepDescription?: string;
 
   @ApiProperty({
-    description: 'Type de peau de l\'utilisateur',
+    description: "Type de peau de l'utilisateur",
     required: false,
     example: 'combination',
   })

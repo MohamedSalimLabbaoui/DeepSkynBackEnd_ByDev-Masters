@@ -1,7 +1,7 @@
 /**
  * Utility for compressing AI prompts to reduce token usage
  * without losing any information.
- * 
+ *
  * Compression strategies:
  * - Minify JSON context
  * - Use abbreviations for common terms
@@ -37,39 +37,39 @@ export interface RoutineContext {
 
 // Skin type abbreviation mappings
 const SKIN_TYPE_ABBR: Record<string, string> = {
-  'oily': 'O',
-  'dry': 'D', 
-  'combination': 'C',
-  'normal': 'N',
-  'sensitive': 'S',
-  'grasse': 'O',
-  'sèche': 'D',
-  'mixte': 'C',
-  'normale': 'N',
-  'sensible': 'S',
+  oily: 'O',
+  dry: 'D',
+  combination: 'C',
+  normal: 'N',
+  sensitive: 'S',
+  grasse: 'O',
+  sèche: 'D',
+  mixte: 'C',
+  normale: 'N',
+  sensible: 'S',
 };
 
 // Budget abbreviation mappings
 const BUDGET_ABBR: Record<string, string> = {
-  'low': 'L',
-  'medium': 'M',
-  'high': 'H',
-  'premium': 'P',
+  low: 'L',
+  medium: 'M',
+  high: 'H',
+  premium: 'P',
 };
 
 // Common concerns abbreviation
 const CONCERN_ABBR: Record<string, string> = {
-  'acne': 'ac',
-  'wrinkles': 'wr',
-  'hyperpigmentation': 'hp',
-  'redness': 'rd',
-  'dryness': 'dr',
-  'oiliness': 'ol',
-  'sensitivity': 'sn',
-  'pores': 'pr',
-  'dark_spots': 'ds',
-  'fine_lines': 'fl',
-  'dehydration': 'dh',
+  acne: 'ac',
+  wrinkles: 'wr',
+  hyperpigmentation: 'hp',
+  redness: 'rd',
+  dryness: 'dr',
+  oiliness: 'ol',
+  sensitivity: 'sn',
+  pores: 'pr',
+  dark_spots: 'ds',
+  fine_lines: 'fl',
+  dehydration: 'dh',
 };
 
 /**
@@ -86,10 +86,12 @@ export function abbrevSkinType(skinType: string | undefined): string {
  */
 export function abbrevConcerns(concerns: string[] | undefined): string {
   if (!concerns || concerns.length === 0) return '-';
-  return concerns.map(c => {
-    const lower = c.toLowerCase();
-    return CONCERN_ABBR[lower] || c.substring(0, 3);
-  }).join(',');
+  return concerns
+    .map((c) => {
+      const lower = c.toLowerCase();
+      return CONCERN_ABBR[lower] || c.substring(0, 3);
+    })
+    .join(',');
 }
 
 /**
@@ -139,7 +141,8 @@ export function buildCompactRoutineContext(ctx: RoutineContext): string {
   parts.push(`st:${abbrevSkinType(ctx.skinType)}`);
   if (ctx.concerns?.length) parts.push(`c:${abbrevConcerns(ctx.concerns)}`);
   if (ctx.sensitivities?.length) parts.push(`s:${ctx.sensitivities.length}`);
-  if (ctx.budget) parts.push(`b:${BUDGET_ABBR[ctx.budget] || ctx.budget.charAt(0)}`);
+  if (ctx.budget)
+    parts.push(`b:${BUDGET_ABBR[ctx.budget] || ctx.budget.charAt(0)}`);
   if (ctx.fitzpatrickType) parts.push(`f:${ctx.fitzpatrickType}`);
   return parts.join('|');
 }
@@ -155,7 +158,9 @@ export function compressWeatherForecast(daily: {
 }): string {
   const entries: string[] = [];
   for (let i = 0; i < Math.min(daily.time.length, 7); i++) {
-    entries.push(`${i + 1}:${daily.uv_index_max[i]},${daily.precipitation_sum[i]},${daily.temperature_2m_max[i]}`);
+    entries.push(
+      `${i + 1}:${daily.uv_index_max[i]},${daily.precipitation_sum[i]},${daily.temperature_2m_max[i]}`,
+    );
   }
   return entries.join('|');
 }

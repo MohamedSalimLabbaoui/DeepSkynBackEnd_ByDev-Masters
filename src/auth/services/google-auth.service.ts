@@ -104,6 +104,13 @@ export class GoogleAuthService {
         data: {
           avatar: profile.avatar || user.avatar,
           lastActivity: new Date(),
+          ...(user.twoFactorEnabled
+            ? {}
+            : {
+                sessionCount: {
+                  increment: 1,
+                },
+              }),
         },
       });
 
@@ -111,7 +118,9 @@ export class GoogleAuthService {
         user: this.sanitizeUser(user),
         isNewUser: false,
         requiresTwoFactor: user.twoFactorEnabled,
-        accessToken: user.twoFactorEnabled ? undefined : this.generateToken(user),
+        accessToken: user.twoFactorEnabled
+          ? undefined
+          : this.generateToken(user),
       };
     }
 
@@ -129,6 +138,13 @@ export class GoogleAuthService {
           avatar: profile.avatar || existingByEmail.avatar,
           emailVerified: true,
           lastActivity: new Date(),
+          ...(existingByEmail.twoFactorEnabled
+            ? {}
+            : {
+                sessionCount: {
+                  increment: 1,
+                },
+              }),
         },
       });
 
@@ -136,7 +152,9 @@ export class GoogleAuthService {
         user: this.sanitizeUser(user),
         isNewUser: false,
         requiresTwoFactor: user.twoFactorEnabled,
-        accessToken: user.twoFactorEnabled ? undefined : this.generateToken(user),
+        accessToken: user.twoFactorEnabled
+          ? undefined
+          : this.generateToken(user),
       };
     }
 
@@ -150,6 +168,8 @@ export class GoogleAuthService {
         emailVerified: profile.emailVerified,
         onboardingComplete: false,
         role: 'user',
+        lastActivity: new Date(),
+        sessionCount: 1,
       },
     });
 
@@ -177,6 +197,7 @@ export class GoogleAuthService {
    * Supprimer les champs sensibles de l'utilisateur
    */
   private sanitizeUser(user: User): Partial<User> {
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const { password, refreshToken, twoFactorSecret, ...safeUser } = user;
     return safeUser;
   }

@@ -80,7 +80,9 @@ export class SubscriptionService {
   };
 
   private normalizePlanCode(planCode: string | undefined | null): string {
-    const normalized = String(planCode || '').trim().toLowerCase();
+    const normalized = String(planCode || '')
+      .trim()
+      .toLowerCase();
     return normalized || SubscriptionService.FREE_PLAN_CODE;
   }
 
@@ -105,7 +107,10 @@ export class SubscriptionService {
     return d;
   }
 
-  private computeMonthlyWindow(anchorDate: Date, now: Date): {
+  private computeMonthlyWindow(
+    anchorDate: Date,
+    now: Date,
+  ): {
     periodStart: Date;
     nextReset: Date;
   } {
@@ -152,7 +157,10 @@ export class SubscriptionService {
   }> {
     const subscription = await this.findOrCreateByUserId(userId);
     const anchor = subscription.startDate || subscription.createdAt;
-    const { periodStart, nextReset } = this.computeMonthlyWindow(anchor, new Date());
+    const { periodStart, nextReset } = this.computeMonthlyWindow(
+      anchor,
+      new Date(),
+    );
     return { periodStart, resetsAt: nextReset };
   }
 
@@ -302,14 +310,20 @@ export class SubscriptionService {
         quotas: {
           analyses: { used: 0, limit: null, remaining: null, resetsAt: null },
           aiRoutines: { used: 0, limit: null, remaining: null, resetsAt: null },
-          chatMessages: { used: 0, limit: null, remaining: null, resetsAt: null },
+          chatMessages: {
+            used: 0,
+            limit: null,
+            remaining: null,
+            resetsAt: null,
+          },
         },
       };
     }
 
     const now = new Date();
 
-    const { periodStart, resetsAt } = await this.getFreeMonthlyQuotaWindow(userId);
+    const { periodStart, resetsAt } =
+      await this.getFreeMonthlyQuotaWindow(userId);
 
     const startOfToday = new Date(now);
     startOfToday.setHours(0, 0, 0, 0);
@@ -485,7 +499,8 @@ export class SubscriptionService {
 
     const updateData: any = {};
 
-    const incomingPlan = updateSubscriptionDto.plan || updateSubscriptionDto.planCode;
+    const incomingPlan =
+      updateSubscriptionDto.plan || updateSubscriptionDto.planCode;
     if (incomingPlan) {
       const planCode = this.normalizePlanCode(incomingPlan);
       const { subscriptionPlanId } = await this.getPlanDetails(planCode);
@@ -522,7 +537,9 @@ export class SubscriptionService {
     upgradeDto: UpgradeSubscriptionDto,
   ): Promise<Subscription> {
     const currentSub = await this.findOrCreateByUserId(userId);
-    const newPlanCode = this.normalizePlanCode(upgradeDto.plan || upgradeDto.planCode);
+    const newPlanCode = this.normalizePlanCode(
+      upgradeDto.plan || upgradeDto.planCode,
+    );
 
     // Bloquer le changement de plan si un abonnement premium est encore actif et non expiré
     if (
@@ -710,7 +727,9 @@ export class SubscriptionService {
     daysRemaining: number | null;
   }> {
     const subscription = await this.findOrCreateByUserId(userId);
-    const { details: planDetails } = await this.getPlanDetails(subscription.plan);
+    const { details: planDetails } = await this.getPlanDetails(
+      subscription.plan,
+    );
     const isPremium = await this.isPremium(userId);
 
     let daysRemaining: number | null = null;
@@ -734,7 +753,9 @@ export class SubscriptionService {
   async getStripePriceIdForPlan(planCodeInput: string): Promise<string> {
     const planCode = this.normalizePlanCode(planCodeInput);
     if (planCode === SubscriptionService.FREE_PLAN_CODE) {
-      throw new BadRequestException('Stripe Checkout is only supported for paid plans');
+      throw new BadRequestException(
+        'Stripe Checkout is only supported for paid plans',
+      );
     }
 
     const { stripePriceId } = await this.getPlanDetails(planCode);

@@ -17,10 +17,6 @@ export interface WeatherAdviceInput {
 @Injectable()
 export class WeatherService {
   private readonly logger = new Logger(WeatherService.name);
-  private readonly vertexApiKeys: string[];
-  private readonly vertexModels: string[];
-  private readonly vertexBaseUrl =
-    'https://aiplatform.googleapis.com/v1/publishers/google/models';
   private readonly geminiApiKeys: string[];
   private readonly geminiModels: string[];
   private readonly geminiBaseUrl =
@@ -30,41 +26,24 @@ export class WeatherService {
   private readonly grokService: GrokService;
 
   constructor(private readonly configService: ConfigService) {
-    this.vertexApiKeys = this.loadApiKeys('VERTEX_API_KEY');
-    this.vertexModels = [
-      this.configService.get<string>('VERTEX_PRIMARY_MODEL') || 'gemini-2.5-pro',
-      this.configService.get<string>('VERTEX_FALLBACK_MODEL') || 'gemini-2.0-flash',
-    ].filter((value, index, arr) => !!value && arr.indexOf(value) === index);
-
     this.geminiApiKeys = this.loadApiKeys('GEMINI_API_KEY');
     this.geminiModels = [
-      this.configService.get<string>('GEMINI_PRIMARY_MODEL') || 'gemini-2.5-flash',
-      this.configService.get<string>('GEMINI_FALLBACK_MODEL') || 'gemini-1.5-flash',
+      this.configService.get<string>('GEMINI_PRIMARY_MODEL') ||
+        'gemini-2.5-flash',
+      this.configService.get<string>('GEMINI_FALLBACK_MODEL') ||
+        'gemini-1.5-flash',
     ].filter((value, index, arr) => !!value && arr.indexOf(value) === index);
 
-    if (this.vertexApiKeys.length < 2) {
-      this.logger.warn(
-        'Weather Vertex resilience is limited. Configure VERTEX_API_KEY and VERTEX_API_KEY_2.',
-      );
-    }
-
-    if (this.geminiApiKeys.length < 2) {
-      this.logger.warn(
-        'Weather Gemini resilience is limited. Configure GEMINI_API_KEY and GEMINI_API_KEY_2.',
-      );
+    if (this.geminiApiKeys.length === 0) {
+      this.logger.warn('Weather Gemini is not configured. Set GEMINI_API_KEY.');
     }
 
     this.grokService = new GrokService(configService);
   }
 
   private loadApiKeys(baseName: string): string[] {
-    const keys = [
-      this.configService.get<string>(baseName),
-      this.configService.get<string>(`${baseName}_2`),
-      this.configService.get<string>(`${baseName}_3`),
-    ].filter((key): key is string => !!key && key.trim().length > 0);
-
-    return Array.from(new Set(keys));
+    const key = this.configService.get<string>(baseName);
+    return key && key.trim().length > 0 ? [key.trim()] : [];
   }
 
   private sleep(ms: number): Promise<void> {
@@ -75,96 +54,47 @@ export class WeatherService {
     return status === 429 || status === 500 || status === 503;
   }
 
-  private async requestVertexAdvice(prompt: string): Promise<string> {
-    if (this.vertexApiKeys.length === 0) {
-      throw new Error('No Vertex API key configured');
-    }
-
-    for (const model of this.vertexModels) {
-      for (let keyIndex = 0; keyIndex < this.vertexApiKeys.length; keyIndex++) {
-        const apiKey = this.vertexApiKeys[keyIndex];
-        const url = `${this.vertexBaseUrl}/${model}:generateContent?key=${apiKey}`;
-
-        for (let attempt = 1; attempt <= this.maxRetries; attempt++) {
-          try {
-            const response = await axios.post(
-              url,
-              {
-                contents: [{ parts: [{ text: prompt }] }],
-                generationConfig: {
-                  temperature: 0.6,
-                  maxOutputTokens: 1024,
-                },
-              },
-              {
-                headers: { 'Content-Type': 'application/json' },
-                timeout: 15000,
-              },
-            );
-
-            const text = response.data?.candidates?.[0]?.content?.parts?.[0]?.text;
-            if (text) {
-              return text;
-            }
-          } catch (error) {
-            const status = (error as any)?.response?.status as number | undefined;
-            this.logger.warn(
-              `Vertex weather failed (model=${model}, key#${keyIndex + 1}, status=${status ?? 'n/a'}, attempt=${attempt}/${this.maxRetries})`,
-            );
-
-            if (this.isRetryableStatus(status) && attempt < this.maxRetries) {
-              await this.sleep(this.retryDelay * attempt);
-              continue;
-            }
-          }
-        }
-      }
-    }
-
-    throw new Error('All Vertex weather candidates failed');
-  }
-
   private async requestGeminiAdvice(prompt: string): Promise<string> {
     if (this.geminiApiKeys.length === 0) {
       throw new Error('No Gemini API key configured');
     }
 
+    const apiKey = this.geminiApiKeys[0];
+
     for (const model of this.geminiModels) {
-      for (let keyIndex = 0; keyIndex < this.geminiApiKeys.length; keyIndex++) {
-        const apiKey = this.geminiApiKeys[keyIndex];
-        const url = `${this.geminiBaseUrl}/${model}:generateContent?key=${apiKey}`;
+      const url = `${this.geminiBaseUrl}/${model}:generateContent?key=${apiKey}`;
 
-        for (let attempt = 1; attempt <= this.maxRetries; attempt++) {
-          try {
-            const response = await axios.post(
-              url,
-              {
-                contents: [{ parts: [{ text: prompt }] }],
-                generationConfig: {
-                  temperature: 0.6,
-                  maxOutputTokens: 1024,
-                },
+      for (let attempt = 1; attempt <= this.maxRetries; attempt++) {
+        try {
+          const response = await axios.post(
+            url,
+            {
+              contents: [{ parts: [{ text: prompt }] }],
+              generationConfig: {
+                temperature: 0.6,
+                maxOutputTokens: 1024,
               },
-              {
-                headers: { 'Content-Type': 'application/json' },
-                timeout: 15000,
-              },
-            );
+            },
+            {
+              headers: { 'Content-Type': 'application/json' },
+              timeout: 15000,
+            },
+          );
 
-            const text = response.data?.candidates?.[0]?.content?.parts?.[0]?.text;
-            if (text) {
-              return text;
-            }
-          } catch (error) {
-            const status = (error as any)?.response?.status as number | undefined;
-            this.logger.warn(
-              `Gemini weather failed (model=${model}, key#${keyIndex + 1}, status=${status ?? 'n/a'}, attempt=${attempt}/${this.maxRetries})`,
-            );
+          const text =
+            response.data?.candidates?.[0]?.content?.parts?.[0]?.text;
+          if (text) {
+            return text;
+          }
+        } catch (error) {
+          const status = (error as any)?.response?.status as number | undefined;
+          this.logger.warn(
+            `Gemini weather failed (model=${model}, status=${status ?? 'n/a'}, attempt=${attempt}/${this.maxRetries})`,
+          );
 
-            if (this.isRetryableStatus(status) && attempt < this.maxRetries) {
-              await this.sleep(this.retryDelay * attempt);
-              continue;
-            }
+          if (this.isRetryableStatus(status) && attempt < this.maxRetries) {
+            await this.sleep(this.retryDelay * attempt);
+            continue;
           }
         }
       }
@@ -207,9 +137,8 @@ export class WeatherService {
     }
   }
 
-
   /**
-   * Générer un conseil météo personnalisé via Vertex -> Gemini -> OpenRouter
+   * Générer un conseil météo personnalisé via Gemini -> OpenRouter
    */
   async generateWeatherAdvice(data: WeatherAdviceInput): Promise<{
     advice: string;
@@ -219,27 +148,10 @@ export class WeatherService {
     const prompt = this.buildWeatherPrompt(data);
     const urgencyLevel = this.calculateUrgency(data);
 
-    // Vertex first
-    if (this.vertexApiKeys.length > 0) {
-      try {
-        this.logger.log('Using Vertex AI for weather advice');
-        const vertexResponse = await this.requestVertexAdvice(prompt);
-        const parsed = this.parseAdviceResponse(vertexResponse);
-
-        return {
-          advice: parsed.advice,
-          emoji: parsed.emoji,
-          urgency: urgencyLevel,
-        };
-      } catch (vertexError) {
-        this.logger.warn('Vertex weather advice failed, trying Gemini', vertexError);
-      }
-    }
-
-    // Gemini fallback
+    // Gemini first
     if (this.geminiApiKeys.length > 0) {
       try {
-        this.logger.log('Using Gemini fallback for weather advice');
+        this.logger.log('Using Gemini for weather advice');
         const geminiResponse = await this.requestGeminiAdvice(prompt);
         const parsed = this.parseAdviceResponse(geminiResponse);
 
@@ -249,7 +161,10 @@ export class WeatherService {
           urgency: urgencyLevel,
         };
       } catch (geminiError) {
-        this.logger.warn('Gemini weather advice failed, trying OpenRouter', geminiError);
+        this.logger.warn(
+          'Gemini weather advice failed, trying OpenRouter',
+          geminiError,
+        );
       }
     }
 
@@ -260,7 +175,7 @@ export class WeatherService {
         this.logger.log('Using OpenRouter for weather advice');
         const grokResponse = await this.grokService.generate(prompt);
         const parsed = this.parseAdviceResponse(grokResponse);
-        
+
         return {
           advice: parsed.advice,
           emoji: parsed.emoji,
@@ -309,7 +224,9 @@ Le conseil doit:
   /**
    * Calculer le niveau d'urgence basé sur les conditions
    */
-  private calculateUrgency(data: WeatherAdviceInput): 'low' | 'medium' | 'high' {
+  private calculateUrgency(
+    data: WeatherAdviceInput,
+  ): 'low' | 'medium' | 'high' {
     let urgencyScore = 0;
 
     // Température extrême

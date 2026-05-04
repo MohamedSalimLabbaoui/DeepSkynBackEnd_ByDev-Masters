@@ -32,6 +32,7 @@ export class NotificationGateway
   private readonly logger = new Logger(NotificationGateway.name);
   private userSockets: Map<string, Set<string>> = new Map();
 
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   afterInit(server: Server) {
     this.logger.log('WebSocket Gateway initialized');
   }

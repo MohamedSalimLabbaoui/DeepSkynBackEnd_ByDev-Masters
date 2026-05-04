@@ -18,8 +18,6 @@ import {
   ApiOperation,
   ApiResponse,
   ApiBearerAuth,
-  ApiParam,
-  ApiQuery,
 } from '@nestjs/swagger';
 import { SkinProfileService, SkinProfileStats } from './skin-profile.service';
 import { CreateSkinProfileDto } from './dto/create-skin-profile.dto';
@@ -40,7 +38,7 @@ export class SkinProfileController {
   constructor(
     private readonly skinProfileService: SkinProfileService,
     private readonly prisma: PrismaService,
-  ) { }
+  ) {}
 
   private async getPrismaUserId(email: string): Promise<string> {
     const user = await this.prisma.user.findUnique({
@@ -170,8 +168,8 @@ export class SkinProfileController {
    */
   @Get('me/onboarding-status')
   @ApiOperation({
-    summary: 'Statut d\'onboarding',
-    description: 'Vérifie si l\'utilisateur a complété l\'onboarding',
+    summary: "Statut d'onboarding",
+    description: "Vérifie si l'utilisateur a complété l'onboarding",
   })
   @ApiResponse({ status: 200, description: 'Statut retourné' })
   async getOnboardingStatus(
