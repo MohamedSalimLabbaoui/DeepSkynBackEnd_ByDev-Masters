@@ -55,7 +55,6 @@ export class FaceVerificationController {
     return this.faceVerificationService.verifyFace(
       userId,
       verifyFaceDto.descriptor,
-      verifyFaceDto.imageBase64,
     );
   }
 

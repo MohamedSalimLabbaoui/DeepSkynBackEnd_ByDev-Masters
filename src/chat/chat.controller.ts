@@ -11,7 +11,7 @@ import {
   HttpCode,
   HttpStatus,
 } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger';
+import { ApiTags, ApiOperation, ApiResponse, ApiQuery } from '@nestjs/swagger';
 import { ChatService } from './chat.service';
 import { SendMessageDto } from './dto';
 import { KeycloakAuthGuard } from '../auth/guards/keycloak-auth.guard';

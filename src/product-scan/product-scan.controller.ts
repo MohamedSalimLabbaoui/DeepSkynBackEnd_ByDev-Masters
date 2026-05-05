@@ -226,7 +226,6 @@ export class ProductScanController {
         productId,
         body.rating,
         body.review,
-        userId,
       );
 
       return {
