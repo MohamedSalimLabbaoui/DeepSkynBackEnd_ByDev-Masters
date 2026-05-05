@@ -57,7 +57,10 @@ export class CreateCouponDto {
   @Min(1)
   maxPerUser?: number;
 
-  @ApiPropertyOptional({ type: [String], example: ['premium', 'premium_yearly'] })
+  @ApiPropertyOptional({
+    type: [String],
+    example: ['premium', 'premium_yearly'],
+  })
   @IsOptional()
   @IsArray()
   @IsString({ each: true })

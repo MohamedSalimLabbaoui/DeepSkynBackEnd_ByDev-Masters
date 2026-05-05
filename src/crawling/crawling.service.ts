@@ -68,7 +68,9 @@ export class CrawlingService {
   }
 
   // ─── Crawler toutes les sources ───
-  async crawlAll(keywords?: string[]): Promise<{ saved: number; skipped: number; errors: string[] }> {
+  async crawlAll(
+    keywords?: string[],
+  ): Promise<{ saved: number; skipped: number; errors: string[] }> {
     const allArticles: CrawledArticle[] = [];
     const errors: string[] = [];
 
@@ -76,7 +78,10 @@ export class CrawlingService {
       { name: 'Healthline', fn: () => this.crawlHealthline(keywords) },
       { name: 'DermNet', fn: () => this.crawlDermNet(keywords) },
       { name: 'AAD', fn: () => this.crawlAAD(keywords) },
-      { name: 'Medical News Today', fn: () => this.crawlMedicalNewsToday(keywords) },
+      {
+        name: 'Medical News Today',
+        fn: () => this.crawlMedicalNewsToday(keywords),
+      },
     ];
 
     for (const source of sources) {
@@ -84,7 +89,9 @@ export class CrawlingService {
         this.logger.log(`📥 Crawling ${source.name}...`);
         const articles = await source.fn();
         allArticles.push(...articles);
-        this.logger.log(`  → ${articles.length} articles trouvés sur ${source.name}`);
+        this.logger.log(
+          `  → ${articles.length} articles trouvés sur ${source.name}`,
+        );
       } catch (error) {
         const msg = `Erreur crawl ${source.name}: ${error.message}`;
         this.logger.error(msg);
@@ -134,11 +141,20 @@ export class CrawlingService {
   // ═══════════════════════════════════════════════════
   //  HEALTHLINE - Articles dermatologiques
   // ═══════════════════════════════════════════════════
-  private async crawlHealthline(keywords?: string[]): Promise<CrawledArticle[]> {
+  private async crawlHealthline(
+    keywords?: string[],
+  ): Promise<CrawledArticle[]> {
     const articles: CrawledArticle[] = [];
     const categoriesToCrawl = keywords?.length
       ? keywords
-      : ['skin-care', 'skin-health', 'acne', 'eczema', 'psoriasis', 'dermatitis'];
+      : [
+          'skin-care',
+          'skin-health',
+          'acne',
+          'eczema',
+          'psoriasis',
+          'dermatitis',
+        ];
 
     for (const category of categoriesToCrawl) {
       try {
@@ -177,7 +193,9 @@ export class CrawlingService {
           }
         }
       } catch {
-        this.logger.warn(`Healthline: impossible de crawler la catégorie ${category}`);
+        this.logger.warn(
+          `Healthline: impossible de crawler la catégorie ${category}`,
+        );
       }
     }
 
@@ -236,7 +254,15 @@ export class CrawlingService {
     const articles: CrawledArticle[] = [];
     const topics = keywords?.length
       ? keywords
-      : ['acne', 'eczema', 'psoriasis', 'rosacea', 'dermatitis', 'melanoma', 'fungal'];
+      : [
+          'acne',
+          'eczema',
+          'psoriasis',
+          'rosacea',
+          'dermatitis',
+          'melanoma',
+          'fungal',
+        ];
 
     for (const topic of topics) {
       try {
@@ -311,7 +337,8 @@ export class CrawlingService {
       if (content.length < 100) return null;
 
       const summary = paragraphs.slice(0, 2).join(' ').substring(0, 500);
-      const imageUrl = $('article img, main img').first().attr('src') || undefined;
+      const imageUrl =
+        $('article img, main img').first().attr('src') || undefined;
       const tags = this.extractTags($, content);
 
       return {
@@ -336,7 +363,15 @@ export class CrawlingService {
     const articles: CrawledArticle[] = [];
     const conditions = keywords?.length
       ? keywords
-      : ['acne', 'eczema', 'psoriasis', 'rosacea', 'skin-cancer', 'hair-loss', 'nail-fungus'];
+      : [
+          'acne',
+          'eczema',
+          'psoriasis',
+          'rosacea',
+          'skin-cancer',
+          'hair-loss',
+          'nail-fungus',
+        ];
 
     for (const condition of conditions) {
       try {
@@ -376,7 +411,8 @@ export class CrawlingService {
       if (content.length < 50) return null;
 
       const summary = paragraphs.slice(0, 2).join(' ').substring(0, 500);
-      const imageUrl = $('article img, main img').first().attr('src') || undefined;
+      const imageUrl =
+        $('article img, main img').first().attr('src') || undefined;
       const tags = this.extractTags($, content);
 
       return {
@@ -397,7 +433,9 @@ export class CrawlingService {
   // ═══════════════════════════════════════════════════
   //  MEDICAL NEWS TODAY - Articles médicaux
   // ═══════════════════════════════════════════════════
-  private async crawlMedicalNewsToday(keywords?: string[]): Promise<CrawledArticle[]> {
+  private async crawlMedicalNewsToday(
+    keywords?: string[],
+  ): Promise<CrawledArticle[]> {
     const articles: CrawledArticle[] = [];
     const topics = keywords?.length
       ? keywords
@@ -470,7 +508,8 @@ export class CrawlingService {
       if (content.length < 100) return null;
 
       const summary = paragraphs.slice(0, 2).join(' ').substring(0, 500);
-      const imageUrl = $('article img, main img').first().attr('src') || undefined;
+      const imageUrl =
+        $('article img, main img').first().attr('src') || undefined;
       const tags = this.extractTags($, content);
 
       return {
@@ -528,7 +567,9 @@ export class CrawlingService {
         });
         saved++;
       } catch (error) {
-        this.logger.warn(`Erreur sauvegarde article "${article.title}": ${error.message}`);
+        this.logger.warn(
+          `Erreur sauvegarde article "${article.title}": ${error.message}`,
+        );
         skipped++;
       }
     }
@@ -605,7 +646,9 @@ export class CrawlingService {
   async getRelevantArticles(
     query: string,
     limit: number = 5,
-  ): Promise<{ title: string; summary: string; source: string; url: string }[]> {
+  ): Promise<
+    { title: string; summary: string; source: string; url: string }[]
+  > {
     const keywords = query
       .toLowerCase()
       .split(/\s+/)
@@ -688,13 +731,38 @@ export class CrawlingService {
 
     // Détecter les conditions de peau mentionnées dans le contenu
     const skinConditions = [
-      'acne', 'eczema', 'psoriasis', 'rosacea', 'dermatitis',
-      'melanoma', 'vitiligo', 'hives', 'urticaria', 'seborrhea',
-      'keratosis', 'fungal', 'warts', 'moles', 'sunburn',
-      'hyperpigmentation', 'melasma', 'wrinkles', 'aging',
-      'dry skin', 'oily skin', 'sensitive skin', 'combination skin',
-      'retinol', 'hyaluronic acid', 'salicylic acid', 'benzoyl peroxide',
-      'niacinamide', 'vitamin c', 'spf', 'sunscreen', 'moisturizer',
+      'acne',
+      'eczema',
+      'psoriasis',
+      'rosacea',
+      'dermatitis',
+      'melanoma',
+      'vitiligo',
+      'hives',
+      'urticaria',
+      'seborrhea',
+      'keratosis',
+      'fungal',
+      'warts',
+      'moles',
+      'sunburn',
+      'hyperpigmentation',
+      'melasma',
+      'wrinkles',
+      'aging',
+      'dry skin',
+      'oily skin',
+      'sensitive skin',
+      'combination skin',
+      'retinol',
+      'hyaluronic acid',
+      'salicylic acid',
+      'benzoyl peroxide',
+      'niacinamide',
+      'vitamin c',
+      'spf',
+      'sunscreen',
+      'moisturizer',
     ];
 
     const lowerContent = content.toLowerCase();

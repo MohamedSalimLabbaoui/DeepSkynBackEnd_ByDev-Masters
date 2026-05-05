@@ -12,13 +12,7 @@ import {
   HttpStatus,
   BadRequestException,
 } from '@nestjs/common';
-import {
-  ApiTags,
-  ApiOperation,
-  ApiResponse,
-  ApiBearerAuth,
-  ApiQuery,
-} from '@nestjs/swagger';
+import { ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger';
 import { SubscriptionService } from './subscription.service';
 import {
   CreateSubscriptionDto,
@@ -63,7 +57,8 @@ export class SubscriptionController {
       throw new BadRequestException(error.message);
     }
 
-    const message = error instanceof Error ? error.message : 'Stripe request failed';
+    const message =
+      error instanceof Error ? error.message : 'Stripe request failed';
     throw new BadRequestException(message);
   }
 
@@ -95,11 +90,12 @@ export class SubscriptionController {
 
     let stripePromotionCodeId: string | undefined;
     if (couponCode) {
-      const couponValidation = await this.couponsService.validateCouponForCheckout(
-        userId,
-        couponCode,
-        planCode,
-      );
+      const couponValidation =
+        await this.couponsService.validateCouponForCheckout(
+          userId,
+          couponCode,
+          planCode,
+        );
 
       if (!couponValidation.stripePromotionCodeId) {
         throw new BadRequestException(
@@ -114,7 +110,9 @@ export class SubscriptionController {
     const cancelUrl = `${frontendUrl}/payment/cancel`;
 
     const discounts = stripePromotionCodeId
-      ? ([{ promotion_code: stripePromotionCodeId }] as Stripe.Checkout.SessionCreateParams.Discount[])
+      ? ([
+          { promotion_code: stripePromotionCodeId },
+        ] as Stripe.Checkout.SessionCreateParams.Discount[])
       : undefined;
 
     let session: Stripe.Checkout.Session;
@@ -143,7 +141,8 @@ export class SubscriptionController {
   @Get('payments/history')
   @UseGuards(KeycloakAuthGuard)
   async getMyPaymentHistory(@CurrentUser('userId') userId: string) {
-    const subscription = await this.subscriptionService.findOrCreateByUserId(userId);
+    const subscription =
+      await this.subscriptionService.findOrCreateByUserId(userId);
 
     // planId stores Stripe subscription id in current implementation.
     if (!subscription.planId) {
@@ -188,7 +187,8 @@ export class SubscriptionController {
     @CurrentUser('userId') userId: string,
     @Param('invoiceId') invoiceId: string,
   ) {
-    const subscription = await this.subscriptionService.findOrCreateByUserId(userId);
+    const subscription =
+      await this.subscriptionService.findOrCreateByUserId(userId);
     if (!subscription.planId) {
       throw new BadRequestException('No paid subscription found for this user');
     }
@@ -310,13 +310,14 @@ export class SubscriptionController {
   async getMySubscription(@CurrentUser('userId') userId: string) {
     return this.subscriptionService.getCurrentPlanDetails(userId);
   }
-  
+
   @Get('me/usage')
   @ApiOperation({
-    summary: 'Usage de l\'abonnement',
-    description: "Récupère le résumé des quotas et de l'utilisation de l'abonnement",
+    summary: "Usage de l'abonnement",
+    description:
+      "Récupère le résumé des quotas et de l'utilisation de l'abonnement",
   })
-  @ApiResponse({ status: 200, description: 'Résumé de l\'utilisation retourné' })
+  @ApiResponse({ status: 200, description: "Résumé de l'utilisation retourné" })
   @UseGuards(KeycloakAuthGuard)
   async getMyUsage(@CurrentUser('userId') userId: string) {
     return this.subscriptionService.getUsageSummary(userId);

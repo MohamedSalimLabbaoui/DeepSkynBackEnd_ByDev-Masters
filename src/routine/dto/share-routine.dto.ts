@@ -1,9 +1,10 @@
 import { IsString, IsUUID, IsOptional, MaxLength } from 'class-validator';
-import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { ApiPropertyOptional } from '@nestjs/swagger';
 
 export class ShareRoutineDto {
   @ApiPropertyOptional({
-    description: 'ID de la routine à partager (peut être obtenu du paramètre d\'URL)',
+    description:
+      "ID de la routine à partager (peut être obtenu du paramètre d'URL)",
     example: 'uuid-of-routine',
   })
   @IsUUID()

@@ -23,8 +23,6 @@ import {
   ApiBearerAuth,
   ApiConsumes,
   ApiBody,
-  ApiParam,
-  ApiQuery,
 } from '@nestjs/swagger';
 import { AnalysisService, AnalysisStats } from './analysis.service';
 import { CreateAnalysisDto } from './dto/create-analysis.dto';
@@ -57,7 +55,8 @@ export class AnalysisController {
         questionnaire: { type: 'string', description: 'Questionnaire JSON' },
         preocupent: {
           type: 'string',
-          description: 'JSON array of selected face zones (ex: ["nez","joues"])',
+          description:
+            'JSON array of selected face zones (ex: ["nez","joues"])',
         },
         saveAnalysis: {
           type: 'string',

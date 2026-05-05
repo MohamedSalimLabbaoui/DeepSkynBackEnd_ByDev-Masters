@@ -67,4 +67,4 @@ import { ProductScanModule } from './product-scan/product-scan.module';
   controllers: [],
   providers: [],
 })
-export class AppModule { }
+export class AppModule {}

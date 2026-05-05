@@ -14,7 +14,7 @@ export class KeycloakAuthGuard extends AuthGuard(['keycloak', 'social-jwt']) {
     return super.canActivate(context);
   }
 
-  handleRequest(err: any, user: any, info: any) {
+  handleRequest(err: any, user: any) {
     if (err || !user) {
       throw err || new UnauthorizedException('Authentication required');
     }

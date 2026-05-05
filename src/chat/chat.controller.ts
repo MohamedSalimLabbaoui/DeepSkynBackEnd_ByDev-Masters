@@ -11,14 +11,7 @@ import {
   HttpCode,
   HttpStatus,
 } from '@nestjs/common';
-import {
-  ApiTags,
-  ApiOperation,
-  ApiResponse,
-  ApiBearerAuth,
-  ApiParam,
-  ApiQuery,
-} from '@nestjs/swagger';
+import { ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger';
 import { ChatService } from './chat.service';
 import { SendMessageDto } from './dto';
 import { KeycloakAuthGuard } from '../auth/guards/keycloak-auth.guard';
@@ -40,7 +33,9 @@ export class ChatController {
       const parts = token.split('.');
       if (parts.length >= 2) {
         try {
-          const payloadJson = Buffer.from(parts[1], 'base64url').toString('utf-8');
+          const payloadJson = Buffer.from(parts[1], 'base64url').toString(
+            'utf-8',
+          );
           const payload = JSON.parse(payloadJson) as {
             sub?: string;
             id?: string;

@@ -1,6 +1,10 @@
 import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import { CreateSnapshotDto, SimulateProductDto, UpdateSimulationDto } from './dto/twin.dto';
+import {
+  CreateSnapshotDto,
+  SimulateProductDto,
+  UpdateSimulationDto,
+} from './dto/twin.dto';
 import { RateLimiterService } from '../shared/services/rate-limiter.service';
 import { CacheService } from '../shared/services/cache.service';
 
@@ -223,7 +227,9 @@ export class DigitalTwinService {
     }
 
     const latest = recentSnapshots[0];
-    const baseline = recentSnapshots.find(s => s.isBaseline) || recentSnapshots[recentSnapshots.length - 1];
+    const baseline =
+      recentSnapshots.find((s) => s.isBaseline) ||
+      recentSnapshots[recentSnapshots.length - 1];
 
     // Calculer l'état actuel
     const currentState = {
@@ -238,9 +244,10 @@ export class DigitalTwinService {
     const trendAnalysis = this.analyzeTrends(recentSnapshots);
 
     // Patterns saisonniers (si > 90 jours de données)
-    const seasonalPatterns = recentSnapshots.length >= 12 
-      ? this.analyzeSeasonalPatterns(recentSnapshots)
-      : null;
+    const seasonalPatterns =
+      recentSnapshots.length >= 12
+        ? this.analyzeSeasonalPatterns(recentSnapshots)
+        : null;
 
     // Calcul du taux d'amélioration
     const improvementRate = this.calculateImprovementRate(baseline, latest);
@@ -257,13 +264,15 @@ export class DigitalTwinService {
         seasonalPatterns,
         improvementRate,
         confidence,
-        baselineEstablished: recentSnapshots.some(s => s.isBaseline),
+        baselineEstablished: recentSnapshots.some((s) => s.isBaseline),
         baselineDate: baseline?.timestamp,
         lastUpdated: new Date(),
       },
     });
 
-    this.logger.log(`Digital Twin updated for user ${userId}, confidence: ${confidence.toFixed(2)}`);
+    this.logger.log(
+      `Digital Twin updated for user ${userId}, confidence: ${confidence.toFixed(2)}`,
+    );
     return updated;
   }
 
@@ -278,19 +287,25 @@ export class DigitalTwinService {
 
     const healthScoreTrend = latest.healthScore - oldest.healthScore;
     const daysDiff = Math.floor(
-      (latest.timestamp.getTime() - oldest.timestamp.getTime()) / (1000 * 60 * 60 * 24)
+      (latest.timestamp.getTime() - oldest.timestamp.getTime()) /
+        (1000 * 60 * 60 * 24),
     );
 
     // Tendances par condition
     const conditionTrends: Record<string, any> = {};
-    
+
     if (latest.conditions && oldest.conditions) {
       for (const key of Object.keys(latest.conditions)) {
         const latestVal = latest.conditions[key]?.severity || 0;
         const oldestVal = oldest.conditions[key]?.severity || 0;
         conditionTrends[key] = {
           change: latestVal - oldestVal,
-          direction: latestVal > oldestVal ? 'worsening' : latestVal < oldestVal ? 'improving' : 'stable',
+          direction:
+            latestVal > oldestVal
+              ? 'worsening'
+              : latestVal < oldestVal
+                ? 'improving'
+                : 'stable',
         };
       }
     }
@@ -298,7 +313,12 @@ export class DigitalTwinService {
     return {
       timeframe: `${daysDiff} days`,
       healthScoreChange: healthScoreTrend,
-      healthScoreTrend: healthScoreTrend > 5 ? 'improving' : healthScoreTrend < -5 ? 'declining' : 'stable',
+      healthScoreTrend:
+        healthScoreTrend > 5
+          ? 'improving'
+          : healthScoreTrend < -5
+            ? 'declining'
+            : 'stable',
       conditionTrends,
       dataPoints: snapshots.length,
     };
@@ -309,14 +329,15 @@ export class DigitalTwinService {
     // Grouper par mois
     const monthlyData: Record<number, any[]> = {};
 
-    snapshots.forEach(snap => {
+    snapshots.forEach((snap) => {
       const month = snap.timestamp.getMonth(); // 0-11
       if (!monthlyData[month]) monthlyData[month] = [];
       monthlyData[month].push(snap);
     });
 
     const patterns = Object.entries(monthlyData).map(([month, snaps]) => {
-      const avgHealth = snaps.reduce((sum, s) => sum + s.healthScore, 0) / snaps.length;
+      const avgHealth =
+        snaps.reduce((sum, s) => sum + s.healthScore, 0) / snaps.length;
       const dominantConditions = this.getDominantConditions(snaps);
 
       return {
@@ -333,9 +354,9 @@ export class DigitalTwinService {
   private getDominantConditions(snapshots: any[]): string[] {
     const conditionCounts: Record<string, number> = {};
 
-    snapshots.forEach(snap => {
+    snapshots.forEach((snap) => {
       if (snap.conditions) {
-        Object.keys(snap.conditions).forEach(cond => {
+        Object.keys(snap.conditions).forEach((cond) => {
           conditionCounts[cond] = (conditionCounts[cond] || 0) + 1;
         });
       }
@@ -350,7 +371,7 @@ export class DigitalTwinService {
   // 📈 Calculer le taux d'amélioration
   private calculateImprovementRate(baseline: any, latest: any): number {
     if (!baseline || !latest) return 0;
-    
+
     const change = latest.healthScore - baseline.healthScore;
     return (change / baseline.healthScore) * 100;
   }
@@ -358,14 +379,17 @@ export class DigitalTwinService {
   // 🔮 Générer une prédiction future
   async predictFuture(userId: string, daysAhead: number = 7) {
     const cacheKey = `prediction:${userId}:${daysAhead}`;
-    
+
     return this.cache.getOrSet(
       cacheKey,
       async () => {
         const twin = await this.getOrCreateTwin(userId);
 
-        if (twin.confidence < 0.1) { // Lowered from 0.3 to 0.1 (10%)
-          throw new NotFoundException('Not enough data to make reliable predictions. Please add more snapshots.');
+        if (twin.confidence < 0.1) {
+          // Lowered from 0.3 to 0.1 (10%)
+          throw new NotFoundException(
+            'Not enough data to make reliable predictions. Please add more snapshots.',
+          );
         }
 
         const snapshots = await this.prisma.skinSnapshot.findMany({
@@ -375,7 +399,11 @@ export class DigitalTwinService {
         });
 
         // Utiliser Gemini pour prédiction intelligente
-        const predictionData = await this.generateAIPrediction(twin, snapshots, daysAhead);
+        const predictionData = await this.generateAIPrediction(
+          twin,
+          snapshots,
+          daysAhead,
+        );
         const normalizedPredictedState = this.normalizePredictedState(
           twin,
           predictionData.predictedState,
@@ -386,7 +414,9 @@ export class DigitalTwinService {
         const prediction = await this.prisma.skinPrediction.create({
           data: {
             userId,
-            predictionDate: new Date(Date.now() + daysAhead * 24 * 60 * 60 * 1000),
+            predictionDate: new Date(
+              Date.now() + daysAhead * 24 * 60 * 60 * 1000,
+            ),
             predictedState: normalizedPredictedState,
             confidence: predictionData.confidence,
             basedOnDays: snapshots.length,
@@ -396,7 +426,9 @@ export class DigitalTwinService {
           },
         });
 
-        this.logger.log(`Prediction generated for user ${userId}, ${daysAhead} days ahead`);
+        this.logger.log(
+          `Prediction generated for user ${userId}, ${daysAhead} days ahead`,
+        );
         return prediction;
       },
       10 * 60 * 1000, // Cache 10min
@@ -404,7 +436,11 @@ export class DigitalTwinService {
   }
 
   // 🤖 Générer prédiction avec AI
-  private async generateAIPrediction(twin: any, snapshots: any[], daysAhead: number) {
+  private async generateAIPrediction(
+    twin: any,
+    snapshots: any[],
+    daysAhead: number,
+  ) {
     const prompt = `Tu es un expert skin-care marketing + dermatologie. Analyse le jumeau numérique et projette UNIQUEMENT le résultat après application régulière de la routine recommandée.
 
 ÉTAT ACTUEL:
@@ -414,7 +450,13 @@ TENDANCES RÉCENTES:
 ${JSON.stringify(twin.trendAnalysis, null, 2)}
 
 HISTORIQUE (${snapshots.length} snapshots):
-${snapshots.slice(0, 5).map(s => `- ${s.timestamp.toISOString()}: Health ${s.healthScore}, SkinAge ${s.skinAge ?? 'N/A'}`).join('\n')}
+${snapshots
+  .slice(0, 5)
+  .map(
+    (s) =>
+      `- ${s.timestamp.toISOString()}: Health ${s.healthScore}, SkinAge ${s.skinAge ?? 'N/A'}`,
+  )
+  .join('\n')}
 
 TÂCHE:
 Prédit l'état du visage dans ${daysAhead} jours APRÈS routine. Ton ton doit rester positif et orienté amélioration.
@@ -454,14 +496,20 @@ Retourne UNIQUEMENT un JSON valide avec cette structure:
       const parsed = JSON.parse(jsonStr);
 
       return {
-        predictedState: this.normalizePredictedState(twin, parsed.predictedState, daysAhead),
+        predictedState: this.normalizePredictedState(
+          twin,
+          parsed.predictedState,
+          daysAhead,
+        ),
         confidence: parsed.confidence || 0.5,
         factors: parsed.factors || {},
         preventiveTips: parsed.preventiveTips || [],
         warnings: [],
       };
-    } catch (error:any) {
-      this.logger.warn(`AI prediction failed, using rule-based fallback: ${error.message}`);
+    } catch (error: any) {
+      this.logger.warn(
+        `AI prediction failed, using rule-based fallback: ${error.message}`,
+      );
       return this.ruleBasedPrediction(twin, snapshots, daysAhead);
     }
   }
@@ -480,14 +528,24 @@ Retourne UNIQUEMENT un JSON valide avec cette structure:
     return {
       predictedState: {
         healthScore: Math.round(predictedHealth),
-        skinAge: Math.max(14, Math.round((twin.currentState?.skinAge ?? 30) - Math.min(3, daysAhead / 7))),
-        radianceScore: Math.max(40, Math.min(100, Math.round(predictedHealth + 6))),
+        skinAge: Math.max(
+          14,
+          Math.round(
+            (twin.currentState?.skinAge ?? 30) - Math.min(3, daysAhead / 7),
+          ),
+        ),
+        radianceScore: Math.max(
+          40,
+          Math.min(100, Math.round(predictedHealth + 6)),
+        ),
         confidence: 0.6,
       },
       confidence: 0.6,
       factors: {
-        routineImpact: 'Routine appliquée de façon régulière, amélioration progressive projetée.',
-        consistencyNote: 'La régularité quotidienne maximise le résultat attendu.',
+        routineImpact:
+          'Routine appliquée de façon régulière, amélioration progressive projetée.',
+        consistencyNote:
+          'La régularité quotidienne maximise le résultat attendu.',
       },
       preventiveTips: [
         'Nettoyage doux matin/soir',
@@ -498,11 +556,17 @@ Retourne UNIQUEMENT un JSON valide avec cette structure:
     };
   }
 
-  private normalizePredictedState(twin: any, predictedState: any, daysAhead: number) {
+  private normalizePredictedState(
+    twin: any,
+    predictedState: any,
+    daysAhead: number,
+  ) {
     const currentHealth = Number(twin?.currentState?.healthScore);
     const baselineHealth = Number.isFinite(currentHealth) ? currentHealth : 55;
     const currentSkinAge = Number(twin?.currentState?.skinAge);
-    const baselineSkinAge = Number.isFinite(currentSkinAge) ? currentSkinAge : 30;
+    const baselineSkinAge = Number.isFinite(currentSkinAge)
+      ? currentSkinAge
+      : 30;
 
     const toNumber = (value: unknown) => {
       const parsed = Number(value);
@@ -515,14 +579,25 @@ Retourne UNIQUEMENT un JSON valide avec cette structure:
     const rawConfidence = toNumber(predictedState?.confidence);
 
     return {
-      healthScore: Math.max(0, Math.min(100, Math.round(rawHealth ?? baselineHealth + 4))),
+      healthScore: Math.max(
+        0,
+        Math.min(100, Math.round(rawHealth ?? baselineHealth + 4)),
+      ),
       skinAge: Math.max(
         14,
-        Math.min(90, Math.round(rawSkinAge ?? baselineSkinAge - Math.min(3, daysAhead / 7))),
+        Math.min(
+          90,
+          Math.round(
+            rawSkinAge ?? baselineSkinAge - Math.min(3, daysAhead / 7),
+          ),
+        ),
       ),
       radianceScore: Math.max(
         0,
-        Math.min(100, Math.round(rawRadiance ?? (rawHealth ?? baselineHealth) + 6)),
+        Math.min(
+          100,
+          Math.round(rawRadiance ?? (rawHealth ?? baselineHealth) + 6),
+        ),
       ),
       confidence: Math.max(0, Math.min(1, rawConfidence ?? 0.6)),
     };
@@ -540,7 +615,10 @@ Retourne UNIQUEMENT un JSON valide avec cette structure:
       brightness: Math.min(14, Math.max(-6, toNum(filters.brightness, 6))),
       redness: Math.min(0, Math.max(-20, toNum(filters.redness, -10))),
       saturation: Math.min(8, Math.max(-8, toNum(filters.saturation, 1))),
-      acneReduction: Math.min(34, Math.max(6, toNum(filters.acneReduction, 14))),
+      acneReduction: Math.min(
+        34,
+        Math.max(6, toNum(filters.acneReduction, 14)),
+      ),
       hydration: Math.min(36, Math.max(8, toNum(filters.hydration, 18))),
       evenness: Math.min(32, Math.max(6, toNum(filters.evenness, 14))),
     };
@@ -550,14 +628,21 @@ Retourne UNIQUEMENT un JSON valide avec cette structure:
   async simulateProduct(userId: string, dto: SimulateProductDto) {
     const twin = await this.getOrCreateTwin(userId);
 
-    if (twin.confidence < 0.1) { // Lowered from 0.3 to 0.1 (10%)
-      throw new NotFoundException('Not enough skin data for reliable product simulation.');
+    if (twin.confidence < 0.1) {
+      // Lowered from 0.3 to 0.1 (10%)
+      throw new NotFoundException(
+        'Not enough skin data for reliable product simulation.',
+      );
     }
 
     const simulationPeriod = dto.simulationPeriod || 14;
 
     // Générer simulation avec AI
-    const simulationData = await this.generateProductSimulation(twin, dto, simulationPeriod);
+    const simulationData = await this.generateProductSimulation(
+      twin,
+      dto,
+      simulationPeriod,
+    );
 
     const simulation = await this.prisma.productSimulation.create({
       data: {
@@ -579,12 +664,18 @@ Retourne UNIQUEMENT un JSON valide avec cette structure:
       },
     });
 
-    this.logger.log(`Product simulation created for user ${userId}: ${simulation.id}`);
+    this.logger.log(
+      `Product simulation created for user ${userId}: ${simulation.id}`,
+    );
     return simulation;
   }
 
   // 🤖 Générer simulation produit avec AI
-  private async generateProductSimulation(twin: any, product: SimulateProductDto, days: number) {
+  private async generateProductSimulation(
+    twin: any,
+    product: SimulateProductDto,
+    days: number,
+  ) {
     const prompt = `Tu es un expert en dermatologie cosmétique. Simule l'effet d'un produit sur la peau.
 
 PROFIL PEAU ACTUEL:
@@ -648,19 +739,23 @@ IMPORTANT: Les valeurs visualFilters doivent être ÉLEVÉES (40-60 en moyenne) 
         expectedChanges: parsed.expectedChanges || {},
         riskFactors: parsed.riskFactors || [],
         successProbability: parsed.successProbability || 0.5,
-        visualFilters: this.clampVisualFilters(parsed.visualFilters || {
-          smoothness: 40,      // Valeurs par défaut plus élevées
-          brightness: 25,
-          redness: -35,
-          saturation: 8,
-          acneReduction: 35,
-          hydration: 45,
-          evenness: 35,
-        }),
+        visualFilters: this.clampVisualFilters(
+          parsed.visualFilters || {
+            smoothness: 40, // Valeurs par défaut plus élevées
+            brightness: 25,
+            redness: -35,
+            saturation: 8,
+            acneReduction: 35,
+            hydration: 45,
+            evenness: 35,
+          },
+        ),
         reasoning: parsed.reasoning || '',
       };
-    } catch (error:any) {
-      this.logger.warn(`AI simulation failed, using rule-based: ${error.message}`);
+    } catch (error: any) {
+      this.logger.warn(
+        `AI simulation failed, using rule-based: ${error.message}`,
+      );
       return this.ruleBasedSimulation(twin, product);
     }
   }
@@ -668,38 +763,38 @@ IMPORTANT: Les valeurs visualFilters doivent être ÉLEVÉES (40-60 en moyenne) 
   // 📏 Simulation basée sur règles (fallback)
   private ruleBasedSimulation(twin: any, product: SimulateProductDto) {
     const current = twin.currentState?.healthScore || 50;
-    
+
     // Estimation basique selon catégorie - VALEURS AMPLIFIÉES pour effets très visibles
     let healthChange = 0;
     const risks: string[] = [];
     const visualFilters = {
-      smoothness: 25,      // Base plus élevée
-      brightness: 15,      // Base plus élevée
-      redness: -25,        // Réduction plus forte
-      saturation: 5,       // Légère amélioration de saturation
-      acneReduction: 25,   // Base plus élevée
-      hydration: 30,       // Base plus élevée
-      evenness: 25,        // Base plus élevée
+      smoothness: 25, // Base plus élevée
+      brightness: 15, // Base plus élevée
+      redness: -25, // Réduction plus forte
+      saturation: 5, // Légère amélioration de saturation
+      acneReduction: 25, // Base plus élevée
+      hydration: 30, // Base plus élevée
+      evenness: 25, // Base plus élevée
     };
 
     if (product.productCategory === 'serum') {
       healthChange = 8;
-      visualFilters.brightness = 35;        // Très lumineux
-      visualFilters.smoothness = 50;        // Très lisse
+      visualFilters.brightness = 35; // Très lumineux
+      visualFilters.smoothness = 50; // Très lisse
       visualFilters.hydration = 45;
       visualFilters.evenness = 40;
     }
     if (product.productCategory === 'moisturizer') {
       healthChange = 6;
-      visualFilters.hydration = 60;         // Très hydraté
+      visualFilters.hydration = 60; // Très hydraté
       visualFilters.smoothness = 45;
       visualFilters.brightness = 20;
       visualFilters.evenness = 35;
     }
     if (product.productCategory === 'cleanser') {
       healthChange = 4;
-      visualFilters.evenness = 45;          // Très uniforme
-      visualFilters.acneReduction = 40;     // Forte réduction
+      visualFilters.evenness = 45; // Très uniforme
+      visualFilters.acneReduction = 40; // Forte réduction
       visualFilters.brightness = 25;
       visualFilters.redness = -35;
     }
@@ -711,32 +806,45 @@ IMPORTANT: Les valeurs visualFilters doivent être ÉLEVÉES (40-60 en moyenne) 
     }
     if (product.productCategory === 'exfoliant') {
       healthChange = 7;
-      visualFilters.smoothness = 65;        // Très très lisse
+      visualFilters.smoothness = 65; // Très très lisse
       visualFilters.evenness = 55;
       visualFilters.acneReduction = 50;
       visualFilters.brightness = 30;
     }
 
     // Check ingredients effects - BONUS TRÈS MARQUÉS
-    const ingredientLower = product.productIngredients.map(i => i.toLowerCase()).join(' ');
-    
-    if (ingredientLower.includes('vitamin c') || ingredientLower.includes('vitamine c')) {
+    const ingredientLower = product.productIngredients
+      .map((i) => i.toLowerCase())
+      .join(' ');
+
+    if (
+      ingredientLower.includes('vitamin c') ||
+      ingredientLower.includes('vitamine c')
+    ) {
       visualFilters.brightness = Math.max(visualFilters.brightness, 45);
       visualFilters.evenness = Math.max(visualFilters.evenness, 50);
       visualFilters.hydration = Math.max(visualFilters.hydration, 40);
       healthChange += 3;
     }
-    if (ingredientLower.includes('hyaluronic') || ingredientLower.includes('hyaluronique')) {
+    if (
+      ingredientLower.includes('hyaluronic') ||
+      ingredientLower.includes('hyaluronique')
+    ) {
       visualFilters.hydration = Math.max(visualFilters.hydration, 70);
       visualFilters.smoothness = Math.max(visualFilters.smoothness, 45);
       visualFilters.brightness = Math.max(visualFilters.brightness, 25);
       healthChange += 2;
     }
-    if (ingredientLower.includes('retinol') || ingredientLower.includes('rétinol')) {
+    if (
+      ingredientLower.includes('retinol') ||
+      ingredientLower.includes('rétinol')
+    ) {
       visualFilters.smoothness = Math.max(visualFilters.smoothness, 60);
       visualFilters.acneReduction = Math.max(visualFilters.acneReduction, 55);
       visualFilters.evenness = Math.max(visualFilters.evenness, 45);
-      risks.push('Possible irritation initiale avec le rétinol - normalisation après 2 semaines');
+      risks.push(
+        'Possible irritation initiale avec le rétinol - normalisation après 2 semaines',
+      );
       healthChange += 4;
     }
     if (ingredientLower.includes('niacinamide')) {
@@ -745,7 +853,10 @@ IMPORTANT: Les valeurs visualFilters doivent être ÉLEVÉES (40-60 en moyenne) 
       visualFilters.brightness = Math.max(visualFilters.brightness, 30);
       healthChange += 3;
     }
-    if (ingredientLower.includes('salicylic') || ingredientLower.includes('salicylique')) {
+    if (
+      ingredientLower.includes('salicylic') ||
+      ingredientLower.includes('salicylique')
+    ) {
       visualFilters.acneReduction = Math.max(visualFilters.acneReduction, 60);
       visualFilters.smoothness = Math.max(visualFilters.smoothness, 40);
       visualFilters.redness = Math.min(visualFilters.redness, -40);
@@ -756,7 +867,10 @@ IMPORTANT: Les valeurs visualFilters doivent être ÉLEVÉES (40-60 en moyenne) 
       visualFilters.evenness = Math.max(visualFilters.evenness, 45);
       healthChange += 3;
     }
-    if (ingredientLower.includes('glycolic') || ingredientLower.includes('lactic')) {
+    if (
+      ingredientLower.includes('glycolic') ||
+      ingredientLower.includes('lactic')
+    ) {
       visualFilters.smoothness = Math.max(visualFilters.smoothness, 55);
       visualFilters.brightness = Math.max(visualFilters.brightness, 40);
       visualFilters.acneReduction = Math.max(visualFilters.acneReduction, 45);
@@ -766,8 +880,8 @@ IMPORTANT: Les valeurs visualFilters doivent être ÉLEVÉES (40-60 en moyenne) 
 
     // Check ingredients à risque
     const sensitiveIngredients = ['retinol', 'aha', 'bha', 'vitamin c'];
-    const hasSensitive = product.productIngredients.some(ing => 
-      sensitiveIngredients.some(si => ing.toLowerCase().includes(si))
+    const hasSensitive = product.productIngredients.some((ing) =>
+      sensitiveIngredients.some((si) => ing.toLowerCase().includes(si)),
     );
 
     if (hasSensitive) {
@@ -783,14 +897,16 @@ IMPORTANT: Les valeurs visualFilters doivent être ÉLEVÉES (40-60 en moyenne) 
         conditions: twin.currentState?.conditions || {},
       },
       expectedChanges: {
-        positive: healthChange > 0 ? ['Amélioration potentielle de la peau'] : [],
+        positive:
+          healthChange > 0 ? ['Amélioration potentielle de la peau'] : [],
         negative: risks,
         neutral: [],
       },
       riskFactors: risks,
       successProbability: 0.6,
       visualFilters: this.clampVisualFilters(visualFilters),
-      reasoning: 'Simulation basée sur les ingrédients et la catégorie du produit',
+      reasoning:
+        'Simulation basée sur les ingrédients et la catégorie du produit',
     };
   }
 
@@ -841,9 +957,13 @@ IMPORTANT: Les valeurs visualFilters doivent être ÉLEVÉES (40-60 en moyenne) 
     }
 
     if (twin.improvementRate > 10) {
-      insights.push(`✨ Your skin is improving at ${twin.improvementRate.toFixed(1)}% rate!`);
+      insights.push(
+        `✨ Your skin is improving at ${twin.improvementRate.toFixed(1)}% rate!`,
+      );
     } else if (twin.improvementRate < -10) {
-      insights.push(`⚠️ Your skin health declined by ${Math.abs(twin.improvementRate).toFixed(1)}%`);
+      insights.push(
+        `⚠️ Your skin health declined by ${Math.abs(twin.improvementRate).toFixed(1)}%`,
+      );
     }
 
     if (twin.trendAnalysis?.healthScoreTrend === 'improving') {
@@ -860,7 +980,11 @@ IMPORTANT: Les valeurs visualFilters doivent être ÉLEVÉES (40-60 en moyenne) 
   }
 
   // ✅ Mettre à jour simulation avec résultats réels
-  async updateSimulation(userId: string, simulationId: string, dto: UpdateSimulationDto) {
+  async updateSimulation(
+    userId: string,
+    simulationId: string,
+    dto: UpdateSimulationDto,
+  ) {
     const simulation = await this.prisma.productSimulation.findFirst({
       where: { id: simulationId, userId },
     });
@@ -892,10 +1016,18 @@ IMPORTANT: Les valeurs visualFilters doivent être ÉLEVÉES (40-60 en moyenne) 
   }
 
   // 🔍 Comparer deux snapshots
-  async compareSnapshots(userId: string, snapshotId1: string, snapshotId2: string) {
+  async compareSnapshots(
+    userId: string,
+    snapshotId1: string,
+    snapshotId2: string,
+  ) {
     const [snap1, snap2] = await Promise.all([
-      this.prisma.skinSnapshot.findFirst({ where: { id: snapshotId1, userId } }),
-      this.prisma.skinSnapshot.findFirst({ where: { id: snapshotId2, userId } }),
+      this.prisma.skinSnapshot.findFirst({
+        where: { id: snapshotId1, userId },
+      }),
+      this.prisma.skinSnapshot.findFirst({
+        where: { id: snapshotId2, userId },
+      }),
     ]);
 
     if (!snap1 || !snap2) {
@@ -904,7 +1036,8 @@ IMPORTANT: Les valeurs visualFilters doivent être ÉLEVÉES (40-60 en moyenne) 
 
     const healthScoreDiff = snap2.healthScore - snap1.healthScore;
     const timeDiff = Math.floor(
-      (snap2.timestamp.getTime() - snap1.timestamp.getTime()) / (1000 * 60 * 60 * 24)
+      (snap2.timestamp.getTime() - snap1.timestamp.getTime()) /
+        (1000 * 60 * 60 * 24),
     );
 
     return {
@@ -913,8 +1046,16 @@ IMPORTANT: Les valeurs visualFilters doivent être ÉLEVÉES (40-60 en moyenne) 
       comparison: {
         timeDifference: `${timeDiff} days`,
         healthScoreChange: healthScoreDiff,
-        trend: healthScoreDiff > 0 ? 'improving' : healthScoreDiff < 0 ? 'declining' : 'stable',
-        conditionChanges: this.compareConditions(snap1.conditions, snap2.conditions),
+        trend:
+          healthScoreDiff > 0
+            ? 'improving'
+            : healthScoreDiff < 0
+              ? 'declining'
+              : 'stable',
+        conditionChanges: this.compareConditions(
+          snap1.conditions,
+          snap2.conditions,
+        ),
       },
     };
   }
@@ -922,9 +1063,12 @@ IMPORTANT: Les valeurs visualFilters doivent être ÉLEVÉES (40-60 en moyenne) 
   private compareConditions(cond1: any, cond2: any): Record<string, string> {
     const changes: Record<string, string> = {};
 
-    const allKeys = new Set([...Object.keys(cond1 || {}), ...Object.keys(cond2 || {})]);
+    const allKeys = new Set([
+      ...Object.keys(cond1 || {}),
+      ...Object.keys(cond2 || {}),
+    ]);
 
-    allKeys.forEach(key => {
+    allKeys.forEach((key) => {
       const val1 = cond1?.[key]?.severity || 'none';
       const val2 = cond2?.[key]?.severity || 'none';
 

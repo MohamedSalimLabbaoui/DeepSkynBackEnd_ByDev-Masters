@@ -32,14 +32,18 @@ export class WeatherService {
   constructor(private readonly configService: ConfigService) {
     this.vertexApiKeys = this.loadApiKeys('VERTEX_API_KEY');
     this.vertexModels = [
-      this.configService.get<string>('VERTEX_PRIMARY_MODEL') || 'gemini-2.5-pro',
-      this.configService.get<string>('VERTEX_FALLBACK_MODEL') || 'gemini-2.0-flash',
+      this.configService.get<string>('VERTEX_PRIMARY_MODEL') ||
+        'gemini-2.5-pro',
+      this.configService.get<string>('VERTEX_FALLBACK_MODEL') ||
+        'gemini-2.0-flash',
     ].filter((value, index, arr) => !!value && arr.indexOf(value) === index);
 
     this.geminiApiKeys = this.loadApiKeys('GEMINI_API_KEY');
     this.geminiModels = [
-      this.configService.get<string>('GEMINI_PRIMARY_MODEL') || 'gemini-2.5-flash',
-      this.configService.get<string>('GEMINI_FALLBACK_MODEL') || 'gemini-1.5-flash',
+      this.configService.get<string>('GEMINI_PRIMARY_MODEL') ||
+        'gemini-2.5-flash',
+      this.configService.get<string>('GEMINI_FALLBACK_MODEL') ||
+        'gemini-1.5-flash',
     ].filter((value, index, arr) => !!value && arr.indexOf(value) === index);
 
     if (this.vertexApiKeys.length < 2) {
@@ -102,12 +106,15 @@ export class WeatherService {
               },
             );
 
-            const text = response.data?.candidates?.[0]?.content?.parts?.[0]?.text;
+            const text =
+              response.data?.candidates?.[0]?.content?.parts?.[0]?.text;
             if (text) {
               return text;
             }
           } catch (error) {
-            const status = (error as any)?.response?.status as number | undefined;
+            const status = (error as any)?.response?.status as
+              | number
+              | undefined;
             this.logger.warn(
               `Vertex weather failed (model=${model}, key#${keyIndex + 1}, status=${status ?? 'n/a'}, attempt=${attempt}/${this.maxRetries})`,
             );
@@ -151,12 +158,15 @@ export class WeatherService {
               },
             );
 
-            const text = response.data?.candidates?.[0]?.content?.parts?.[0]?.text;
+            const text =
+              response.data?.candidates?.[0]?.content?.parts?.[0]?.text;
             if (text) {
               return text;
             }
           } catch (error) {
-            const status = (error as any)?.response?.status as number | undefined;
+            const status = (error as any)?.response?.status as
+              | number
+              | undefined;
             this.logger.warn(
               `Gemini weather failed (model=${model}, key#${keyIndex + 1}, status=${status ?? 'n/a'}, attempt=${attempt}/${this.maxRetries})`,
             );
@@ -207,7 +217,6 @@ export class WeatherService {
     }
   }
 
-
   /**
    * Générer un conseil météo personnalisé via Vertex -> Gemini -> OpenRouter
    */
@@ -232,7 +241,10 @@ export class WeatherService {
           urgency: urgencyLevel,
         };
       } catch (vertexError) {
-        this.logger.warn('Vertex weather advice failed, trying Gemini', vertexError);
+        this.logger.warn(
+          'Vertex weather advice failed, trying Gemini',
+          vertexError,
+        );
       }
     }
 
@@ -249,7 +261,10 @@ export class WeatherService {
           urgency: urgencyLevel,
         };
       } catch (geminiError) {
-        this.logger.warn('Gemini weather advice failed, trying OpenRouter', geminiError);
+        this.logger.warn(
+          'Gemini weather advice failed, trying OpenRouter',
+          geminiError,
+        );
       }
     }
 
@@ -260,7 +275,7 @@ export class WeatherService {
         this.logger.log('Using OpenRouter for weather advice');
         const grokResponse = await this.grokService.generate(prompt);
         const parsed = this.parseAdviceResponse(grokResponse);
-        
+
         return {
           advice: parsed.advice,
           emoji: parsed.emoji,
@@ -309,7 +324,9 @@ Le conseil doit:
   /**
    * Calculer le niveau d'urgence basé sur les conditions
    */
-  private calculateUrgency(data: WeatherAdviceInput): 'low' | 'medium' | 'high' {
+  private calculateUrgency(
+    data: WeatherAdviceInput,
+  ): 'low' | 'medium' | 'high' {
     let urgencyScore = 0;
 
     // Température extrême

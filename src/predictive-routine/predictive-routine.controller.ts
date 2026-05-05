@@ -1,21 +1,30 @@
-import { 
-  Controller, 
-  Post, 
+import {
+  Controller,
+  Post,
   Get,
   Patch,
-  Body, 
-  UseGuards, 
-  HttpCode, 
-  HttpStatus, 
+  Body,
+  UseGuards,
+  HttpCode,
+  HttpStatus,
   Param,
-  Query 
+  Query,
 } from '@nestjs/common';
-import { IsString, IsNumber, IsArray, ValidateNested, IsObject, IsOptional, IsBoolean } from 'class-validator';
+import {
+  IsString,
+  IsNumber,
+  IsArray,
+  ValidateNested,
+  IsObject,
+} from 'class-validator';
 import { Type, Transform } from 'class-transformer';
 import { KeycloakAuthGuard } from '../auth/guards/keycloak-auth.guard';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { PredictiveRoutineService } from './predictive-routine.service';
-import { UpdateRoutineStatusDto, GetUserRoutinesQueryDto, PredictiveRoutineStatus } from './dto/routine-status.dto';
+import {
+  UpdateRoutineStatusDto,
+  GetUserRoutinesQueryDto,
+} from './dto/routine-status.dto';
 
 class AnalysisResultDto {
   @IsString()
@@ -92,7 +101,11 @@ export class PredictiveRoutineController {
     @CurrentUser('id') userId: string,
     @Query() query: GetUserRoutinesQueryDto,
   ) {
-    return this.service.getUserRoutines(userId, query.status, query.includeExpired);
+    return this.service.getUserRoutines(
+      userId,
+      query.status,
+      query.includeExpired,
+    );
   }
 
   // Update routine status (core UX interaction)

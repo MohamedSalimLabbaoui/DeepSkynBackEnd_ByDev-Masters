@@ -9,12 +9,7 @@ import { GeminiService } from '../analysis/services/gemini.service';
 import { SkinProfileService } from '../skin-profile/skin-profile.service';
 import { SubscriptionService } from '../subscription/subscription.service';
 import { CrawlingService } from '../crawling/crawling.service';
-import {
-  CreateChatDto,
-  SendMessageDto,
-  MessageRole,
-  ChatMessageDto,
-} from './dto';
+import { CreateChatDto, SendMessageDto, MessageRole } from './dto';
 import { ChatHistory } from '@prisma/client';
 
 export interface ChatMessage {
@@ -40,7 +35,7 @@ export class ChatService {
     private readonly skinProfileService: SkinProfileService,
     private readonly subscriptionService: SubscriptionService,
     private readonly crawlingService: CrawlingService,
-  ) { }
+  ) {}
 
   /**
    * Envoyer un message et obtenir une réponse AI
@@ -51,7 +46,9 @@ export class ChatService {
   ): Promise<ChatResponse> {
     // Vérifier si l'utilisateur existe
     let activeUserId = userId;
-    const userExists = await this.prisma.user.findUnique({ where: { id: userId } });
+    const userExists = await this.prisma.user.findUnique({
+      where: { id: userId },
+    });
     if (!userExists) {
       const firstUser = await this.prisma.user.findFirst();
       if (firstUser) {
@@ -89,7 +86,10 @@ export class ChatService {
     }
 
     // Obtenir le contexte utilisateur (skin profile)
-    const context = await this.buildUserContext(activeUserId, sendMessageDto.context);
+    const context = await this.buildUserContext(
+      activeUserId,
+      sendMessageDto.context,
+    );
 
     // Ajouter le message utilisateur
     const userMessage: ChatMessage = {
@@ -281,7 +281,9 @@ export class ChatService {
     // Enrichir le contexte avec des articles dermatologiques pertinents
 
     const systemPrompt = this.buildSystemPrompt(context, isPremium);
-    const conversationHistory = this.formatConversationHistory(messages.slice(0, -1)); // Exclude last user message
+    const conversationHistory = this.formatConversationHistory(
+      messages.slice(0, -1),
+    ); // Exclude last user message
 
     try {
       const response = await this.geminiService.chat(
@@ -342,8 +344,6 @@ Même en Premium, reste concis par défaut et n'allonge la réponse que si l'uti
       prompt += `\n\nL'utilisateur est en plan gratuit. Fournis des conseils généraux et suggère 
 de passer à Premium pour des recommandations plus détaillées quand c'est pertinent.`;
     }
-
-
 
     return prompt;
   }

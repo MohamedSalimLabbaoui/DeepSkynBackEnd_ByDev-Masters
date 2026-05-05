@@ -40,11 +40,15 @@ export class CouponsService {
   }
 
   private normalizeCode(code: string): string {
-    return String(code || '').trim().toUpperCase();
+    return String(code || '')
+      .trim()
+      .toUpperCase();
   }
 
   private normalizePlanCode(planCode: string): string {
-    return String(planCode || '').trim().toLowerCase();
+    return String(planCode || '')
+      .trim()
+      .toLowerCase();
   }
 
   private async createStripePromotionCode(params: {
@@ -146,7 +150,9 @@ export class CouponsService {
         expiresAt,
         maxRedemptions,
         maxPerUser: dto.maxPerUser ?? null,
-        allowedPlans: (dto.allowedPlans || []).map((x) => this.normalizePlanCode(x)),
+        allowedPlans: (dto.allowedPlans || []).map((x) =>
+          this.normalizePlanCode(x),
+        ),
         stripePromotionCodeId,
       },
     });
@@ -160,12 +166,17 @@ export class CouponsService {
     if (dto.discountValue !== undefined) data.discountValue = dto.discountValue;
     if (dto.currency !== undefined) data.currency = dto.currency;
     if (dto.isActive !== undefined) data.isActive = dto.isActive;
-    if (dto.startsAt !== undefined) data.startsAt = dto.startsAt ? new Date(dto.startsAt) : null;
-    if (dto.expiresAt !== undefined) data.expiresAt = dto.expiresAt ? new Date(dto.expiresAt) : null;
-    if (dto.maxRedemptions !== undefined) data.maxRedemptions = dto.maxRedemptions;
+    if (dto.startsAt !== undefined)
+      data.startsAt = dto.startsAt ? new Date(dto.startsAt) : null;
+    if (dto.expiresAt !== undefined)
+      data.expiresAt = dto.expiresAt ? new Date(dto.expiresAt) : null;
+    if (dto.maxRedemptions !== undefined)
+      data.maxRedemptions = dto.maxRedemptions;
     if (dto.maxPerUser !== undefined) data.maxPerUser = dto.maxPerUser;
     if (dto.allowedPlans !== undefined) {
-      data.allowedPlans = dto.allowedPlans.map((x) => this.normalizePlanCode(x));
+      data.allowedPlans = dto.allowedPlans.map((x) =>
+        this.normalizePlanCode(x),
+      );
     }
     if (dto.stripePromotionCodeId !== undefined) {
       data.stripePromotionCodeId = dto.stripePromotionCodeId;
@@ -184,7 +195,11 @@ export class CouponsService {
     });
   }
 
-  async validateCouponForCheckout(userId: string, couponCode: string, planCodeInput: string) {
+  async validateCouponForCheckout(
+    userId: string,
+    couponCode: string,
+    planCodeInput: string,
+  ) {
     const code = this.normalizeCode(couponCode);
     const planCode = this.normalizePlanCode(planCodeInput);
 
@@ -198,13 +213,18 @@ export class CouponsService {
 
     this.assertCouponUsableWindow(coupon);
 
-    if (coupon.allowedPlans.length > 0 && !coupon.allowedPlans.includes(planCode)) {
+    if (
+      coupon.allowedPlans.length > 0 &&
+      !coupon.allowedPlans.includes(planCode)
+    ) {
       throw new BadRequestException('Coupon is not valid for this plan');
     }
 
     const [totalUsed, usedByUser, plan] = await Promise.all([
       this.prisma.couponRedemption.count({ where: { couponId: coupon.id } }),
-      this.prisma.couponRedemption.count({ where: { couponId: coupon.id, userId } }),
+      this.prisma.couponRedemption.count({
+        where: { couponId: coupon.id, userId },
+      }),
       this.prisma.subscriptionPlan.findUnique({
         where: { code: planCode },
         select: { price: true, currency: true },

@@ -6,7 +6,6 @@ import {
   compressWhitespace,
   buildCompactAnalysisPrompt,
   buildUltraCompactScanPrompt,
-  buildMinimalScanPrompt,
 } from './prompt-compression.util';
 
 export interface GeminiAnalysisResult {
@@ -85,14 +84,18 @@ export class GeminiService {
   constructor(private readonly configService: ConfigService) {
     this.vertexApiKeys = this.loadApiKeys('VERTEX_API_KEY');
     this.vertexModels = [
-      this.configService.get<string>('VERTEX_PRIMARY_MODEL') || 'gemini-2.5-pro',
-      this.configService.get<string>('VERTEX_FALLBACK_MODEL') || 'gemini-2.0-flash',
+      this.configService.get<string>('VERTEX_PRIMARY_MODEL') ||
+        'gemini-2.5-pro',
+      this.configService.get<string>('VERTEX_FALLBACK_MODEL') ||
+        'gemini-2.0-flash',
     ].filter((value, index, arr) => !!value && arr.indexOf(value) === index);
 
     this.geminiApiKeys = this.loadApiKeys('GEMINI_API_KEY');
     this.geminiModels = [
-      this.configService.get<string>('GEMINI_PRIMARY_MODEL') || 'gemini-2.5-flash',
-      this.configService.get<string>('GEMINI_FALLBACK_MODEL') || 'gemini-1.5-flash',
+      this.configService.get<string>('GEMINI_PRIMARY_MODEL') ||
+        'gemini-2.5-flash',
+      this.configService.get<string>('GEMINI_FALLBACK_MODEL') ||
+        'gemini-1.5-flash',
     ].filter((value, index, arr) => !!value && arr.indexOf(value) === index);
 
     if (this.vertexApiKeys.length < 2) {
@@ -153,10 +156,14 @@ export class GeminiService {
               `Vertex request with model=${model}, key#${keyIndex + 1}, attempt=${attempt}`,
             );
 
-            const response = await axios.post<GeminiResponse>(url, requestBody, {
-              headers: { 'Content-Type': 'application/json' },
-              timeout,
-            });
+            const response = await axios.post<GeminiResponse>(
+              url,
+              requestBody,
+              {
+                headers: { 'Content-Type': 'application/json' },
+                timeout,
+              },
+            );
 
             return response.data;
           } catch (error) {
@@ -206,7 +213,11 @@ export class GeminiService {
 
     if (this.geminiApiKeys.length > 0) {
       for (const model of this.geminiModels) {
-        for (let keyIndex = 0; keyIndex < this.geminiApiKeys.length; keyIndex++) {
+        for (
+          let keyIndex = 0;
+          keyIndex < this.geminiApiKeys.length;
+          keyIndex++
+        ) {
           const apiKey = this.geminiApiKeys[keyIndex];
           const url = `${this.geminiBaseUrl}/${model}:generateContent?key=${apiKey}`;
 
@@ -216,10 +227,14 @@ export class GeminiService {
                 `Gemini request with model=${model}, key#${keyIndex + 1}, attempt=${attempt}`,
               );
 
-              const response = await axios.post<GeminiResponse>(url, requestBody, {
-                headers: { 'Content-Type': 'application/json' },
-                timeout,
-              });
+              const response = await axios.post<GeminiResponse>(
+                url,
+                requestBody,
+                {
+                  headers: { 'Content-Type': 'application/json' },
+                  timeout,
+                },
+              );
 
               return response.data;
             } catch (error) {
@@ -352,26 +367,34 @@ export class GeminiService {
 
       return this.parseAnalysisResponse(textResponse);
     } catch (error) {
-      this.logger.error('Gemini analysis failed, trying OpenRouter fallback', error);
-      
+      this.logger.error(
+        'Gemini analysis failed, trying OpenRouter fallback',
+        error,
+      );
+
       // Fallback to OpenRouter with vision model
       try {
         const isGrokAvailable = await this.grokService.isAvailable();
         if (isGrokAvailable) {
-          this.logger.log('Using OpenRouter vision fallback for image analysis');
+          this.logger.log(
+            'Using OpenRouter vision fallback for image analysis',
+          );
           const fallbackPrompt = this.buildAnalysisPrompt(questionnaire);
           const fallbackImageParts = await this.prepareImageParts(imageUrls);
-          
+
           if (fallbackImageParts.length > 0) {
             const base64Image = fallbackImageParts[0].inlineData.data;
-            const grokResponse = await this.grokService.analyzeImage(base64Image, fallbackPrompt);
+            const grokResponse = await this.grokService.analyzeImage(
+              base64Image,
+              fallbackPrompt,
+            );
             return this.parseAnalysisResponse(grokResponse);
           }
         }
       } catch (grokError) {
         this.logger.error('OpenRouter fallback also failed', grokError);
       }
-      
+
       throw error;
     }
   }
@@ -504,21 +527,29 @@ export class GeminiService {
 
       return this.parseAnalysisResponse(textResponse);
     } catch (error) {
-      this.logger.error('Real-time scan analysis failed, trying OpenRouter fallback', error);
-      
+      this.logger.error(
+        'Real-time scan analysis failed, trying OpenRouter fallback',
+        error,
+      );
+
       // Fallback to OpenRouter with vision model
       try {
         const isGrokAvailable = await this.grokService.isAvailable();
         if (isGrokAvailable) {
-          this.logger.log('Using OpenRouter vision fallback for real-time scan');
+          this.logger.log(
+            'Using OpenRouter vision fallback for real-time scan',
+          );
           const prompt = this.buildRealTimeScanPrompt();
-          const grokResponse = await this.grokService.analyzeImage(base64Image, prompt);
+          const grokResponse = await this.grokService.analyzeImage(
+            base64Image,
+            prompt,
+          );
           return this.parseAnalysisResponse(grokResponse);
         }
       } catch (grokError) {
         this.logger.error('OpenRouter fallback also failed', grokError);
       }
-      
+
       throw error;
     }
   }
@@ -698,7 +729,13 @@ export class GeminiService {
         score:
           maybeScore === null
             ? 70
-            : Math.max(0, Math.min(100, Math.round(maybeScore <= 10 ? maybeScore * 10 : maybeScore))),
+            : Math.max(
+                0,
+                Math.min(
+                  100,
+                  Math.round(maybeScore <= 10 ? maybeScore * 10 : maybeScore),
+                ),
+              ),
         description: maybeDescription,
       };
     }
@@ -813,8 +850,11 @@ Concerns:${concernsList}
         'Unable to generate advice.'
       );
     } catch (error) {
-      this.logger.error('Failed to get skincare advice from Gemini, trying OpenRouter', error);
-      
+      this.logger.error(
+        'Failed to get skincare advice from Gemini, trying OpenRouter',
+        error,
+      );
+
       try {
         const isGrokAvailable = await this.grokService.isAvailable();
         if (isGrokAvailable) {
@@ -824,7 +864,7 @@ Concerns:${concernsList}
       } catch (grokError) {
         this.logger.error('OpenRouter fallback also failed', grokError);
       }
-      
+
       return 'Unable to generate advice at this time. Please try again later.';
     }
   }
@@ -838,9 +878,10 @@ Concerns:${concernsList}
     userMessage: string,
   ): Promise<string> {
     // Compress history by keeping only last 500 chars
-    const compressedHistory = conversationHistory?.length > 500 
-      ? '...' + conversationHistory.slice(-500) 
-      : (conversationHistory || '-');
+    const compressedHistory =
+      conversationHistory?.length > 500
+        ? '...' + conversationHistory.slice(-500)
+        : conversationHistory || '-';
 
     const prompt = compressWhitespace(`
 ${systemPrompt}
@@ -867,18 +908,25 @@ Rép:français,utile,pro.`);
         "Je suis désolé, je n'ai pas pu générer une réponse."
       );
     } catch (error) {
-      this.logger.error('Failed to generate chat response from Gemini, trying OpenRouter', error);
-      
+      this.logger.error(
+        'Failed to generate chat response from Gemini, trying OpenRouter',
+        error,
+      );
+
       try {
         const isGrokAvailable = await this.grokService.isAvailable();
         if (isGrokAvailable) {
           this.logger.log('Using OpenRouter fallback for chat');
-          return await this.grokService.chatSkincare(systemPrompt, conversationHistory, userMessage);
+          return await this.grokService.chatSkincare(
+            systemPrompt,
+            conversationHistory,
+            userMessage,
+          );
         }
       } catch (grokError) {
         this.logger.error('OpenRouter fallback also failed', grokError);
       }
-      
+
       throw error;
     }
   }
@@ -989,7 +1037,9 @@ Rules:
         ? parsed.concerns
             .filter((item: any) => item && (item.title || item.description))
             .map((item: any) => {
-              const severityValue = String(item.severity || 'low').toLowerCase();
+              const severityValue = String(
+                item.severity || 'low',
+              ).toLowerCase();
               const severity: 'low' | 'medium' | 'high' =
                 severityValue === 'high'
                   ? 'high'

@@ -90,12 +90,15 @@ export class AuthService {
     this.clientSecret = this.configService.get<string>(
       'keycloak.credentials.secret',
     );
-    this.adminUser = this.configService.get<string>('KEYCLOAK_ADMIN_USER') || 'admin';
-    this.adminPassword = this.configService.get<string>('KEYCLOAK_ADMIN_PASSWORD') || 'admin';
+    this.adminUser =
+      this.configService.get<string>('KEYCLOAK_ADMIN_USER') || 'admin';
+    this.adminPassword =
+      this.configService.get<string>('KEYCLOAK_ADMIN_PASSWORD') || 'admin';
     this.adminClientId =
       this.configService.get<string>('KEYCLOAK_ADMIN_CLIENT_ID') || 'admin-cli';
     this.adminClientSecret =
-      this.configService.get<string>('KEYCLOAK_ADMIN_CLIENT_SECRET') || 'pFhUhztRlEJaEM75T7S1qbYvzBR2FnV1';
+      this.configService.get<string>('KEYCLOAK_ADMIN_CLIENT_SECRET') ||
+      'pFhUhztRlEJaEM75T7S1qbYvzBR2FnV1';
   }
 
   /**
@@ -121,7 +124,8 @@ export class AuthService {
 
     // 3. Create user in Keycloak
     const derivedFirstName = firstName || name.split(' ')[0] || name;
-    const derivedLastName = lastName || name.split(' ').slice(1).join(' ') || '';
+    const derivedLastName =
+      lastName || name.split(' ').slice(1).join(' ') || '';
 
     // 4. Capture Keycloak User ID from admin token location header or look it up
     let keycloakId: string | null = null;
@@ -172,7 +176,7 @@ export class AuthService {
         );
       }
       throw new InternalServerErrorException(
-        "Erreur lors de la création du compte. Veuillez réessayer.",
+        'Erreur lors de la création du compte. Veuillez réessayer.',
       );
     }
 
@@ -190,7 +194,10 @@ export class AuthService {
         },
       });
     } catch (error) {
-      this.logger.error('Prisma user creation failed - rolling back Keycloak user', error);
+      this.logger.error(
+        'Prisma user creation failed - rolling back Keycloak user',
+        error,
+      );
 
       if (keycloakId) {
         try {
@@ -301,7 +308,9 @@ export class AuthService {
       where: { email: username },
     });
     if (!user) {
-      throw new UnauthorizedException('Aucun compte trouvé avec cet email. Veuillez vous inscrire.');
+      throw new UnauthorizedException(
+        'Aucun compte trouvé avec cet email. Veuillez vous inscrire.',
+      );
     }
     if (!user.isActive) {
       throw new UnauthorizedException('Ce compte a été désactivé.');
@@ -494,7 +503,7 @@ export class AuthService {
       });
 
       return response.data.active === true;
-    } catch (error) {
+    } catch {
       return false;
     }
   }

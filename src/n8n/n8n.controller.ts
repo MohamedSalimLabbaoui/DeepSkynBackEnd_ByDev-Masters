@@ -5,19 +5,17 @@ import { N8nService } from './n8n.service';
 
 @Controller('n8n')
 export class N8nController {
-	constructor(private readonly n8nService: N8nService) {}
+  constructor(private readonly n8nService: N8nService) {}
 
-	@Post('reclamation')
-	@HttpCode(HttpStatus.OK)
-	async triggerReclamation(@Body() payload: CreateReclamationDto) {
-		return this.n8nService.triggerReclamationWorkflow(payload);
-	}
+  @Post('reclamation')
+  @HttpCode(HttpStatus.OK)
+  async triggerReclamation(@Body() payload: CreateReclamationDto) {
+    return this.n8nService.triggerReclamationWorkflow(payload);
+  }
 
-	@Post('reclamation/processed')
-	@HttpCode(HttpStatus.OK)
-	async sendProcessedReclamationMail(
-		@Body() payload: ProcessReclamationDto,
-	) {
-		return this.n8nService.sendProcessedReclamationEmail(payload);
-	}
+  @Post('reclamation/processed')
+  @HttpCode(HttpStatus.OK)
+  async sendProcessedReclamationMail(@Body() payload: ProcessReclamationDto) {
+    return this.n8nService.sendProcessedReclamationEmail(payload);
+  }
 }

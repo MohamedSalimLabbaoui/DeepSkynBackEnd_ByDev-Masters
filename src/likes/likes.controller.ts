@@ -34,7 +34,11 @@ export class LikesController {
     description: 'Like ou unlike un post',
   })
   @ApiParam({ name: 'postId', description: 'ID du post' })
-  @ApiQuery({ name: 'type', required: false, description: 'Type de réaction (like, haha, love, etc.)' })
+  @ApiQuery({
+    name: 'type',
+    required: false,
+    description: 'Type de réaction (like, haha, love, etc.)',
+  })
   @ApiResponse({ status: 200, description: 'Like togglé' })
   @ApiResponse({ status: 404, description: 'Post non trouvé' })
   async toggle(
@@ -95,7 +99,7 @@ export class LikesController {
   @Get('post/:postId/reactions')
   @ApiOperation({
     summary: "Réactions d'un post (legacy)",
-    description: "Alias rétrocompatible vers /likes/post/:postId",
+    description: 'Alias rétrocompatible vers /likes/post/:postId',
   })
   @ApiParam({ name: 'postId', description: 'ID du post' })
   @ApiQuery({ name: 'page', required: false, type: Number })

@@ -1,7 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
-import * as fs from 'fs/promises';
-import * as path from 'path';
 import sharp from 'sharp';
 
 @Injectable()
@@ -27,13 +25,13 @@ export class SupabaseService {
   async uploadImage(
     imageBuffer: Buffer,
     fileName: string,
-    contentType: string = 'image/jpeg'
+    contentType: string = 'image/jpeg',
   ): Promise<string> {
     try {
       const bucket = process.env.SUPABASE_BUCKET || 'deepskyn-images';
 
       // Upload to Supabase
-      const { data, error } = await this.supabase.storage
+      const { error } = await this.supabase.storage
         .from(bucket)
         .upload(fileName, imageBuffer, {
           contentType,
@@ -51,7 +49,10 @@ export class SupabaseService {
         .getPublicUrl(fileName);
 
       this.logger.log(`Image uploaded successfully: ${fileName}`);
-      return publicUrlData?.publicUrl || `${process.env.SUPABASE_URL}/storage/v1/object/public/${bucket}/${fileName}`;
+      return (
+        publicUrlData?.publicUrl ||
+        `${process.env.SUPABASE_URL}/storage/v1/object/public/${bucket}/${fileName}`
+      );
     } catch (error) {
       this.logger.error('Error uploading image to Supabase', error);
       throw error;
@@ -142,7 +143,7 @@ export class SupabaseService {
       quality?: number;
       maxWidth?: number;
       maxHeight?: number;
-    } = {}
+    } = {},
   ): Promise<{
     fileName: string;
     publicUrl: string;
@@ -151,11 +152,7 @@ export class SupabaseService {
     height?: number;
   }> {
     try {
-      const {
-        quality = 85,
-        maxWidth = 1024,
-        maxHeight = 1024,
-      } = options;
+      const { quality = 85, maxWidth = 1024, maxHeight = 1024 } = options;
 
       // Get image metadata
       const metadata = await sharp(imageBuffer).metadata();
@@ -173,7 +170,11 @@ export class SupabaseService {
       const fileName = `product-scans/${userId}/product-${Date.now()}.jpg`;
 
       // Upload to Supabase
-      const publicUrl = await this.uploadImage(compressedBuffer, fileName, 'image/jpeg');
+      const publicUrl = await this.uploadImage(
+        compressedBuffer,
+        fileName,
+        'image/jpeg',
+      );
 
       return {
         fileName,
@@ -191,7 +192,10 @@ export class SupabaseService {
   /**
    * Get signed URL for temporary access
    */
-  async getSignedUrl(fileName: string, expiresIn: number = 3600): Promise<string> {
+  async getSignedUrl(
+    fileName: string,
+    expiresIn: number = 3600,
+  ): Promise<string> {
     try {
       const bucket = process.env.SUPABASE_BUCKET || 'deepskyn-images';
 

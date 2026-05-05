@@ -4,6 +4,6 @@ import { N8nController } from './n8n.controller';
 
 @Module({
   providers: [N8nService],
-  controllers: [N8nController]
+  controllers: [N8nController],
 })
 export class N8nModule {}

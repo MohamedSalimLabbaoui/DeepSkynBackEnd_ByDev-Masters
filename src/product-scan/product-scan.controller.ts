@@ -55,12 +55,17 @@ export class ProductScanController {
       required: ['image'],
     },
   })
-  @ApiOperation({ summary: 'Analyze product image using camera or uploaded file' })
-  @ApiResponse({ status: 200, description: 'Product analysis completed successfully' })
+  @ApiOperation({
+    summary: 'Analyze product image using camera or uploaded file',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Product analysis completed successfully',
+  })
   async analyzeProductImage(
     @UploadedFile() file: any,
     @Body('imageType') imageType: 'base64' | 'file' = 'file',
-    @CurrentUser('sub') userId: string
+    @CurrentUser('sub') userId: string,
   ) {
     try {
       if (!file) {
@@ -76,7 +81,7 @@ export class ProductScanController {
         imageData,
         userId,
         imageType,
-        file.mimetype
+        file.mimetype,
       );
 
       return {
@@ -99,7 +104,7 @@ export class ProductScanController {
   @ApiResponse({ status: 200, description: 'QR code scanned successfully' })
   async scanQRCode(
     @Body('qrData') qrData: string,
-    @CurrentUser('sub') userId: string
+    @CurrentUser('sub') userId: string,
   ) {
     try {
       if (!qrData) {
@@ -155,10 +160,14 @@ export class ProductScanController {
   async getScanHistory(
     @Query('page') page: number = 1,
     @Query('limit') limit: number = 10,
-    @CurrentUser('sub') userId: string
+    @CurrentUser('sub') userId: string,
   ) {
     try {
-      const history = await this.productScanService.getScanHistory(userId, page, limit);
+      const history = await this.productScanService.getScanHistory(
+        userId,
+        page,
+        limit,
+      );
 
       return {
         success: true,
@@ -180,13 +189,13 @@ export class ProductScanController {
   @ApiResponse({ status: 200, description: 'Product added to list' })
   async addProductToList(
     @Body() body: { productId: string; category?: string; product?: any },
-    @CurrentUser('sub') userId: string
+    @CurrentUser('sub') userId: string,
   ) {
     try {
       const result = await this.productScanService.addProductToList(
         userId,
         body.product,
-        body.category || 'used'
+        body.category || 'used',
       );
 
       return {
@@ -210,14 +219,14 @@ export class ProductScanController {
   async rateProduct(
     @Param('productId') productId: string,
     @Body() body: { rating: number; review?: string },
-    @CurrentUser('sub') userId: string
+    @CurrentUser('sub') userId: string,
   ) {
     try {
       const result = await this.productScanService.rateProduct(
         productId,
         body.rating,
         body.review,
-        userId
+        userId,
       );
 
       return {
@@ -240,7 +249,8 @@ export class ProductScanController {
   @ApiResponse({ status: 200, description: 'Detailed analysis retrieved' })
   async getDetailedAnalysis(@Param('productId') productId: string) {
     try {
-      const analysis = await this.productScanService.getDetailedAnalysis(productId);
+      const analysis =
+        await this.productScanService.getDetailedAnalysis(productId);
 
       return {
         success: true,
@@ -258,17 +268,17 @@ export class ProductScanController {
   }
 
   @Get('recommendations')
-  @ApiOperation({ summary: 'Get product recommendations based on skin profile' })
+  @ApiOperation({
+    summary: 'Get product recommendations based on skin profile',
+  })
   @ApiResponse({ status: 200, description: 'Recommendations retrieved' })
   async getRecommendedProducts(
     @Query('category') category?: string,
-    @CurrentUser('sub') userId?: string
+    @CurrentUser('sub') userId?: string,
   ) {
     try {
-      const recommendations = await this.productScanService.getRecommendedProducts(
-        userId,
-        category
-      );
+      const recommendations =
+        await this.productScanService.getRecommendedProducts(userId, category);
 
       return {
         success: true,
@@ -291,10 +301,14 @@ export class ProductScanController {
   async compareProducts(@Body() body: { productIds: string[] }) {
     try {
       if (!body.productIds || body.productIds.length < 2) {
-        throw new BadRequestException('At least 2 product IDs are required for comparison');
+        throw new BadRequestException(
+          'At least 2 product IDs are required for comparison',
+        );
       }
 
-      const comparison = await this.productScanService.compareProducts(body.productIds);
+      const comparison = await this.productScanService.compareProducts(
+        body.productIds,
+      );
 
       return {
         success: true,

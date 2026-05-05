@@ -48,8 +48,7 @@ export class KeycloakStrategy extends PassportStrategy(Strategy, 'keycloak') {
       const key =
         response.data.keys.find(
           (k: any) => k.use === 'sig' && k.kty === 'RSA',
-        ) ||
-        response.data.keys.find((k: any) => k.kty === 'RSA');
+        ) || response.data.keys.find((k: any) => k.kty === 'RSA');
 
       if (key) {
         return this.jwkToPem(key);
@@ -69,7 +68,7 @@ export class KeycloakStrategy extends PassportStrategy(Strategy, 'keycloak') {
       }
 
       throw new Error('No public key found');
-    } catch (error) {
+    } catch {
       throw new UnauthorizedException('Failed to get public key from Keycloak');
     }
   }
@@ -85,9 +84,6 @@ export class KeycloakStrategy extends PassportStrategy(Strategy, 'keycloak') {
     const exponent = Buffer.from(e, 'base64url');
 
     // Build RSA public key in DER format
-    const modulusLength = modulus.length;
-    const exponentLength = exponent.length;
-
     // ASN.1 encoding
     const sequence = (contents: Buffer[]): Buffer => {
       const totalLength = contents.reduce((sum, c) => sum + c.length, 0);

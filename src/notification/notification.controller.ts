@@ -8,7 +8,6 @@ import {
   Delete,
   Query,
   UseGuards,
-  Request,
   HttpCode,
   HttpStatus,
   ParseIntPipe,
@@ -20,8 +19,6 @@ import {
   ApiOperation,
   ApiResponse,
   ApiBearerAuth,
-  ApiParam,
-  ApiQuery,
 } from '@nestjs/swagger';
 import {
   NotificationService,

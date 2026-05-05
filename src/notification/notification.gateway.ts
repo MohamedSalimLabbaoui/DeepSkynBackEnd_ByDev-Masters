@@ -27,12 +27,13 @@ export class NotificationGateway
   implements OnGatewayInit, OnGatewayConnection, OnGatewayDisconnect
 {
   @WebSocketServer()
-  server: Server;
+  private server: Server = undefined as any;
 
   private readonly logger = new Logger(NotificationGateway.name);
   private userSockets: Map<string, Set<string>> = new Map();
 
   afterInit(server: Server) {
+    this.server = server;
     this.logger.log('WebSocket Gateway initialized');
   }
 

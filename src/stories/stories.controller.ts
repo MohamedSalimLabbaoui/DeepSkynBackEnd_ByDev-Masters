@@ -1,6 +1,15 @@
-import { Controller, Get, Post, Delete, Body, Param, Req, UseGuards } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Post,
+  Delete,
+  Body,
+  Param,
+  Req,
+  UseGuards,
+} from '@nestjs/common';
 import { StoriesService } from './stories.service';
-import { CreateStoryDto, CreateStoryCommentDto } from './dto/create-story.dto';
+import { CreateStoryDto } from './dto/create-story.dto';
 import { ApiTags, ApiOperation } from '@nestjs/swagger';
 import { KeycloakAuthGuard } from '../auth/guards/keycloak-auth.guard';
 
@@ -19,7 +28,9 @@ export class StoriesController {
       const parts = token.split('.');
       if (parts.length >= 2) {
         try {
-          const payloadJson = Buffer.from(parts[1], 'base64url').toString('utf-8');
+          const payloadJson = Buffer.from(parts[1], 'base64url').toString(
+            'utf-8',
+          );
           const payload = JSON.parse(payloadJson) as {
             sub?: string;
             id?: string;
@@ -71,9 +82,16 @@ export class StoriesController {
   @Post(':id/comments')
   @UseGuards(KeycloakAuthGuard)
   @ApiOperation({ summary: 'Add a comment to a story' })
-  addComment(@Req() req: any, @Param('id') storyId: string, @Body() body: { comment: string }) {
+  addComment(
+    @Req() req: any,
+    @Param('id') storyId: string,
+    @Body() body: { comment: string },
+  ) {
     const userId = this.resolveUserId(req);
-    return this.storiesService.addComment(userId, { storyId, comment: body.comment });
+    return this.storiesService.addComment(userId, {
+      storyId,
+      comment: body.comment,
+    });
   }
 
   @Get(':id/comments')
@@ -100,9 +118,17 @@ export class StoriesController {
   @Post(':id/highlight')
   @UseGuards(KeycloakAuthGuard)
   @ApiOperation({ summary: 'Mark a story as highlight' })
-  saveAsHighlight(@Req() req: any, @Param('id') storyId: string, @Body() body: { highlightTitle?: string }) {
+  saveAsHighlight(
+    @Req() req: any,
+    @Param('id') storyId: string,
+    @Body() body: { highlightTitle?: string },
+  ) {
     const userId = this.resolveUserId(req);
-    return this.storiesService.saveStoryAsHighlight(storyId, userId, body.highlightTitle);
+    return this.storiesService.saveStoryAsHighlight(
+      storyId,
+      userId,
+      body.highlightTitle,
+    );
   }
 
   @Delete(':id/highlight')

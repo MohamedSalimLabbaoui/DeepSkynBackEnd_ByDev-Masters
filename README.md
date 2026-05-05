@@ -232,6 +232,14 @@ npm run test:e2e
 npm run test:cov
 ```
 
+Tests unitaires actuellement en place:
+- src/shared/services/cache.service.spec.ts
+- src/shared/services/quota-tracker.service.spec.ts
+
+Ces tests couvrent:
+- comportement du cache (TTL, getOrSet, cache miss)
+- parsing et suivi des quotas Gemini (429, retryDelay, reset automatique)
+
 ## 12) Depannage rapide
 
 - Erreur prisma client: lancer npm run prisma:generate

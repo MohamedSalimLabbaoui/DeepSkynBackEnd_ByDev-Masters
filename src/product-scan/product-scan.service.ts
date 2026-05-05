@@ -6,7 +6,7 @@ import {
   CosmeticProductAnalysisResult,
 } from '../analysis/services/gemini.service';
 import axios from 'axios';
-import sharp = require('sharp');
+import sharp from 'sharp';
 
 export interface Product {
   id: string;
@@ -63,7 +63,10 @@ export class ProductScanService {
       // Convert to base64 if needed
       let base64String: string;
       if (imageType === 'base64') {
-        base64String = String(imageData).replace(/^data:image\/\w+;base64,/, '');
+        base64String = String(imageData).replace(
+          /^data:image\/\w+;base64,/,
+          '',
+        );
       } else {
         base64String = (imageData as Buffer).toString('base64');
       }
@@ -73,7 +76,7 @@ export class ProductScanService {
         base64String,
         userId,
         mimeType,
-        'product-scans'
+        'product-scans',
       );
 
       this.logger.log(`Image uploaded to Supabase: ${uploadResult.path}`);
@@ -156,11 +159,11 @@ export class ProductScanService {
         // Prefer extracted barcode/GTIN code when available.
         const codeToUse = extractedCode || qrData;
         product = await this.searchProductByCode(codeToUse);
-      } catch (searchError) {
+      } catch {
         this.logger.warn(
           `QR product lookup failed for payload "${qrData}"${
             extractedCode ? ` (extracted code: ${extractedCode})` : ''
-          }. Returning fallback product.`
+          }. Returning fallback product.`,
         );
 
         // Graceful fallback to keep QR flow usable even when catalog lookup fails.
@@ -243,73 +246,70 @@ export class ProductScanService {
   /**
    * Search product by barcode or code
    */
-async searchProductByCode(code: string): Promise<Product> {
-  const strategies = [
-    () => this.searchOpenBeautyFacts(code), 
-    () => this.searchOpenFoodFacts(code),
-    () => this.searchUPCItemDB(code),
-    () => this.searchGoUPC(code),
-  ];
+  async searchProductByCode(code: string): Promise<Product> {
+    const strategies = [
+      () => this.searchOpenBeautyFacts(code),
+      () => this.searchOpenFoodFacts(code),
+      () => this.searchUPCItemDB(code),
+      () => this.searchGoUPC(code),
+    ];
 
-  for (const strategy of strategies) {
-    try {
-      const product = await strategy();
-      if (product) return product;
-    } catch (err:any){
-  this.logger.warn(`Strategy failed: ${err.message}`);
+    for (const strategy of strategies) {
+      try {
+        const product = await strategy();
+        if (product) return product;
+      } catch (err: any) {
+        this.logger.warn(`Strategy failed: ${err.message}`);
+      }
     }
+
+    throw new Error(`Product not found for code: ${code}`);
   }
 
-  throw new Error(`Product not found for code: ${code}`);
-}
+  private async searchOpenBeautyFacts(code: string): Promise<Product | null> {
+    const res = await axios.get(
+      `https://world.openbeautyfacts.org/api/v2/product/${code}.json`,
+      { timeout: 5000 },
+    );
 
-
-private async searchOpenBeautyFacts(code: string): Promise<Product | null> {
-  const res = await axios.get(
-    `https://world.openbeautyfacts.org/api/v2/product/${code}.json`,
-    { timeout: 5000 }
-  );
-
-  if (res.data.status === 1 && res.data.product) {
-    return this.formatProductFromAPI(res.data.product, 'openbeautyfacts');
+    if (res.data.status === 1 && res.data.product) {
+      return this.formatProductFromAPI(res.data.product, 'openbeautyfacts');
+    }
+    return null;
   }
-  return null;
-}
 
-
-private async searchOpenFoodFacts(code: string): Promise<Product | null> {
-  const res = await axios.get(
-    `https://world.openfoodfacts.org/api/v0/product/${code}.json`
-  );
-  if (res.data.status === 1 && res.data.product) {
-    return this.formatProductFromAPI(res.data.product, 'openfoodfacts');
+  private async searchOpenFoodFacts(code: string): Promise<Product | null> {
+    const res = await axios.get(
+      `https://world.openfoodfacts.org/api/v0/product/${code}.json`,
+    );
+    if (res.data.status === 1 && res.data.product) {
+      return this.formatProductFromAPI(res.data.product, 'openfoodfacts');
+    }
+    return null;
   }
-  return null;
-}
 
-private async searchUPCItemDB(code: string): Promise<Product | null> {
-  // Gratuit : 100 req/jour sans clé, plan payant avec user_key
-  const res = await axios.get(
-    `https://api.upcitemdb.com/prod/trial/lookup?upc=${code}`
-  );
-  if (res.data.items?.length > 0) {
-    return this.formatProductFromAPI(res.data.items[0], 'upcitemdb');
+  private async searchUPCItemDB(code: string): Promise<Product | null> {
+    // Gratuit : 100 req/jour sans clé, plan payant avec user_key
+    const res = await axios.get(
+      `https://api.upcitemdb.com/prod/trial/lookup?upc=${code}`,
+    );
+    if (res.data.items?.length > 0) {
+      return this.formatProductFromAPI(res.data.items[0], 'upcitemdb');
+    }
+    return null;
   }
-  return null;
-}
 
-private async searchGoUPC(code: string): Promise<Product | null> {
-  // Nécessite une clé API (plan gratuit disponible)
-    if (!process.env.GO_UPC_API_KEY) return null; 
-  const res = await axios.get(
-    `https://go-upc.com/api/v1/code/${code}`,
-    { headers: { Authorization: `Bearer ${process.env.GO_UPC_API_KEY}` } }
-  );
-  if (res.data.product) {
-    return this.formatProductFromAPI(res.data.product, 'goupc');
+  private async searchGoUPC(code: string): Promise<Product | null> {
+    // Nécessite une clé API (plan gratuit disponible)
+    if (!process.env.GO_UPC_API_KEY) return null;
+    const res = await axios.get(`https://go-upc.com/api/v1/code/${code}`, {
+      headers: { Authorization: `Bearer ${process.env.GO_UPC_API_KEY}` },
+    });
+    if (res.data.product) {
+      return this.formatProductFromAPI(res.data.product, 'goupc');
+    }
+    return null;
   }
-  return null;
-}
 
   /**
    * Get scan history for user
@@ -354,7 +354,11 @@ private async searchGoUPC(code: string): Promise<Product | null> {
   /**
    * Add product to user's product list
    */
-  async addProductToList(userId: string, product: Product, category: string = 'used') {
+  async addProductToList(
+    userId: string,
+    product: Product,
+    category: string = 'used',
+  ) {
     try {
       const userProduct = await this.prisma.userProduct.create({
         data: {
@@ -379,7 +383,7 @@ private async searchGoUPC(code: string): Promise<Product | null> {
   /**
    * Rate a scanned product
    */
-  async rateProduct(productId: string, rating: number, review?: string, userId?: string) {
+  async rateProduct(productId: string, rating: number, review?: string) {
     try {
       const updateData: any = { rating };
       if (review) updateData.review = review;
@@ -419,7 +423,8 @@ private async searchGoUPC(code: string): Promise<Product | null> {
    */
   async getRecommendedProducts(userId: string, category?: string) {
     try {
-      const userSkinProfile = await this.prisma.skinProfile.findUnique({
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      const _userSkinProfile = await this.prisma.skinProfile.findUnique({
         where: { userId },
       });
 
@@ -474,94 +479,107 @@ private async searchGoUPC(code: string): Promise<Product | null> {
   /**
    * Format product data from Open Food Facts API
    */
-private formatProductFromAPI(apiProduct: any, source: 'openbeautyfacts'|'openfoodfacts' | 'upcitemdb' | 'goupc' = 'openfoodfacts'): Product {
-  switch (source) {
-    case 'openbeautyfacts':
-  return {
-    id: apiProduct.code ?? apiProduct._id ?? '',
-    name: apiProduct.product_name || apiProduct.product_name_en || 'Unknown',
-    brand: apiProduct.brands || 'Unknown',
-    image: apiProduct.image_url ?? apiProduct.image_front_url ?? '',
-    category: apiProduct.categories || apiProduct.product_type || 'Skincare',
-    // ✅ INCI = vrai format ingrédients cosmétiques
-    ingredients: this.parseInciIngredients(apiProduct),
-    benefits: [],
-    concerns: [],
-    skinTypeCompatibility: [],
-    recommendation: 'Product found in Open Beauty Facts',
-  };
-    case 'upcitemdb':
-      return {
-        id: apiProduct.ean ?? apiProduct.upc ?? '',
-        name: apiProduct.title || 'Unknown',
-        brand: apiProduct.brand || 'Unknown',
-        image: apiProduct.images?.[0] ?? '',
-        category: apiProduct.category || 'Cosmetics',
-        ingredients: this.parseIngredients(apiProduct.description),
-        benefits: [],
-        concerns: [],
-        skinTypeCompatibility: [],
-        recommendation: 'Product found in UPCitemdb',
-      };
+  private formatProductFromAPI(
+    apiProduct: any,
+    source:
+      | 'openbeautyfacts'
+      | 'openfoodfacts'
+      | 'upcitemdb'
+      | 'goupc' = 'openfoodfacts',
+  ): Product {
+    switch (source) {
+      case 'openbeautyfacts':
+        return {
+          id: apiProduct.code ?? apiProduct._id ?? '',
+          name:
+            apiProduct.product_name || apiProduct.product_name_en || 'Unknown',
+          brand: apiProduct.brands || 'Unknown',
+          image: apiProduct.image_url ?? apiProduct.image_front_url ?? '',
+          category:
+            apiProduct.categories || apiProduct.product_type || 'Skincare',
+          // ✅ INCI = vrai format ingrédients cosmétiques
+          ingredients: this.parseInciIngredients(apiProduct),
+          benefits: [],
+          concerns: [],
+          skinTypeCompatibility: [],
+          recommendation: 'Product found in Open Beauty Facts',
+        };
+      case 'upcitemdb':
+        return {
+          id: apiProduct.ean ?? apiProduct.upc ?? '',
+          name: apiProduct.title || 'Unknown',
+          brand: apiProduct.brand || 'Unknown',
+          image: apiProduct.images?.[0] ?? '',
+          category: apiProduct.category || 'Cosmetics',
+          ingredients: this.parseIngredients(apiProduct.description),
+          benefits: [],
+          concerns: [],
+          skinTypeCompatibility: [],
+          recommendation: 'Product found in UPCitemdb',
+        };
 
-    case 'goupc':
-      return {
-        id: apiProduct.barcode ?? '',
-        name: apiProduct.name || 'Unknown',
-        brand: apiProduct.brand || 'Unknown',
-        image: apiProduct.imageUrl ?? '',
-        category: apiProduct.category || 'Cosmetics',
-        ingredients: this.parseIngredients(apiProduct.description),
-        benefits: [],
-        concerns: [],
-        skinTypeCompatibility: [],
-        recommendation: 'Product found in Go-UPC',
-      };
+      case 'goupc':
+        return {
+          id: apiProduct.barcode ?? '',
+          name: apiProduct.name || 'Unknown',
+          brand: apiProduct.brand || 'Unknown',
+          image: apiProduct.imageUrl ?? '',
+          category: apiProduct.category || 'Cosmetics',
+          ingredients: this.parseIngredients(apiProduct.description),
+          benefits: [],
+          concerns: [],
+          skinTypeCompatibility: [],
+          recommendation: 'Product found in Go-UPC',
+        };
 
-    case 'openfoodfacts':
-    default:
-      return {
-        id: apiProduct.code ?? '',
-        name: apiProduct.product_name || 'Unknown',
-        brand: apiProduct.brands || 'Unknown',
-        image: apiProduct.image_url ?? '',
-        category: apiProduct.categories || 'Cosmetics',
-        ingredients: this.parseIngredients(apiProduct.ingredients_text),
-        benefits: [],
-        concerns: [],
-        skinTypeCompatibility: [],
-        recommendation: 'Product found in Open Food Facts',
-      };
+      case 'openfoodfacts':
+      default:
+        return {
+          id: apiProduct.code ?? '',
+          name: apiProduct.product_name || 'Unknown',
+          brand: apiProduct.brands || 'Unknown',
+          image: apiProduct.image_url ?? '',
+          category: apiProduct.categories || 'Cosmetics',
+          ingredients: this.parseIngredients(apiProduct.ingredients_text),
+          benefits: [],
+          concerns: [],
+          skinTypeCompatibility: [],
+          recommendation: 'Product found in Open Food Facts',
+        };
+    }
   }
-}
-private parseInciIngredients(apiProduct: any): string[] {
-  // Open Beauty Facts retourne les ingrédients sous plusieurs formes
-  
-  // 1. Liste structurée (la meilleure source)
-  if (Array.isArray(apiProduct.ingredients) && apiProduct.ingredients.length > 0) {
-    return apiProduct.ingredients
-      .map((i: any) => i.text || i.id || '')
+  private parseInciIngredients(apiProduct: any): string[] {
+    // Open Beauty Facts retourne les ingrédients sous plusieurs formes
+
+    // 1. Liste structurée (la meilleure source)
+    if (
+      Array.isArray(apiProduct.ingredients) &&
+      apiProduct.ingredients.length > 0
+    ) {
+      return apiProduct.ingredients
+        .map((i: any) => i.text || i.id || '')
+        .filter((i: string) => i.length > 0);
+    }
+
+    // 2. Texte INCI brut
+    const raw =
+      apiProduct.ingredients_text ||
+      apiProduct.ingredients_text_en ||
+      apiProduct.ingredients_text_fr ||
+      '';
+
+    if (!raw) return [];
+
+    return raw
+      .split(/[,;]/)
+      .map((i: string) => i.trim().replace(/^\*+/, '').replace(/\.$/, ''))
+      .filter((i: string) => i.length > 2);
+  }
+  private parseIngredients(raw: string | undefined): string[] {
+    if (!raw) return [];
+    return raw
+      .split(',')
+      .map((i: string) => i.trim())
       .filter((i: string) => i.length > 0);
   }
-
-  // 2. Texte INCI brut
-  const raw = apiProduct.ingredients_text 
-    || apiProduct.ingredients_text_en
-    || apiProduct.ingredients_text_fr
-    || '';
-
-  if (!raw) return [];
-
-  return raw
-    .split(/[,;]/)
-    .map((i: string) => i.trim().replace(/^\*+/, '').replace(/\.$/, ''))
-    .filter((i: string) => i.length > 2);
-}
-private parseIngredients(raw: string | undefined): string[] {
-  if (!raw) return [];
-  return raw
-    .split(',')
-    .map((i: string) => i.trim())
-    .filter((i: string) => i.length > 0);
-}
 }

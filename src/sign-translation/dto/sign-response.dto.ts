@@ -1,4 +1,7 @@
-import { Frame, SignTranslationMetadata } from '../interfaces/sign-translation.interface';
+import {
+  Frame,
+  SignTranslationMetadata,
+} from '../interfaces/sign-translation.interface';
 
 export class SignResponseDto {
   frames: Frame[];

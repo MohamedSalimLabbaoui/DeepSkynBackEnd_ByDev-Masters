@@ -32,7 +32,6 @@ export class FaceVerificationService {
   async verifyFace(
     userId: string,
     faceDescriptor: number[],
-    imageBase64?: string,
   ): Promise<FaceVerificationResult> {
     // Récupérer les infos de l'utilisateur avec sa photo de profil
     const user = await this.prisma.user.findUnique({
@@ -70,7 +69,10 @@ export class FaceVerificationService {
 
     // Comparer le visage avec la référence
     const storedDescriptor = faceReference.descriptor as number[];
-    const similarity = this.calculateSimilarity(faceDescriptor, storedDescriptor);
+    const similarity = this.calculateSimilarity(
+      faceDescriptor,
+      storedDescriptor,
+    );
 
     if (similarity >= this.SIMILARITY_THRESHOLD) {
       return {
@@ -103,7 +105,9 @@ export class FaceVerificationService {
     });
 
     if (!user?.avatar) {
-      throw new BadRequestException('Vous devez d\'abord définir une photo de profil');
+      throw new BadRequestException(
+        "Vous devez d'abord définir une photo de profil",
+      );
     }
 
     await this.prisma.faceReference.upsert({
@@ -135,7 +139,7 @@ export class FaceVerificationService {
     if (imageBase64) {
       const buffer = Buffer.from(imageBase64, 'base64');
       const filename = `face-reference-${userId}-${crypto.randomUUID()}.jpg`;
-      
+
       const file = {
         originalname: filename,
         buffer,
@@ -167,7 +171,9 @@ export class FaceVerificationService {
    */
   private calculateSimilarity(desc1: number[], desc2: number[]): number {
     if (desc1.length !== desc2.length) {
-      throw new BadRequestException('Les descripteurs de visage ont des dimensions différentes');
+      throw new BadRequestException(
+        'Les descripteurs de visage ont des dimensions différentes',
+      );
     }
 
     // Distance euclidienne
@@ -181,7 +187,7 @@ export class FaceVerificationService {
     // Pour face-api.js, une distance < 0.6 = même visage
     // On convertit en score de similarité (0-1)
     const maxExpectedDistance = 1.2;
-    const similarity = Math.max(0, 1 - (euclideanDistance / maxExpectedDistance));
+    const similarity = Math.max(0, 1 - euclideanDistance / maxExpectedDistance);
 
     return similarity;
   }
@@ -200,11 +206,13 @@ export class FaceVerificationService {
    * Supprime la référence faciale d'un utilisateur (pour réinitialisation)
    */
   async deleteFaceReference(userId: string): Promise<void> {
-    await this.prisma.faceReference.delete({
-      where: { userId },
-    }).catch(() => {
-      // Ignorer si la référence n'existe pas
-    });
+    await this.prisma.faceReference
+      .delete({
+        where: { userId },
+      })
+      .catch(() => {
+        // Ignorer si la référence n'existe pas
+      });
   }
 
   /**

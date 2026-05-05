@@ -25,14 +25,19 @@ export class SignupVerificationService {
   private readonly CODE_TTL_MS = 10 * 60 * 1000;
   private readonly RESEND_COOLDOWN_MS = 60 * 1000;
   private readonly MAX_ATTEMPTS = 5;
-  private readonly pendingVerifications = new Map<string, PendingSignupVerification>();
+  private readonly pendingVerifications = new Map<
+    string,
+    PendingSignupVerification
+  >();
 
   constructor(
     private readonly prisma: PrismaService,
     private readonly mailService: MailService,
   ) {}
 
-  async requestCode(payload: RequestSignupCodeDto): Promise<{ message: string; expiresInSeconds: number }> {
+  async requestCode(
+    payload: RequestSignupCodeDto,
+  ): Promise<{ message: string; expiresInSeconds: number }> {
     const email = payload.email.toLowerCase().trim();
 
     const existingUser = await this.prisma.user.findUnique({
@@ -45,7 +50,10 @@ export class SignupVerificationService {
     }
 
     const existingPending = this.pendingVerifications.get(email);
-    if (existingPending && existingPending.resendAvailableAt.getTime() > Date.now()) {
+    if (
+      existingPending &&
+      existingPending.resendAvailableAt.getTime() > Date.now()
+    ) {
       const retryAfter = Math.ceil(
         (existingPending.resendAvailableAt.getTime() - Date.now()) / 1000,
       );
@@ -80,8 +88,13 @@ export class SignupVerificationService {
       );
     } catch (error) {
       this.pendingVerifications.delete(email);
-      this.logger.error(`Failed to send signup verification code to ${email}`, error?.stack);
-      throw new BadRequestException("Impossible d'envoyer le code de verification pour le moment.");
+      this.logger.error(
+        `Failed to send signup verification code to ${email}`,
+        error?.stack,
+      );
+      throw new BadRequestException(
+        "Impossible d'envoyer le code de verification pour le moment.",
+      );
     }
 
     return {
@@ -95,7 +108,9 @@ export class SignupVerificationService {
     const pending = this.pendingVerifications.get(email);
 
     if (!pending) {
-      throw new BadRequestException('Aucune demande de verification en cours pour cet email.');
+      throw new BadRequestException(
+        'Aucune demande de verification en cours pour cet email.',
+      );
     }
 
     if (pending.expiresAt.getTime() < Date.now()) {
@@ -108,7 +123,9 @@ export class SignupVerificationService {
       pending.attemptsLeft -= 1;
       if (pending.attemptsLeft <= 0) {
         this.pendingVerifications.delete(email);
-        throw new BadRequestException('Code incorrect. Veuillez redemander un nouveau code.');
+        throw new BadRequestException(
+          'Code incorrect. Veuillez redemander un nouveau code.',
+        );
       }
 
       throw new BadRequestException(
