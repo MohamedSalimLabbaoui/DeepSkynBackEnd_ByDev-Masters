@@ -1,0 +1,354 @@
+"use strict";
+var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
+    var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
+    if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
+    else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
+    return c > 3 && r && Object.defineProperty(target, key, r), r;
+};
+var __metadata = (this && this.__metadata) || function (k, v) {
+    if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
+};
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.UsersService = void 0;
+const common_1 = require("@nestjs/common");
+const prisma_service_1 = require("../prisma/prisma.service");
+let UsersService = class UsersService {
+    constructor(prisma) {
+        this.prisma = prisma;
+    }
+    async findOne(id) {
+        return this.prisma.user.findUnique({
+            where: { id },
+        });
+    }
+    async findByEmail(email) {
+        return this.prisma.user.findUnique({
+            where: { email },
+        });
+    }
+    async update(id, updateUserDto) {
+        return this.prisma.user.update({
+            where: { id },
+            data: updateUserDto,
+        });
+    }
+    async findById(id) {
+        return this.prisma.user.findUnique({
+            where: { id },
+            include: {
+                skinProfile: true,
+                routines: {
+                    where: { isActive: true },
+                    orderBy: { createdAt: 'desc' },
+                    take: 5,
+                },
+                _count: {
+                    select: {
+                        posts: true,
+                        followers: true,
+                        following: true,
+                    },
+                },
+            },
+        });
+    }
+    async findByIdWithFollowStatus(id, viewerId) {
+        const user = await this.findById(id);
+        if (!user)
+            return null;
+        let isFollowing = false;
+        if (viewerId && viewerId !== id) {
+            const follow = await this.prisma.follower.findUnique({
+                where: {
+                    followerId_followingId: {
+                        followerId: viewerId,
+                        followingId: id,
+                    },
+                },
+            });
+            isFollowing = !!follow;
+        }
+        return { ...user, isFollowing };
+    }
+    async findAllForAdmin(query) {
+        const page = query.page || 1;
+        const limit = query.limit || 20;
+        const skip = (page - 1) * limit;
+        const where = {
+            ...(query.search
+                ? {
+                    OR: [
+                        { email: { contains: query.search, mode: 'insensitive' } },
+                        { name: { contains: query.search, mode: 'insensitive' } },
+                    ],
+                }
+                : {}),
+            ...(query.role ? { role: query.role } : {}),
+            ...(query.status ? { isActive: query.status === 'active' } : {}),
+            ...(query.subscriptionStatus
+                ? { subscription: { is: { status: query.subscriptionStatus } } }
+                : {}),
+            ...(query.skinType
+                ? { skinProfile: { is: { skinType: query.skinType } } }
+                : {}),
+        };
+        const [users, total] = await Promise.all([
+            this.prisma.user.findMany({
+                where,
+                skip,
+                take: limit,
+                orderBy: { createdAt: 'desc' },
+                include: {
+                    skinProfile: {
+                        select: {
+                            skinType: true,
+                            healthScore: true,
+                        },
+                    },
+                    subscription: {
+                        select: {
+                            plan: true,
+                            status: true,
+                            endDate: true,
+                        },
+                    },
+                    _count: {
+                        select: {
+                            analyses: true,
+                            posts: true,
+                        },
+                    },
+                },
+            }),
+            this.prisma.user.count({ where }),
+        ]);
+        return { users, total, page, limit };
+    }
+    async findOneForAdmin(userId) {
+        return this.prisma.user.findUnique({
+            where: { id: userId },
+            include: {
+                skinProfile: true,
+                subscription: true,
+                analyses: {
+                    orderBy: { createdAt: 'desc' },
+                    take: 20,
+                },
+                routines: {
+                    orderBy: { createdAt: 'desc' },
+                    take: 10,
+                },
+                _count: {
+                    select: {
+                        posts: true,
+                        comments: true,
+                        likes: true,
+                        analyses: true,
+                    },
+                },
+            },
+        });
+    }
+    async findSuggestions(userId, limit = 20) {
+        const connections = await this.prisma.follower.findMany({
+            where: { OR: [{ followerId: userId }, { followingId: userId }] },
+            select: { followerId: true, followingId: true },
+        });
+        const followingIds = connections.map((f) => f.followerId === userId ? f.followingId : f.followerId);
+        return this.prisma.user.findMany({
+            where: {
+                id: { not: userId, notIn: followingIds },
+                isPublic: true,
+                isActive: true,
+            },
+            take: limit,
+            select: {
+                id: true,
+                name: true,
+                avatar: true,
+                isPublic: true,
+                skinProfile: {
+                    select: { skinType: true },
+                },
+                _count: {
+                    select: { followers: true },
+                },
+            },
+        });
+    }
+    async searchCommunityProfiles(viewerId, q = '', page = 1, limit = 20) {
+        const safePage = Math.max(1, page || 1);
+        const safeLimit = Math.min(50, Math.max(1, limit || 20));
+        const skip = (safePage - 1) * safeLimit;
+        const search = q.trim();
+        const where = {
+            id: { not: viewerId },
+            isPublic: true,
+            isActive: true,
+            ...(search
+                ? {
+                    OR: [
+                        { name: { contains: search, mode: 'insensitive' } },
+                        { email: { contains: search, mode: 'insensitive' } },
+                    ],
+                }
+                : {}),
+        };
+        const [users, total] = await Promise.all([
+            this.prisma.user.findMany({
+                where,
+                skip,
+                take: safeLimit,
+                orderBy: [{ createdAt: 'desc' }],
+                select: {
+                    id: true,
+                    name: true,
+                    email: true,
+                    avatar: true,
+                    skinProfile: {
+                        select: { skinType: true },
+                    },
+                    _count: {
+                        select: { followers: true },
+                    },
+                },
+            }),
+            this.prisma.user.count({ where }),
+        ]);
+        const following = await this.prisma.follower.findMany({
+            where: {
+                followerId: viewerId,
+                followingId: { in: users.map((u) => u.id) },
+            },
+            select: { followingId: true },
+        });
+        const followingSet = new Set(following.map((f) => f.followingId));
+        return {
+            data: users.map((u) => ({
+                ...u,
+                isFollowing: followingSet.has(u.id),
+            })),
+            total,
+            page: safePage,
+            limit: safeLimit,
+            totalPages: Math.max(1, Math.ceil(total / safeLimit)),
+        };
+    }
+    async toggleFollow(followerId, followingId) {
+        if (followerId === followingId)
+            throw new Error('Vous ne pouvez pas vous suivre vous-même');
+        const existing = await this.prisma.follower.findFirst({
+            where: {
+                OR: [
+                    { followerId, followingId },
+                    { followerId: followingId, followingId: followerId },
+                ],
+            },
+        });
+        if (existing) {
+            await this.prisma.follower.delete({
+                where: { id: existing.id },
+            });
+            return { followed: false };
+        }
+        else {
+            await this.prisma.follower.create({
+                data: { followerId, followingId },
+            });
+            return { followed: true };
+        }
+    }
+    async updateStatus(userId, isActive) {
+        return this.prisma.user.update({
+            where: { id: userId },
+            data: { isActive },
+        });
+    }
+    async getUserStats(userId) {
+        const sevenDaysAgo = new Date();
+        sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+        const [postsCount, followersCount, followingCount, recentFollowers, totalLikes, totalComments, weeklyPosts, aggregates,] = await Promise.all([
+            this.prisma.post.count({ where: { userId, status: 'published' } }),
+            this.prisma.follower.count({
+                where: { OR: [{ followingId: userId }, { followerId: userId }] },
+            }),
+            this.prisma.follower.count({
+                where: { OR: [{ followingId: userId }, { followerId: userId }] },
+            }),
+            this.prisma.follower.findMany({
+                where: { OR: [{ followingId: userId }, { followerId: userId }] },
+                take: 15,
+                orderBy: { createdAt: 'desc' },
+                include: {
+                    follower: { select: { id: true, avatar: true, name: true } },
+                    following: { select: { id: true, avatar: true, name: true } },
+                },
+            }),
+            this.prisma.like.count({ where: { post: { userId } } }),
+            this.prisma.comment.count({ where: { post: { userId } } }),
+            this.prisma.post.findMany({
+                where: { userId, createdAt: { gte: sevenDaysAgo } },
+                select: { createdAt: true },
+            }),
+            this.prisma.post.aggregate({
+                where: { userId },
+                _sum: {
+                    views: true,
+                    impressions: true,
+                },
+            }),
+        ]);
+        const dayCounts = new Array(7).fill(0);
+        const now = new Date();
+        weeklyPosts.forEach((post) => {
+            const diffDays = Math.floor((now.getTime() - post.createdAt.getTime()) / (1000 * 3600 * 24));
+            if (diffDays >= 0 && diffDays < 7) {
+                dayCounts[6 - diffDays]++;
+            }
+        });
+        const avatars = recentFollowers
+            .map((f) => f.followerId === userId ? f.following.avatar : f.follower.avatar)
+            .filter((a) => !!a);
+        const followersList = recentFollowers.map((f) => {
+            const friend = f.followerId === userId ? f.following : f.follower;
+            return {
+                id: friend.id,
+                name: friend.name || 'Anonyme',
+                avatar: friend.avatar ||
+                    `https://ui-avatars.com/api/?name=${encodeURIComponent(friend.name || 'A')}`,
+                time: this.getRelativeTime(f.createdAt),
+                views: Math.floor(Math.random() * 100) + 50,
+            };
+        });
+        return {
+            posts: postsCount,
+            followers: followersCount,
+            following: followingCount,
+            recentFollowersAvatars: avatars,
+            totalLikes,
+            totalComments,
+            weeklyActivity: dayCounts,
+            followersDetail: followersList,
+            storyViews: aggregates._sum.views || 0,
+            impressions: aggregates._sum.impressions || 0,
+            shares: Math.floor(totalLikes * 0.1),
+        };
+    }
+    getRelativeTime(date) {
+        const now = new Date();
+        const diffSeconds = Math.floor((now.getTime() - date.getTime()) / 1000);
+        if (diffSeconds < 60)
+            return "À l'instant";
+        if (diffSeconds < 3600)
+            return `Il y a ${Math.floor(diffSeconds / 60)}m`;
+        if (diffSeconds < 86400)
+            return `Il y a ${Math.floor(diffSeconds / 3600)}h`;
+        return `Il y a ${Math.floor(diffSeconds / 86400)}j`;
+    }
+};
+exports.UsersService = UsersService;
+exports.UsersService = UsersService = __decorate([
+    (0, common_1.Injectable)(),
+    __metadata("design:paramtypes", [prisma_service_1.PrismaService])
+], UsersService);
+//# sourceMappingURL=users.service.js.map
