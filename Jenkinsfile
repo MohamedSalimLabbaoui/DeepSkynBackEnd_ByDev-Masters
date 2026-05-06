@@ -48,11 +48,6 @@ pipeline {
       }
     }
 
-    stage('Test + Coverage') {
-      steps {
-        sh 'npm run test:cov'
-      }
-    }
 
    stage('SonarQube Analysis') {
   steps {

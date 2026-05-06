@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
+import { PrometheusModule } from '@willsoto/nestjs-prometheus';
 import keycloakConfig from './config/keycloak.config';
 import { ScraperModule } from './scraper/scraper.module';
 import { PrismaModule } from './prisma/prisma.module';
@@ -31,7 +32,13 @@ import { ProductScanModule } from './product-scan/product-scan.module';
 
 @Module({
   imports: [
-    SharedModule, // Add SharedModule here to make it available globally
+    PrometheusModule.register({
+      defaultMetrics: {
+        enabled: true,
+      },
+      path: '/metrics',
+    }),
+    SharedModule,
     UsersModule,
     ConfigModule.forRoot({
       isGlobal: true,
