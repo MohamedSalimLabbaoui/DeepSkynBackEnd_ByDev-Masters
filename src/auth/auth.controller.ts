@@ -26,7 +26,6 @@ import {
 import {
   AuthService,
   KeycloakTokenResponse,
-  KeycloakUserInfo,
   LoginResponse,
 } from './auth.service';
 import { TwoFactorService } from './services/two-factor.service';
@@ -39,7 +38,6 @@ import { FacebookAuthGuard } from './guards/facebook-auth.guard';
 import { CurrentUser } from './decorators/current-user.decorator';
 import { Roles } from './decorators/roles.decorator';
 import { RolesGuard } from './guards/roles.guard';
-import { LoginDto } from './dto/login.dto';
 import { Login2faDto } from './dto/login-2fa.dto';
 import { RefreshTokenDto } from './dto/refresh-token.dto';
 import { LogoutDto } from './dto/logout.dto';
@@ -49,16 +47,25 @@ import { GoogleTokenDto } from './dto/google-token.dto';
 import { ForgotPasswordDto } from './dto/forgot-password.dto';
 import { ResetPasswordDto } from './dto/reset-password.dto';
 import { RegisterDto } from './dto/register.dto';
+import { RequestSignupCodeDto } from './dto/request-signup-code.dto';
+import { VerifySignupCodeDto } from './dto/verify-signup-code.dto';
 import { UpdateProfileDto } from './dto/update-profile.dto';
 import { UpdateAddressDto } from './dto/update-address.dto';
 import { PasswordResetService } from './services/password-reset.service';
+import { SignupVerificationService } from './services/signup-verification.service';
 import { PrismaService } from '../prisma/prisma.service';
 import axios from 'axios';
+import * as path from 'path';
+import * as faceapi from 'face-api.js';
+import * as tf from '@tensorflow/tfjs';
+import * as jpeg from 'jpeg-js';
+import { PNG } from 'pngjs';
 
 @ApiTags('Auth')
 @Controller('auth')
 export class AuthController {
   private readonly logger = new Logger(AuthController.name);
+  private static faceModelsLoadPromise: Promise<void> | null = null;
 
   constructor(
     private readonly authService: AuthService,
@@ -67,8 +74,9 @@ export class AuthController {
     private readonly facebookAuthService: FacebookAuthService,
     private readonly recaptchaService: RecaptchaService,
     private readonly passwordResetService: PasswordResetService,
+    private readonly signupVerificationService: SignupVerificationService,
     private readonly prisma: PrismaService,
-  ) { }
+  ) {}
 
   @Post('login')
   @HttpCode(HttpStatus.OK)
@@ -85,7 +93,9 @@ export class AuthController {
   async login(@Body() loginDto: Login2faDto): Promise<LoginResponse> {
     // Vérification reCAPTCHA
     if (loginDto.captchaToken) {
-      const isCaptchaValid = await this.recaptchaService.verify(loginDto.captchaToken);
+      const isCaptchaValid = await this.recaptchaService.verify(
+        loginDto.captchaToken,
+      );
       if (!isCaptchaValid) {
         throw new UnauthorizedException('Validation captcha échouée');
       }
@@ -105,13 +115,21 @@ export class AuthController {
     description:
       'Crée un nouveau compte utilisateur dans Keycloak et la base de données, puis authentifie automatiquement.',
   })
-  @ApiResponse({ status: 201, description: 'Compte créé et authentification réussie' })
-  @ApiResponse({ status: 409, description: 'Un compte avec cet email existe déjà' })
+  @ApiResponse({
+    status: 201,
+    description: 'Compte créé et authentification réussie',
+  })
+  @ApiResponse({
+    status: 409,
+    description: 'Un compte avec cet email existe déjà',
+  })
   @ApiResponse({ status: 400, description: 'Données invalides' })
   async register(@Body() registerDto: RegisterDto): Promise<LoginResponse> {
     // Vérification reCAPTCHA
     if (registerDto.captchaToken) {
-      const isCaptchaValid = await this.recaptchaService.verify(registerDto.captchaToken);
+      const isCaptchaValid = await this.recaptchaService.verify(
+        registerDto.captchaToken,
+      );
       if (!isCaptchaValid) {
         throw new UnauthorizedException('Validation captcha échouée');
       }
@@ -123,6 +141,64 @@ export class AuthController {
       registerDto.name,
       registerDto.firstName,
       registerDto.lastName,
+    );
+  }
+
+  @Post('register/request-code')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Demander un code email pour inscription',
+    description:
+      "Envoie un code de verification a 6 chiffres sur l'email avant de finaliser l'inscription.",
+  })
+  @ApiResponse({ status: 200, description: 'Code envoye' })
+  @ApiResponse({
+    status: 400,
+    description: 'Donnees invalides ou email deja utilise',
+  })
+  @ApiResponse({ status: 429, description: 'Demande de code trop frequente' })
+  async requestSignupCode(@Body() dto: RequestSignupCodeDto) {
+    if (dto.captchaToken) {
+      const isCaptchaValid = await this.recaptchaService.verify(
+        dto.captchaToken,
+      );
+      if (!isCaptchaValid) {
+        throw new UnauthorizedException('Validation captcha echouee');
+      }
+    }
+
+    return this.signupVerificationService.requestCode(dto);
+  }
+
+  @Post('register/verify-code')
+  @HttpCode(HttpStatus.CREATED)
+  @ApiOperation({
+    summary: 'Verifier le code email et creer le compte',
+    description:
+      'Verifie le code recu par email puis finalise la creation du compte (Keycloak + base de donnees).',
+  })
+  @ApiResponse({
+    status: 201,
+    description: 'Compte cree et utilisateur authentifie',
+  })
+  @ApiResponse({
+    status: 400,
+    description: 'Code invalide/expire ou demande absente',
+  })
+  async verifySignupCode(
+    @Body() dto: VerifySignupCodeDto,
+  ): Promise<LoginResponse> {
+    const payload = this.signupVerificationService.verifyCodeAndConsume(
+      dto.email,
+      dto.code,
+    );
+
+    return this.authService.register(
+      payload.email,
+      payload.password,
+      payload.name,
+      payload.firstName,
+      payload.lastName,
     );
   }
 
@@ -139,7 +215,7 @@ export class AuthController {
   @ApiResponse({ status: 200, description: 'Secret et QR code générés' })
   @ApiResponse({ status: 400, description: '2FA déjà activé' })
   async generate2fa(@CurrentUser('sub') userId: string) {
-    console.log(userId)
+    console.log(userId);
     return this.twoFactorService.generateTwoFactorSecret(userId);
   }
 
@@ -203,9 +279,7 @@ export class AuthController {
     summary: 'Vérifier 2FA pour login social',
     description: 'Vérifie le code 2FA et retourne les tokens finaux',
   })
-  async verifySocial2fa(
-    @Body() body: { email: string; code: string },
-  ) {
+  async verifySocial2fa(@Body() body: { email: string; code: string }) {
     const isValid = await this.twoFactorService.verifyCodeByEmail(
       body.email,
       body.code,
@@ -312,6 +386,7 @@ export class AuthController {
         preferredLanguage: true,
         isPublic: true,
         receiveRecommendations: true,
+        onboardingComplete: true,
         createdAt: true,
         updatedAt: true,
       },
@@ -338,6 +413,7 @@ export class AuthController {
           preferredLanguage: true,
           isPublic: true,
           receiveRecommendations: true,
+          onboardingComplete: true,
           createdAt: true,
           updatedAt: true,
         },
@@ -345,7 +421,9 @@ export class AuthController {
     }
 
     if (!user) {
-      throw new UnauthorizedException('Utilisateur non trouvé dans la base de données');
+      throw new UnauthorizedException(
+        'Utilisateur non trouvé dans la base de données',
+      );
     }
 
     return user;
@@ -356,7 +434,7 @@ export class AuthController {
   @ApiBearerAuth('JWT-auth')
   @ApiOperation({
     summary: 'Mettre à jour le profil',
-    description: 'Met à jour les informations de base de l\'utilisateur',
+    description: "Met à jour les informations de base de l'utilisateur",
   })
   @ApiResponse({ status: 200, description: 'Profil mis à jour' })
   async updateProfile(
@@ -396,8 +474,8 @@ export class AuthController {
   @UseGuards(KeycloakAuthGuard)
   @ApiBearerAuth('JWT-auth')
   @ApiOperation({
-    summary: 'Récupérer l\'adresse',
-    description: 'Récupère les informations d\'adresse de l\'utilisateur',
+    summary: "Récupérer l'adresse",
+    description: "Récupère les informations d'adresse de l'utilisateur",
   })
   @ApiResponse({ status: 200, description: 'Adresse retournée' })
   @ApiResponse({ status: 401, description: 'Non authentifié' })
@@ -426,8 +504,8 @@ export class AuthController {
   @UseGuards(KeycloakAuthGuard)
   @ApiBearerAuth('JWT-auth')
   @ApiOperation({
-    summary: 'Mettre à jour l\'adresse',
-    description: 'Met à jour l\'adresse et les coordonnées GPS de l\'utilisateur',
+    summary: "Mettre à jour l'adresse",
+    description: "Met à jour l'adresse et les coordonnées GPS de l'utilisateur",
   })
   @ApiResponse({ status: 200, description: 'Adresse mise à jour' })
   @ApiResponse({ status: 401, description: 'Non authentifié' })
@@ -463,8 +541,8 @@ export class AuthController {
   @UseGuards(KeycloakAuthGuard)
   @ApiBearerAuth('JWT-auth')
   @ApiOperation({
-    summary: 'Supprimer l\'adresse',
-    description: 'Supprime les informations d\'adresse de l\'utilisateur',
+    summary: "Supprimer l'adresse",
+    description: "Supprime les informations d'adresse de l'utilisateur",
   })
   @ApiResponse({ status: 200, description: 'Adresse supprimée' })
   @ApiResponse({ status: 401, description: 'Non authentifié' })
@@ -510,7 +588,9 @@ export class AuthController {
     @Body() body: { coverPhotoUrl: string },
   ) {
     if (!body.coverPhotoUrl || typeof body.coverPhotoUrl !== 'string') {
-      throw new BadRequestException('URL de photo de couverture requise et doit être une chaîne');
+      throw new BadRequestException(
+        'URL de photo de couverture requise et doit être une chaîne',
+      );
     }
 
     const user = await this.prisma.user.update({
@@ -533,17 +613,19 @@ export class AuthController {
   @ApiBearerAuth('JWT-auth')
   @ApiOperation({
     summary: 'Mettre à jour la photo de profil',
-    description: 'Met à jour l\'avatar/photo de profil de l\'utilisateur',
+    description: "Met à jour l'avatar/photo de profil de l'utilisateur",
   })
   @ApiResponse({ status: 200, description: 'Photo de profil mise à jour' })
-  @ApiResponse({ status: 400, description: 'URL d\'avatar invalide' })
+  @ApiResponse({ status: 400, description: "URL d'avatar invalide" })
   @ApiResponse({ status: 401, description: 'Non authentifié' })
   async updateAvatar(
     @CurrentUser('sub') userId: string,
     @Body() body: { avatarUrl: string },
   ) {
     if (!body.avatarUrl || typeof body.avatarUrl !== 'string') {
-      throw new BadRequestException('URL d\'avatar requise et doit être une chaîne');
+      throw new BadRequestException(
+        "URL d'avatar requise et doit être une chaîne",
+      );
     }
 
     const user = await this.prisma.user.update({
@@ -558,7 +640,49 @@ export class AuthController {
       },
     });
 
+    try {
+      await this.syncFaceReferenceFromAvatar(userId, body.avatarUrl);
+    } catch (error: any) {
+      this.logger.warn(
+        `Face reference sync skipped after avatar update for user ${userId}: ${error?.message || 'unknown error'}`,
+      );
+    }
+
     return user;
+  }
+
+  @Post('face-reference/sync')
+  @UseGuards(KeycloakAuthGuard)
+  @ApiBearerAuth('JWT-auth')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Synchroniser la reference faciale depuis la photo de profil',
+    description:
+      "Extrait un descripteur facial depuis l'avatar utilisateur et met a jour la reference faciale.",
+  })
+  @ApiResponse({ status: 200, description: 'Reference faciale synchronisee' })
+  @ApiResponse({
+    status: 400,
+    description: 'Avatar absent ou visage non detecte',
+  })
+  async syncFaceReference(@CurrentUser('sub') userId: string) {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { avatar: true },
+    });
+
+    if (!user?.avatar) {
+      throw new BadRequestException(
+        'Aucune photo de profil disponible pour la synchronisation.',
+      );
+    }
+
+    await this.syncFaceReferenceFromAvatar(userId, user.avatar);
+
+    return {
+      success: true,
+      message: 'Reference faciale synchronisee avec succes.',
+    };
   }
 
   @Get('roles')
@@ -593,11 +717,11 @@ export class AuthController {
       valid,
       user: decoded
         ? {
-          sub: decoded.sub,
-          email: decoded.email,
-          name: decoded.name,
-          preferred_username: decoded.preferred_username,
-        }
+            sub: decoded.sub,
+            email: decoded.email,
+            name: decoded.name,
+            preferred_username: decoded.preferred_username,
+          }
         : null,
     };
   }
@@ -671,7 +795,8 @@ export class AuthController {
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
     summary: 'Changer le mot de passe',
-    description: 'Permet à un utilisateur authentifié de changer son mot de passe',
+    description:
+      'Permet à un utilisateur authentifié de changer son mot de passe',
   })
   @ApiResponse({
     status: 200,
@@ -687,7 +812,11 @@ export class AuthController {
     if (!userId) {
       throw new BadRequestException('User not found');
     }
-    return this.authService.changePassword(userId, changePasswordDto.currentPassword, changePasswordDto.newPassword);
+    return this.authService.changePassword(
+      userId,
+      changePasswordDto.currentPassword,
+      changePasswordDto.newPassword,
+    );
   }
 
   // ==================== Google OAuth Endpoints ====================
@@ -780,18 +909,21 @@ export class AuthController {
   }
 
   @Get('avatar/:email')
-  @ApiOperation({ summary: 'Récupérer l\'avatar d\'un utilisateur par email' })
+  @ApiOperation({ summary: "Récupérer l'avatar d'un utilisateur par email" })
   async getAvatar(@Param('email') email: string) {
     const user = await this.prisma.user.findUnique({
       where: { email },
-      select: { avatar: true }
+      select: { avatar: true },
     });
     if (!user) throw new UnauthorizedException('Utilisateur non trouvé');
     return { avatar: user.avatar };
   }
 
   @Get('proxy-avatar')
-  @ApiOperation({ summary: 'Proxy pour les images d\'avatar afin d\'éviter les erreurs 429/CORS' })
+  @ApiOperation({
+    summary:
+      "Proxy pour les images d'avatar afin d'éviter les erreurs 429/CORS",
+  })
   async proxyAvatar(@Req() req, @Res() res) {
     const url = req.query.url as string;
     if (!url) return res.status(400).send('URL missing');
@@ -810,7 +942,7 @@ export class AuthController {
         res.set('Content-Type', contentType);
         res.set('Access-Control-Allow-Origin', '*');
         return res.send(buffer);
-      } catch (error) {
+      } catch (error: any) {
         this.logger.error(`Error processing data URL: ${error.message}`);
         return res.status(500).send('Error processing data URL');
       }
@@ -822,13 +954,14 @@ export class AuthController {
         responseType: 'stream',
         timeout: 5000,
         headers: {
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
-        }
+          'User-Agent':
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+        },
       });
       res.set('Content-Type', response.headers['content-type'] || 'image/jpeg');
       res.set('Access-Control-Allow-Origin', '*');
       response.data.pipe(res);
-    } catch (error) {
+    } catch (error: any) {
       this.logger.error(`Error fetching image from ${url}: ${error.message}`);
       res.status(500).send('Error fetching image');
     }
@@ -837,12 +970,83 @@ export class AuthController {
   @Post('face-login')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Connexion via FaceID' })
-  async faceLogin(@Body() body: { email: string }) {
+  async faceLogin(
+    @Body()
+    body: {
+      email: string;
+      descriptor?: number[];
+      imageBase64?: string;
+    },
+  ) {
+    if (
+      (!Array.isArray(body.descriptor) || body.descriptor.length === 0) &&
+      !body.imageBase64
+    ) {
+      throw new BadRequestException('Image faciale ou descripteur requis');
+    }
+
     const user = await this.prisma.user.findUnique({
-      where: { email: body.email }
+      where: { email: body.email },
     });
     if (!user) throw new UnauthorizedException('Utilisateur non trouvé');
     if (!user.isActive) throw new UnauthorizedException('Compte désactivé');
+    let faceReference = await this.prisma.faceReference.findUnique({
+      where: { userId: user.id },
+      select: { descriptor: true },
+    });
+
+    if (
+      !faceReference?.descriptor ||
+      !Array.isArray(faceReference.descriptor)
+    ) {
+      if (!user.avatar) {
+        throw new UnauthorizedException(
+          'Aucune reference faciale enregistree pour ce compte',
+        );
+      }
+
+      await this.syncFaceReferenceFromAvatar(user.id, user.avatar);
+
+      faceReference = await this.prisma.faceReference.findUnique({
+        where: { userId: user.id },
+        select: { descriptor: true },
+      });
+
+      if (
+        !faceReference?.descriptor ||
+        !Array.isArray(faceReference.descriptor)
+      ) {
+        throw new UnauthorizedException(
+          'Aucune reference faciale enregistree pour ce compte',
+        );
+      }
+    }
+
+    const liveDescriptor =
+      Array.isArray(body.descriptor) && body.descriptor.length > 0
+        ? body.descriptor
+        : await this.extractDescriptorFromImageBase64(
+            body.imageBase64 as string,
+          );
+
+    const confidence = this.calculateDescriptorSimilarity(
+      liveDescriptor,
+      faceReference.descriptor as number[],
+    );
+
+    if (confidence < 0.42) {
+      throw new UnauthorizedException('Vérification faciale échouée');
+    }
+
+    await this.prisma.user.update({
+      where: { id: user.id },
+      data: {
+        lastActivity: new Date(),
+        sessionCount: {
+          increment: 1,
+        },
+      },
+    });
 
     const accessToken = this.googleAuthService.generateToken(user);
 
@@ -858,6 +1062,165 @@ export class AuthController {
         name: user.name,
       },
     };
+  }
+
+  private calculateDescriptorSimilarity(
+    desc1: number[],
+    desc2: number[],
+  ): number {
+    if (desc1.length !== desc2.length) {
+      throw new BadRequestException('Descripteurs faciaux incompatibles');
+    }
+
+    let sumSquares = 0;
+    for (let i = 0; i < desc1.length; i++) {
+      const diff = desc1[i] - desc2[i];
+      sumSquares += diff * diff;
+    }
+
+    const euclideanDistance = Math.sqrt(sumSquares);
+    const maxExpectedDistance = 1.2;
+    return Math.max(0, 1 - euclideanDistance / maxExpectedDistance);
+  }
+
+  private async ensureFaceModelsLoaded(): Promise<void> {
+    if (!AuthController.faceModelsLoadPromise) {
+      const modelPath = path.join(process.cwd(), 'public', 'models');
+      AuthController.faceModelsLoadPromise = Promise.all([
+        faceapi.nets.ssdMobilenetv1.loadFromDisk(modelPath),
+        faceapi.nets.faceLandmark68Net.loadFromDisk(modelPath),
+        faceapi.nets.faceRecognitionNet.loadFromDisk(modelPath),
+      ]).then(() => undefined);
+    }
+
+    try {
+      await AuthController.faceModelsLoadPromise;
+    } catch (error: any) {
+      this.logger.error(
+        `FaceID model loading failed: ${error?.message || 'unknown error'}`,
+      );
+      AuthController.faceModelsLoadPromise = null;
+      throw new UnauthorizedException('Modeles FaceID indisponibles');
+    }
+  }
+
+  private normalizeBase64(input: string): string {
+    if (input.startsWith('data:')) {
+      const match = input.match(/^data:[^;]+;base64,(.+)$/);
+      if (!match) {
+        throw new BadRequestException('Format image base64 invalide');
+      }
+      return match[1];
+    }
+
+    return input;
+  }
+
+  private decodeImageToTensor(imageBuffer: Buffer): tf.Tensor3D {
+    const isPng =
+      imageBuffer.length >= 8 &&
+      imageBuffer[0] === 0x89 &&
+      imageBuffer[1] === 0x50 &&
+      imageBuffer[2] === 0x4e &&
+      imageBuffer[3] === 0x47;
+
+    const isJpeg =
+      imageBuffer.length >= 3 &&
+      imageBuffer[0] === 0xff &&
+      imageBuffer[1] === 0xd8 &&
+      imageBuffer[2] === 0xff;
+
+    let width = 0;
+    let height = 0;
+    let rgbaData: Uint8Array;
+
+    if (isPng) {
+      const decoded = PNG.sync.read(imageBuffer);
+      width = decoded.width;
+      height = decoded.height;
+      rgbaData = decoded.data;
+    } else if (isJpeg) {
+      const decoded = jpeg.decode(imageBuffer, { useTArray: true });
+      width = decoded.width;
+      height = decoded.height;
+      rgbaData = decoded.data;
+    } else {
+      throw new BadRequestException(
+        'Format image non supporte (PNG/JPEG attendu)',
+      );
+    }
+
+    const rgbData = new Uint8Array(width * height * 3);
+    for (let i = 0, j = 0; i < rgbaData.length; i += 4, j += 3) {
+      rgbData[j] = rgbaData[i];
+      rgbData[j + 1] = rgbaData[i + 1];
+      rgbData[j + 2] = rgbaData[i + 2];
+    }
+
+    return tf.tensor3d(rgbData, [height, width, 3], 'int32');
+  }
+
+  private async extractDescriptorFromImageBase64(
+    imageBase64: string,
+  ): Promise<number[]> {
+    await this.ensureFaceModelsLoaded();
+
+    let imageBuffer: Buffer;
+    try {
+      imageBuffer = Buffer.from(this.normalizeBase64(imageBase64), 'base64');
+    } catch {
+      throw new BadRequestException('Image base64 invalide');
+    }
+
+    let tensor: tf.Tensor3D;
+    try {
+      tensor = this.decodeImageToTensor(imageBuffer);
+    } catch (error) {
+      if (error instanceof BadRequestException) {
+        throw error;
+      }
+      throw new BadRequestException('Image faciale illisible');
+    }
+
+    let detection: any;
+    try {
+      detection = await faceapi
+        .detectSingleFace(
+          tensor as any,
+          new faceapi.SsdMobilenetv1Options({ minConfidence: 0.3 }),
+        )
+        .withFaceLandmarks()
+        .withFaceDescriptor();
+    } finally {
+      tensor.dispose();
+    }
+
+    if (!detection) {
+      throw new UnauthorizedException('Aucun visage detecte dans la capture');
+    }
+
+    return Array.from(detection.descriptor);
+  }
+
+  private async syncFaceReferenceFromAvatar(
+    userId: string,
+    avatarUrl: string,
+  ): Promise<void> {
+    const descriptor = await this.extractDescriptorFromImageBase64(avatarUrl);
+
+    await this.prisma.faceReference.upsert({
+      where: { userId },
+      update: {
+        descriptor,
+        imageUrl: avatarUrl,
+        updatedAt: new Date(),
+      },
+      create: {
+        userId,
+        descriptor,
+        imageUrl: avatarUrl,
+      },
+    });
   }
 
   private extractTokenFromRequest(req: any): string {

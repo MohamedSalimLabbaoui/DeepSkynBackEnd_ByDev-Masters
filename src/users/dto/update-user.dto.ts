@@ -1,30 +1,30 @@
-import { IsOptional, IsString, IsDateString, IsEnum } from 'class-validator';
+import { IsOptional, IsString, IsDateString } from 'class-validator';
 
 export class UpdateUserDto {
-    @IsOptional()
-    @IsString()
-    avatar?: string;
+  @IsOptional()
+  @IsString()
+  avatar?: string;
 
-    @IsOptional()
-    @IsString()
-    coverPhoto?: string;
+  @IsOptional()
+  @IsString()
+  coverPhoto?: string;
 
-    @IsOptional()
-    @IsString()
-    avatar3D?: string;
+  @IsOptional()
+  @IsString()
+  avatar3D?: string;
 
-    @IsOptional()
-    @IsDateString()
-    dateOfBirth?: string;
+  @IsOptional()
+  @IsDateString()
+  dateOfBirth?: string;
 
-    @IsOptional()
-    @IsString()
-    gender?: string;
+  @IsOptional()
+  @IsString()
+  gender?: string;
 
-    @IsOptional()
-    @IsString()
-    preferredLanguage?: string;
+  @IsOptional()
+  @IsString()
+  preferredLanguage?: string;
 
-    @IsOptional()
-    settings?: any;
+  @IsOptional()
+  settings?: any;
 }

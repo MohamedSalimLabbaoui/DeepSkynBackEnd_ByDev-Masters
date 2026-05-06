@@ -8,35 +8,35 @@ datasource db {
 }
 
 model User {
-  id                     String         @id @default(uuid())
-  email                  String         @unique
+  id                     String                @id @default(uuid())
+  email                  String                @unique
   password               String?
-  googleId               String?        @unique
-  twoFactorEnabled       Boolean        @default(false)
+  googleId               String?               @unique
+  twoFactorEnabled       Boolean               @default(false)
   twoFactorSecret        String?
   resetPasswordToken     String?
   resetPasswordExpires   DateTime?
   name                   String?
   avatar                 String?
-  preferredLanguage      String         @default("fr")
+  preferredLanguage      String                @default("fr")
   dateOfBirth            DateTime?
   gender                 String?
-  emailVerified          Boolean        @default(false)
-  onboardingComplete     Boolean        @default(false)
+  emailVerified          Boolean               @default(false)
+  onboardingComplete     Boolean               @default(false)
   refreshToken           String?
-  role                   String         @default("user")
-  isActive               Boolean        @default(true)
+  role                   String                @default("user")
+  isActive               Boolean               @default(true)
   settings               Json?
   lastActivity           DateTime?
-  interactionCount       Int            @default(0)
-  sessionCount           Int            @default(0)
+  interactionCount       Int                   @default(0)
+  sessionCount           Int                   @default(0)
   churnRiskScore         Float?
   churnRiskLevel         String?
   lastChurnAnalysis      DateTime?
   reEngagementSentAt     DateTime?
-  createdAt              DateTime       @default(now())
-  updatedAt              DateTime       @updatedAt
-  facebookId             String?        @unique
+  createdAt              DateTime              @default(now())
+  updatedAt              DateTime              @updatedAt
+  facebookId             String?               @unique
   address                String?
   city                   String?
   zipCode                String?
@@ -45,25 +45,96 @@ model User {
   longitude              Float?
   avatar3D               String?
   coverPhoto             String?
-  isPublic               Boolean        @default(false)
-  receiveRecommendations Boolean        @default(true)
+  isPublic               Boolean               @default(false)
+  receiveRecommendations Boolean               @default(true)
   analyses               Analysis[]
   chatHistories          ChatHistory[]
   commentLikes           CommentLike[]
   comments               Comment[]
-  following              Follower[]     @relation("follower")
-  followers              Follower[]     @relation("following")
+  faceReference          FaceReference?
+  following              Follower[]            @relation("follower")
+  followers              Follower[]            @relation("following")
   likes                  Like[]
   notifications          Notification[]
   posts                  Post[]
+  predictiveRoutines     PredictiveRoutine[]
+  digitalTwin            DigitalTwin?
+  skinSnapshots          SkinSnapshot[]
+  productSimulations     ProductSimulation[]
+  skinPredictions        SkinPrediction[]
   routines               Routine[]
+  skinAlerts             SkinAlert[]
+  skinDailyLogs          SkinDailyLog[]
   skinProfile            SkinProfile?
+  skinSeasonalPatterns   SkinSeasonalPattern[]
   stories                Story[]
-  storyLikes             StoryLike[]
   storyComments          StoryComment[]
+  storyLikes             StoryLike[]
   subscription           Subscription?
+  weatherLogs            WeatherLog[]
+  productScans           ProductScan[]
+  userProducts           UserProduct[]
+  productComparisons     ProductComparison[]
 
   @@map("users")
+}
+
+model ProductScan {
+  id                    String   @id @default(uuid())
+  userId                String
+  productName           String
+  brand                 String?
+  category              String?
+  ingredients           String?
+  benefits              String?
+  concerns              String?
+  skinTypeCompatibility String?
+  recommendation        String?
+  imageUrl              String?
+  qrCode                String?
+  analysisResult        String?
+  rating                Int?
+  review                String?
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+  user                  User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userProducts          UserProduct[]
+
+  @@index([userId, createdAt])
+  @@map("product_scans")
+}
+
+model UserProduct {
+  id           String      @id @default(uuid())
+  userId       String
+  productName  String
+  brand        String?
+  category     String
+  categoryType String?
+  ingredients  String?
+  imageUrl     String?
+  productData  String?
+  productScanId String?
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+  user         User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  productScan  ProductScan? @relation(fields: [productScanId], references: [id], onDelete: SetNull)
+
+  @@index([userId, category])
+  @@map("user_products")
+}
+
+model ProductComparison {
+  id             String   @id @default(uuid())
+  userId         String
+  productIds     String[]
+  comparisonData String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@map("product_comparisons")
 }
 
 model Follower {
@@ -118,6 +189,7 @@ model Analysis {
   healthScore     Int?
   skinAge         Int?
   conditions      String[]
+  preocupent      String[] @default([])
   recommendations Json?
   status          String   @default("pending")
   processingTime  Int?
@@ -168,7 +240,9 @@ model Subscription {
   id            String    @id @default(uuid())
   userId        String    @unique
   planId        String?
+  subscriptionPlanId String?
   plan          String    @default("free")
+  lastPaidPlan  String?
   status        String    @default("active")
   amount        Float?
   currency      String?   @default("TND")
@@ -180,24 +254,26 @@ model Subscription {
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
   user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  subscriptionPlan SubscriptionPlan? @relation(fields: [subscriptionPlanId], references: [id], onDelete: SetNull)
+  couponRedemptions CouponRedemption[]
 
   @@map("subscriptions")
 }
 
 model Post {
-  id        String    @id @default(uuid())
-  userId    String
-  media     String?
-  message   String
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
-  status    String    @default("published")
-  views     Int       @default(0)
-  impressions Int     @default(0)
-  comments  Comment[]
-  likes     Like[]
+  id              String           @id @default(uuid())
+  userId          String
+  media           String?
+  message         String
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+  status          String           @default("published")
+  impressions     Int              @default(0)
+  views           Int              @default(0)
+  comments        Comment[]
+  likes           Like[]
+  user            User             @relation(fields: [userId], references: [id], onDelete: Cascade)
   signTranslation SignTranslation?
-  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@map("posts")
 }
@@ -265,19 +341,19 @@ model DermatologyArticle {
 }
 
 model Story {
-  id              String         @id @default(uuid())
-  userId          String
-  mediaUrl        String
-  musicUrl        String?
-  musicTitle      String?
-  expiresAt       DateTime
-  createdAt       DateTime       @default(now())
-  isHighlight     Boolean        @default(false)
-  highlightTitle  String?        // Title for highlights grouping (e.g., "Vacation", "Friends")
-  highlightOrder  Int?           // Order of highlights display
-  user            User           @relation(fields: [userId], references: [id], onDelete: Cascade)
-  likes           StoryLike[]
-  comments        StoryComment[]
+  id             String         @id @default(uuid())
+  userId         String
+  mediaUrl       String
+  expiresAt      DateTime
+  createdAt      DateTime       @default(now())
+  highlightOrder Int?
+  highlightTitle String?
+  isHighlight    Boolean        @default(false)
+  musicTitle     String?
+  musicUrl       String?
+  user           User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  comments       StoryComment[]
+  likes          StoryLike[]
 
   @@index([expiresAt])
   @@index([userId, isHighlight])
@@ -289,8 +365,8 @@ model StoryLike {
   userId    String
   storyId   String
   createdAt DateTime @default(now())
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   story     Story    @relation(fields: [storyId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([userId, storyId])
   @@map("story_likes")
@@ -303,24 +379,284 @@ model StoryComment {
   comment   String
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   story     Story    @relation(fields: [storyId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@map("story_comments")
 }
 
 model SignTranslation {
-  id          String   @id @default(uuid())
-  postId      String   @unique
-  transcript  String
-  language    String   @default("fr")
-  frames      Json
-  metadata    Json
-  status      String   @default("completed")
+  id           String   @id @default(uuid())
+  postId       String   @unique
+  transcript   String
+  language     String   @default("fr")
+  frames       Json
+  metadata     Json
+  status       String   @default("completed")
   errorMessage String?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-  post        Post     @relation(fields: [postId], references: [id], onDelete: Cascade)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  post         Post     @relation(fields: [postId], references: [id], onDelete: Cascade)
 
   @@map("sign_translations")
 }
+
+model WeatherLog {
+  id          String   @id @default(uuid())
+  userId      String
+  latitude    Float
+  longitude   Float
+  city        String?
+  country     String?
+  uvIndex     Float
+  aqi         Int?
+  humidity    Float?
+  temperature Float?
+  date        DateTime @default(now())
+  createdAt   DateTime @default(now())
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, date])
+  @@map("weather_logs")
+}
+
+model SkinAlert {
+  id        String   @id @default(uuid())
+  userId    String
+  type      String
+  message   String
+  severity  String
+  isRead    Boolean  @default(false)
+  metadata  Json?
+  date      DateTime @default(now())
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, isRead])
+  @@map("skin_alerts")
+}
+
+model SkinSeasonalPattern {
+  id                String   @id @default(uuid())
+  userId            String
+  month             Int
+  year              Int
+  avgConditionScore Float
+  dominantIssue     String?
+  totalLogs         Int      @default(0)
+  notes             String?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, month, year])
+  @@map("skin_seasonal_patterns")
+}
+
+model SkinDailyLog {
+  id             String   @id @default(uuid())
+  userId         String
+  conditionScore Int
+  notes          String?
+  concerns       String[]
+  weather        Json?
+  date           DateTime @default(now())
+  createdAt      DateTime @default(now())
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, date])
+  @@map("skin_daily_logs")
+}
+
+model PredictiveRoutine {
+  id              String                      @id @default(cuid())
+  userId          String
+  analysisId      String
+  generatedAt     DateTime                    @default(now())
+  routine         Json
+  weatherData     Json
+  expiresAt       DateTime
+  status          PredictiveRoutineStatus     @default(PENDING)
+  actionedAt      DateTime?
+  dismissedAt     DateTime?
+  implementedAt   DateTime?
+  feedback        String?                     // User feedback on routine effectiveness
+  user            User                        @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, analysisId])
+  @@index([expiresAt])
+  @@index([userId, status])
+  @@map("predictive_routines")
+}
+
+enum PredictiveRoutineStatus {
+  PENDING     // Just generated, waiting for user action
+  VIEWED      // User has viewed the routine
+  ACCEPTED    // User accepted and will implement
+  DISMISSED   // User dismissed the routine
+  IMPLEMENTED // User confirmed they're following it
+  EXPIRED     // Routine expired without action
+}
+
+model FaceReference {
+  id         String   @id @default(uuid())
+  userId     String   @unique
+  imageUrl   String
+  descriptor Json
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("face_references")
+}
+
+model SubscriptionPlan {
+  id            String   @id @default(uuid())
+  code          String   @unique
+  name          String
+  price         Float    @default(0)
+  currency      String   @default("TND")
+  durationDays  Int      @default(-1)
+  features      Json?
+  stripePriceId String?
+  isActive      Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  subscriptions Subscription[]
+
+  @@map("subscription_plans")
+}
+
+model Coupon {
+  id                    String             @id @default(uuid())
+  code                  String             @unique
+  discountType          String
+  discountValue         Float
+  maxUses               Int                @default(1)
+  maxUsesPerUser        Int                @default(1)
+  maxPerUser            Int                @default(1)
+  maxRedemptions        Int                @default(1)
+  usedCount             Int                @default(0)
+  minPurchaseAmount     Float?
+  currency              String             @default("TND")
+  applicablePlans       String[]
+  allowedPlans          String[]
+  startsAt              DateTime?
+  stripePromotionCodeId String?
+  isActive              Boolean            @default(true)
+  expiresAt             DateTime?
+  createdAt             DateTime           @default(now())
+  updatedAt             DateTime           @updatedAt
+  couponRedemptions     CouponRedemption[]
+
+  @@map("coupons")
+}
+
+model CouponRedemption {
+  id           String       @id @default(uuid())
+  couponId     String
+  userId       String
+  subscriptionId String
+  stripeCheckoutSessionId String?
+  discountAmount Float
+  redeemedAt   DateTime     @default(now())
+  coupon       Coupon       @relation(fields: [couponId], references: [id], onDelete: Cascade)
+  subscription Subscription @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+
+  @@unique([couponId, userId])
+  @@map("coupon_redemptions")
+}
+
+// 🔬 DIGITAL TWIN MODELS - Jumeau Numérique de la Peau
+
+model DigitalTwin {
+  id                   String   @id @default(uuid())
+  userId               String   @unique
+  baselineEstablished  Boolean  @default(false)
+  baselineDate         DateTime?
+  currentState         Json     // État actuel peau: scores, conditions, tendances
+  trendAnalysis        Json     // Analyse des tendances sur 3/6/12 mois
+  seasonalPatterns     Json?    // Patterns saisonniers détectés
+  productSensitivity   Json?    // Sensibilités produits détectées
+  improvementRate      Float?   // Taux d'amélioration global (%)
+  confidence           Float    @default(0.5) // Confiance du modèle (0-1)
+  lastUpdated          DateTime @default(now())
+  createdAt            DateTime @default(now())
+  user                 User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([lastUpdated])
+  @@map("digital_twins")
+}
+
+model SkinSnapshot {
+  id                String   @id @default(uuid())
+  userId            String
+  timestamp         DateTime @default(now())
+  imageUrl          String?
+  healthScore       Int
+  skinAge           Int?
+  conditions        Json     // {acne: severity, dryness: severity, wrinkles: level}
+  metrics           Json     // {hydration, texture, pores, pigmentation}
+  environmental     Json?    // Weather, pollution, UV context
+  lifestyle         Json?    // Sleep, stress, diet si disponible
+  productsUsed      Json?    // Produits utilisés ce jour-là
+  notes             String?
+  isBaseline        Boolean  @default(false)
+  analysisType      String   @default("automatic") // automatic, manual, verification
+  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, timestamp])
+  @@index([userId, isBaseline])
+  @@map("skin_snapshots")
+}
+
+model SkinPrediction {
+  id                String   @id @default(uuid())
+  userId            String
+  predictionDate    DateTime // Date pour laquelle on prédit
+  predictedState    Json     // État prédit: scores, conditions probables
+  confidence        Float    // Niveau de confiance (0-1)
+  basedOnDays       Int      // Nb jours d'historique utilisés
+  factors           Json     // Facteurs influençant: météo, saison, routine
+  preventiveTips    String[] // Conseils prévention
+  warnings          String[] // Alertes potentielles
+  createdAt         DateTime @default(now())
+  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, predictionDate])
+  @@map("skin_predictions")
+}
+
+model ProductSimulation {
+  id                String              @id @default(uuid())
+  userId            String
+  productName       String
+  productCategory   String              // cleanser, serum, moisturizer
+  productIngredients String[]
+  simulationPeriod  Int                 // Durée simulation en jours (ex: 14)
+  startState        Json                // État peau au début
+  predictedState    Json                // État prédit après période
+  expectedChanges   Json                // Changements attendus détaillés
+  riskFactors       String[]            // Risques potentiels
+  successProbability Float              // Probabilité succès (0-1)
+  status            ProductSimulationStatus @default(SIMULATED)
+  actualResults     Json?               // Résultats réels si user teste
+  feedback          String?             // Feedback utilisateur
+  createdAt         DateTime            @default(now())
+  validUntil        DateTime            // Date limite validité simulation
+  user              User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, status])
+  @@index([createdAt])
+  @@map("product_simulations")
+}
+
+enum ProductSimulationStatus {
+  SIMULATED   // Simulation créée
+  TESTING     // User teste actuellement
+  CONFIRMED   // Résultats confirmés
+  REJECTED    // Simulation incorrecte
+  EXPIRED     // Simulation expirée
+}
+

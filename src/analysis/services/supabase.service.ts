@@ -60,7 +60,7 @@ export class SupabaseService {
       this.logger.log(`Attempting upload: ${fileName}`);
       this.logger.log(`File size: ${file.size}, MimeType: ${file.mimetype}`);
 
-      const { data, error } = await this.supabase.storage
+      const { error } = await this.supabase.storage
         .from(this.bucket)
         .upload(fileName, file.buffer, {
           contentType: file.mimetype,
@@ -114,7 +114,7 @@ export class SupabaseService {
 
       this.logger.log(`Attempting 3D avatar upload: ${fileName}`);
 
-      const { data, error } = await this.supabase.storage
+      const { error } = await this.supabase.storage
         .from(this.bucket)
         .upload(fileName, file.buffer, {
           contentType: file.mimetype || 'model/gltf-binary',
@@ -179,7 +179,7 @@ export class SupabaseService {
       const extension = mimeType.split('/')[1] || 'jpeg';
       const fileName = `${folder}/${userId}/${randomUUID()}.${extension}`;
 
-      const { data, error } = await this.supabase.storage
+      const { error } = await this.supabase.storage
         .from(this.bucket)
         .upload(fileName, buffer, {
           contentType: mimeType,

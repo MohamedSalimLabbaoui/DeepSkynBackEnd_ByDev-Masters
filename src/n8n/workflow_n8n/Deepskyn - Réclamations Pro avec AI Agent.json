@@ -1,0 +1,425 @@
+{
+  "name": "Deepskyn - Réclamations Pro avec AI Agent",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "reclamation-deepskyn",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "36678e59-494d-41e7-8272-2a6f9249d639",
+      "name": "Webhook Réclamation",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        1584,
+        -96
+      ],
+      "webhookId": "deepskyn-reclamation-v2"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "f1",
+              "name": "date_soumission",
+              "value": "={{ $now.format('dd/MM/yyyy HH:mm') }}",
+              "type": "string"
+            },
+            {
+              "id": "f2",
+              "name": "id_reclamation",
+              "value": "={{ 'REC-' + $now.toMillis() }}",
+              "type": "string"
+            },
+            {
+              "id": "f3",
+              "name": "nom_client",
+              "value": "={{ $json.body.nom }}",
+              "type": "string"
+            },
+            {
+              "id": "f4",
+              "name": "email_client",
+              "value": "={{ $json.body.email }}",
+              "type": "string"
+            },
+            {
+              "id": "f5",
+              "name": "type_reclamation",
+              "value": "={{ $json.body.type_reclamation }}",
+              "type": "string"
+            },
+            {
+              "id": "f6",
+              "name": "description",
+              "value": "={{ $json.body.description }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "cc2f345a-7323-414a-98ca-7543c9172088",
+      "name": "Préparer les données",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1808,
+        -96
+      ]
+    },
+    {
+      "parameters": {
+        "modelId": {
+          "__rl": true,
+          "value": "gpt-5-mini",
+          "mode": "list",
+          "cachedResultName": "GPT-5-MINI"
+        },
+        "messages": {
+          "values": [
+            {
+              "content": "Tu es l'assistant IA de Deepskyn, une plateforme d'analyse et de routine. Ton rôle est d'analyser les réclamations clients et de produire une réponse JSON structurée UNIQUEMENT, sans aucun texte avant ou après.\n\nTu dois retourner exactement ce format JSON :\n{\n  \"priorite\": \"Haute\" | \"Moyenne\" | \"Faible\",\n  \"categorie\": \"Bug technique\" | \"Facturation\" | \"Performance\" | \"Fonctionnalité\" | \"Autre\",\n  \"sentiment\": \"Très insatisfait\" | \"Insatisfait\" | \"Neutre\",\n  \"resume_interne\": \"Résumé court pour l'équipe interne (max 100 caractères)\",\n  \"delai_traitement\": \"24h\" | \"48h\" | \"72h\",\n  \"email_client_html\": \"Email HTML complet et professionnel à envoyer au client, chaleureux, en français, avec les balises HTML inline styles, qui confirme réception, explique les prochaines étapes selon le délai, et rassure le client. Utilise les variables {nom_client} et {id_reclamation} et {date}.\",\n  \"statut_initial\": \"En cours d'analyse\"\n}",
+              "role": "system"
+            },
+            {
+              "content": "=Analyse cette réclamation et retourne le JSON demandé :\n\nClient : {{ $json.nom_client }}\nEmail : {{ $json.email_client }}\nType déclaré : {{ $json.type_reclamation }}\nDescription : {{ $json.description }}\nDate : {{ $json.date_soumission }}"
+            }
+          ]
+        },
+        "options": {
+          "temperature": null
+        }
+      },
+      "id": "5b20e00e-7ca9-41a8-b251-2234e5371043",
+      "name": "AI Agent - Analyse Réclamation",
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 1.5,
+      "position": [
+        2032,
+        -96
+      ],
+      "credentials": {
+        "openAiApi": {
+          "id": "6RVDGpSl6wGUXBYE",
+          "name": "n8n free OpenAI API credits"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const raw = $input.item.json.message.content;\n\n// Nettoyage robuste\nlet cleaned = raw\n  .replace(/```json/g, '')\n  .replace(/```/g, '')\n  .trim();\n\n// Extraire uniquement le bloc JSON entre { }\nconst match = cleaned.match(/\\{[\\s\\S]*\\}/);\nif (!match) throw new Error('Aucun JSON trouvé dans la réponse AI');\n\nlet ai;\ntry {\n  ai = JSON.parse(match[0]);\n} catch(e) {\n  // Deuxième tentative : nettoyer les caractères problématiques\n  const sanitized = match[0]\n    .replace(/[\\u0000-\\u001F\\u007F]/g, ' ')\n    .replace(/\\n/g, '\\\\n')\n    .replace(/\\r/g, '')\n    .replace(/\\t/g, '\\\\t');\n  ai = JSON.parse(sanitized);\n}\n\nconst prev = $('Préparer les données').item.json;\n\nconst emailHtml = (ai.email_client_html || '')\n  .replace(/{nom_client}/g, prev.nom_client || '')\n  .replace(/{id_reclamation}/g, prev.id_reclamation || '')\n  .replace(/{date}/g, prev.date_soumission || '');\n\nreturn [{\n  json: {\n    ...prev,\n    priorite: ai.priorite || 'Moyenne',\n    categorie: ai.categorie || 'Autre',\n    sentiment: ai.sentiment || 'Neutre',\n    resume_interne: ai.resume_interne || '',\n    delai_traitement: ai.delai_traitement || '48h',\n    email_html: emailHtml,\n    statut: ai.statut_initial || 'En cours d\\'analyse'\n  }\n}];"
+      },
+      "id": "21965eac-00b6-4215-8975-fafde2d063b7",
+      "name": "Parser réponse AI",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2304,
+        -240
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "1YFuEd3wa-YzWHRbdueNBYuwxGQzNRc50OylFU4k_HYg",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "Réclamations",
+          "mode": "name"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "ID Réclamation": "={{ $json.id_reclamation }}",
+            "Date": "={{ $json.date_soumission }}",
+            "Nom Client": "={{ $json.nom_client }}",
+            "Email": "={{ $json.email_client }}",
+            "Catégorie IA": "={{ $json.categorie }}",
+            "Type Déclaré": "={{ $json.type_reclamation }}",
+            "Sentiment": "={{ $json.sentiment }}",
+            "Description": "={{ $json.description }}",
+            "Délai Traitement": "={{ $json.delai_traitement }}",
+            "Résumé Interne": "={{ $json.resume_interne }}",
+            "Statut": "={{ $json.statut }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "ID Réclamation",
+              "displayName": "ID Réclamation",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Date",
+              "displayName": "Date",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Nom Client",
+              "displayName": "Nom Client",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Email",
+              "displayName": "Email",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Type Déclaré",
+              "displayName": "Type Déclaré",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Catégorie IA",
+              "displayName": "Catégorie IA",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Sentiment",
+              "displayName": "Sentiment",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Délai Traitement",
+              "displayName": "Délai Traitement",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Description",
+              "displayName": "Description",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Résumé Interne",
+              "displayName": "Résumé Interne",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Statut",
+              "displayName": "Statut",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "id": "e8c54489-e78c-4a0c-a194-6e3ea8b77d43",
+      "name": "Enregistrer dans Google Sheets",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        2464,
+        -96
+      ],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "FDW4bWGlnharNVKL",
+          "name": "Google Sheets OAuth2 API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "sendTo": "={{ $('Préparer les données').item.json.email_client }}",
+        "subject": "=Réclamation #{{ $('Parser réponse AI').item.json.id_reclamation }} — Deepskyn",
+        "message": "={{ $('Parser réponse AI').item.json.email_html }}",
+        "options": {}
+      },
+      "id": "967be7b4-3225-489c-aacf-af01bf6507d3",
+      "name": "Envoyer Email Client",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [
+        2688,
+        -96
+      ],
+      "webhookId": "bc21510e-8919-4183-a3d7-5c534cd18bf4",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "X4VveIod2nD8tVgx",
+          "name": "Gmail OAuth2 API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={\n  \"success\": true,\n  \"id_reclamation\": \"{{ $('Parser réponse AI').item.json.id_reclamation }}\",\n  \"priorite\": \"{{ $('Parser réponse AI').item.json.priorite }}\",\n  \"categorie\": \"{{ $('Parser réponse AI').item.json.categorie }}\",\n  \"delai_traitement\": \"{{ $('Parser réponse AI').item.json.delai_traitement }}\",\n  \"statut\": \"{{ $('Parser réponse AI').item.json.statut }}\"\n}",
+        "options": {}
+      },
+      "id": "1755472e-1d08-4286-9509-99e3422c5018",
+      "name": "Réponse Webhook",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        2912,
+        -96
+      ]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Webhook Réclamation": {
+      "main": [
+        [
+          {
+            "node": "Préparer les données",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Préparer les données": {
+      "main": [
+        [
+          {
+            "node": "AI Agent - Analyse Réclamation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Agent - Analyse Réclamation": {
+      "main": [
+        [
+          {
+            "node": "Parser réponse AI",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parser réponse AI": {
+      "main": [
+        [
+          {
+            "node": "Enregistrer dans Google Sheets",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Enregistrer dans Google Sheets": {
+      "main": [
+        [
+          {
+            "node": "Envoyer Email Client",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Envoyer Email Client": {
+      "main": [
+        [
+          {
+            "node": "Réponse Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "758ab40e-f324-468e-9cd8-fadeaa3e9195",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "5cb416b31df3858ac633953e0370f023b88c8ebbc8997cd6fe2ec203c7c8f007"
+  },
+  "id": "a3QLTZidp7HwhkbM",
+  "tags": [
+    {
+      "name": "deepskyn",
+      "id": "QrXVX0269Mk93Pat",
+      "updatedAt": "2026-04-06T21:13:55.068Z",
+      "createdAt": "2026-04-06T21:13:55.068Z"
+    },
+    {
+      "name": "reclamations",
+      "id": "J01eMLFtBDViYejr",
+      "updatedAt": "2026-04-06T21:13:55.040Z",
+      "createdAt": "2026-04-06T21:13:55.040Z"
+    },
+    {
+      "name": "ai-agent",
+      "id": "HXSKdi2clOcCkEYS",
+      "updatedAt": "2026-04-06T21:39:06.857Z",
+      "createdAt": "2026-04-06T21:39:06.857Z"
+    }
+  ]
+}

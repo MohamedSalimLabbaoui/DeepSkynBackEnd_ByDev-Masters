@@ -1,9 +1,4 @@
-import {
-  Injectable,
-  HttpException,
-  HttpStatus,
-  Logger,
-} from '@nestjs/common';
+import { Injectable, HttpException, HttpStatus, Logger } from '@nestjs/common';
 import { HttpService } from '@nestjs/axios';
 import { lastValueFrom } from 'rxjs';
 import { PrismaService } from '../prisma/prisma.service';
@@ -13,15 +8,13 @@ import {
   Frame,
   SignTranslationMetadata,
 } from './interfaces/sign-translation.interface';
-import {
-  TranslateTextDto,
-  TranslateVideoPostDto,
-} from './dto';
+import { TranslateTextDto, TranslateVideoPostDto } from './dto';
 
 @Injectable()
 export class SignTranslationService {
   private readonly logger = new Logger(SignTranslationService.name);
-  private readonly MICROSERVICE_URL = process.env.SIGN_TRANSLATION_SERVICE_URL || 'http://localhost:8000';
+  private readonly MICROSERVICE_URL =
+    process.env.SIGN_TRANSLATION_SERVICE_URL || 'http://localhost:8000';
   private readonly MAX_RETRIES = 3;
   private readonly RETRY_DELAY = 1000; // 1 second
 
@@ -33,13 +26,8 @@ export class SignTranslationService {
   /**
    * Traduit un texte en langage des signes via le microservice
    */
-  async translateText(
-    dto: TranslateTextDto,
-  ): Promise<SignTranslationResponse> {
-    return this.callMicroserviceWithRetry(
-      dto.text,
-      dto.language,
-    );
+  async translateText(dto: TranslateTextDto): Promise<SignTranslationResponse> {
+    return this.callMicroserviceWithRetry(dto.text, dto.language);
   }
 
   /**
@@ -138,9 +126,7 @@ export class SignTranslationService {
   /**
    * Récupère la traduction d'un post vidéo
    */
-  async getVideoPostTranslation(
-    postId: string,
-  ): Promise<SignTranslationData> {
+  async getVideoPostTranslation(postId: string): Promise<SignTranslationData> {
     const translation = await this.prisma.signTranslation.findUnique({
       where: { postId },
     });
@@ -192,7 +178,9 @@ export class SignTranslationService {
       const convertedResponse = this.convertMicroserviceResponse(response.data);
 
       if (!convertedResponse.frames || convertedResponse.frames.length === 0) {
-        throw new Error('Invalid response format from microservice: no frames generated');
+        throw new Error(
+          'Invalid response format from microservice: no frames generated',
+        );
       }
 
       return convertedResponse;
@@ -214,7 +202,7 @@ export class SignTranslationService {
       if (error.code === 'ECONNREFUSED') {
         this.logger.error(
           `Microservice unavailable at ${this.MICROSERVICE_URL}: Connection refused. ` +
-          `Make sure the Python service is running on port 8000.`,
+            `Make sure the Python service is running on port 8000.`,
         );
         throw new HttpException(
           {
@@ -258,12 +246,14 @@ export class SignTranslationService {
       postId: translation.postId,
       transcript: translation.transcript,
       language: translation.language,
-      frames: typeof translation.frames === 'string' 
-        ? JSON.parse(translation.frames) 
-        : translation.frames as Frame[],
-      metadata: typeof translation.metadata === 'string'
-        ? JSON.parse(translation.metadata)
-        : translation.metadata as SignTranslationMetadata,
+      frames:
+        typeof translation.frames === 'string'
+          ? JSON.parse(translation.frames)
+          : (translation.frames as Frame[]),
+      metadata:
+        typeof translation.metadata === 'string'
+          ? JSON.parse(translation.metadata)
+          : (translation.metadata as SignTranslationMetadata),
       status: translation.status,
       errorMessage: translation.errorMessage ?? undefined,
       createdAt: translation.createdAt,
@@ -288,38 +278,39 @@ export class SignTranslationService {
       }
 
       // Sinon, convertir le format Python au format TypeScript
-      const convertedFrames = response.frames?.map((frame: any) => {
-        const keypoints = frame.keypoints || [];
-        const hand_right_keypoints: any[] = [];
-        const hand_left_keypoints: any[] = [];
-        const pose_keypoints: any[] = [];
+      const convertedFrames =
+        response.frames?.map((frame: any) => {
+          const keypoints = frame.keypoints || [];
+          const hand_right_keypoints: any[] = [];
+          const hand_left_keypoints: any[] = [];
+          const pose_keypoints: any[] = [];
 
-        // Catégoriser les keypoints
-        keypoints.forEach((kp: any, index: number) => {
-          const keypoint = {
-            id: kp.name || `keypoint-${index}`,
-            x: kp.x || 0,
-            y: kp.y || 0,
-            z: kp.z || 0,
+          // Catégoriser les keypoints
+          keypoints.forEach((kp: any, index: number) => {
+            const keypoint = {
+              id: kp.name || `keypoint-${index}`,
+              x: kp.x || 0,
+              y: kp.y || 0,
+              z: kp.z || 0,
+            };
+
+            // Utiliser le nom ou la position dans la liste pour catégoriser
+            const name = kp.name?.toLowerCase() || '';
+            if (name.includes('right_hand')) {
+              hand_right_keypoints.push(keypoint);
+            } else if (name.includes('left_hand')) {
+              hand_left_keypoints.push(keypoint);
+            } else {
+              pose_keypoints.push(keypoint);
+            }
+          });
+
+          return {
+            hand_right_keypoints,
+            hand_left_keypoints,
+            pose_keypoints,
           };
-
-          // Utiliser le nom ou la position dans la liste pour catégoriser
-          const name = kp.name?.toLowerCase() || '';
-          if (name.includes('right_hand')) {
-            hand_right_keypoints.push(keypoint);
-          } else if (name.includes('left_hand')) {
-            hand_left_keypoints.push(keypoint);
-          } else {
-            pose_keypoints.push(keypoint);
-          }
-        });
-
-        return {
-          hand_right_keypoints,
-          hand_left_keypoints,
-          pose_keypoints,
-        };
-      }) || [];
+        }) || [];
 
       // Adapter les métadonnées au format attendu
       const metadata = {

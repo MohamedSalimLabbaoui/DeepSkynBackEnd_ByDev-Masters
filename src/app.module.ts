@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
+import { PrometheusModule } from '@willsoto/nestjs-prometheus';
 import keycloakConfig from './config/keycloak.config';
 import { ScraperModule } from './scraper/scraper.module';
 import { PrismaModule } from './prisma/prisma.module';
@@ -20,9 +21,24 @@ import { UsersModule } from './users/users.module';
 import { WeatherModule } from './weather/weather.module';
 import { StoriesModule } from './stories/stories.module';
 import { SignTranslationModule } from './sign-translation/sign-translation.module';
+import { ContextualAnalysisModule } from './contextual-analysis/contextual-analysis.module';
+import { PredictiveRoutineModule } from './predictive-routine/predictive-routine.module';
+import { FaceVerificationModule } from './face-verification/face-verification.module';
+import { SharedModule } from './shared/shared.module';
+import { DigitalTwinModule } from './digital-twin/digital-twin.module';
+import { N8nModule } from './n8n/n8n.module';
+import { AdminBiModule } from './admin-bi/admin-bi.module';
+import { ProductScanModule } from './product-scan/product-scan.module';
 
 @Module({
   imports: [
+    PrometheusModule.register({
+      defaultMetrics: {
+        enabled: true,
+      },
+      path: '/metrics',
+    }),
+    SharedModule,
     UsersModule,
     ConfigModule.forRoot({
       isGlobal: true,
@@ -47,8 +63,15 @@ import { SignTranslationModule } from './sign-translation/sign-translation.modul
     WeatherModule,
     StoriesModule,
     SignTranslationModule,
+    ContextualAnalysisModule,
+    PredictiveRoutineModule,
+    FaceVerificationModule,
+    DigitalTwinModule,
+    N8nModule,
+    AdminBiModule,
+    ProductScanModule,
   ],
   controllers: [],
   providers: [],
 })
-export class AppModule { }
+export class AppModule {}

@@ -5,15 +5,9 @@ import {
   Query,
   Param,
   Body,
-  UseGuards,
   Logger,
 } from '@nestjs/common';
-import {
-  ApiTags,
-  ApiOperation,
-  ApiResponse,
-  ApiBearerAuth,
-} from '@nestjs/swagger';
+import { ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger';
 import { CrawlingService } from './crawling.service';
 import { CrawlArticlesDto, SearchArticlesDto } from './dto';
 // Auth guard commenté temporairement comme dans les autres controllers
@@ -37,7 +31,9 @@ export class CrawlingController {
   })
   @ApiResponse({ status: 201, description: 'Crawl terminé avec succès' })
   async triggerCrawl(@Body() crawlDto: CrawlArticlesDto) {
-    this.logger.log(`🕷️ Crawl déclenché manuellement - source: ${crawlDto.source || 'all'}`);
+    this.logger.log(
+      `🕷️ Crawl déclenché manuellement - source: ${crawlDto.source || 'all'}`,
+    );
     const result = await this.crawlingService.crawlBySource(
       crawlDto.source,
       crawlDto.keywords,
@@ -88,7 +84,7 @@ export class CrawlingController {
   @ApiOperation({
     summary: 'Obtenir les articles pertinents pour une question',
     description:
-      "Utilisé en interne par le chatbot AI pour enrichir ses réponses avec des connaissances dermatologiques récentes.",
+      'Utilisé en interne par le chatbot AI pour enrichir ses réponses avec des connaissances dermatologiques récentes.',
   })
   @ApiResponse({ status: 200, description: 'Articles pertinents' })
   async getRelevantArticles(

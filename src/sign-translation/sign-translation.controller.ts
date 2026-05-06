@@ -19,7 +19,9 @@ import {
 @ApiTags('sign-translation')
 @Controller('sign-translation')
 export class SignTranslationController {
-  constructor(private readonly signTranslationService: SignTranslationService) {}
+  constructor(
+    private readonly signTranslationService: SignTranslationService,
+  ) {}
 
   /**
    * POST /sign-translation/translate
@@ -33,13 +35,13 @@ export class SignTranslationController {
     description: 'Successfully translated text',
     type: SignResponseDto,
   })
-  @ApiResponse({ status: 400, description: 'Invalid language or missing lexicon' })
+  @ApiResponse({
+    status: 400,
+    description: 'Invalid language or missing lexicon',
+  })
   @ApiResponse({ status: 503, description: 'Service unavailable' })
-  async translateText(
-    @Body() dto: TranslateTextDto,
-  ): Promise<SignResponseDto> {
-    const result =
-      await this.signTranslationService.translateText(dto);
+  async translateText(@Body() dto: TranslateTextDto): Promise<SignResponseDto> {
+    const result = await this.signTranslationService.translateText(dto);
     return {
       ...result,
       status: 'success',
@@ -58,16 +60,16 @@ export class SignTranslationController {
     description: 'Translation saved successfully',
     type: SignTranslationResultDto,
   })
-  @ApiResponse({ status: 400, description: 'Invalid language or translation failed' })
+  @ApiResponse({
+    status: 400,
+    description: 'Invalid language or translation failed',
+  })
   @ApiResponse({ status: 503, description: 'Service unavailable' })
   async translateVideoPost(
     @Param('postId') postId: string,
     @Body() dto: TranslateVideoPostDto,
   ): Promise<SignTranslationResultDto> {
-    return this.signTranslationService.translateVideoPost(
-      postId,
-      dto,
-    );
+    return this.signTranslationService.translateVideoPost(postId, dto);
   }
 
   /**
@@ -86,8 +88,6 @@ export class SignTranslationController {
   async getVideoPostTranslation(
     @Param('postId') postId: string,
   ): Promise<SignTranslationResultDto> {
-    return this.signTranslationService.getVideoPostTranslation(
-      postId,
-    );
+    return this.signTranslationService.getVideoPostTranslation(postId);
   }
 }

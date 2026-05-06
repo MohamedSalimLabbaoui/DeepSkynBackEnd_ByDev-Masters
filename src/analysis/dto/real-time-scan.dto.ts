@@ -1,13 +1,47 @@
-import { IsString, IsOptional, IsBoolean, IsIn } from 'class-validator';
-import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import {
+  IsString,
+  IsOptional,
+  IsBoolean,
+  IsIn,
+  IsArray,
+  IsObject,
+} from 'class-validator';
+import { ApiPropertyOptional } from '@nestjs/swagger';
+import { GeminiAnalysisResult } from '../services/gemini.service';
+
+export type ScanFaceAngle = 'front' | 'left' | 'right';
+
+export interface CapturedScanImage {
+  angle: ScanFaceAngle;
+  imageBase64: string;
+  mimeType: string;
+  imageUrl?: string | null;
+}
+
+export interface AnalysisEvolutionRemark {
+  hasHistory: boolean;
+  trend: 'improved' | 'declined' | 'stable';
+  healthScoreChange: number;
+  skinAgeChange: number;
+  newConditions: string[];
+  resolvedConditions: string[];
+  remark: string;
+}
+
+export interface RealTimeScanResult {
+  analysis: GeminiAnalysisResult;
+  capturedImages: Record<ScanFaceAngle, CapturedScanImage | null>;
+  evolution: AnalysisEvolutionRemark;
+}
 
 export class RealTimeScanDto {
-  @ApiProperty({
+  @ApiPropertyOptional({
     description: 'Image encodée en Base64',
     example: '/9j/4AAQSkZJRgABAQAAAQABAAD...',
   })
+  @IsOptional()
   @IsString()
-  image: string; // Base64 encoded image
+  image?: string; // Base64 encoded image (legacy payload)
 
   @ApiPropertyOptional({
     description: "Type MIME de l'image",
@@ -36,4 +70,46 @@ export class RealTimeScanDto {
   @IsOptional()
   @IsBoolean()
   saveAnalysis?: boolean; // Save analysis to database
+
+  @ApiPropertyOptional({
+    description: 'Zones du visage qui preoccupent le plus l utilisateur',
+    type: [String],
+    example: ['nez', 'joues'],
+  })
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  preocupent?: string[];
+
+  @ApiPropertyOptional({
+    description: 'Image frontale encodée en Base64',
+    example: '/9j/4AAQSkZJRgABAQAAAQABAAD...',
+  })
+  @IsOptional()
+  @IsString()
+  frontImage?: string;
+
+  @ApiPropertyOptional({
+    description: 'Image profil gauche encodée en Base64',
+    example: '/9j/4AAQSkZJRgABAQAAAQABAAD...',
+  })
+  @IsOptional()
+  @IsString()
+  leftImage?: string;
+
+  @ApiPropertyOptional({
+    description: 'Image profil droit encodée en Base64',
+    example: '/9j/4AAQSkZJRgABAQAAAQABAAD...',
+  })
+  @IsOptional()
+  @IsString()
+  rightImage?: string;
+
+  @ApiPropertyOptional({
+    description:
+      "Résultat d'analyse déjà calculé (à fournir pour sauvegarder sans relancer Gemini)",
+  })
+  @IsOptional()
+  @IsObject()
+  cachedAnalysis?: GeminiAnalysisResult;
 }

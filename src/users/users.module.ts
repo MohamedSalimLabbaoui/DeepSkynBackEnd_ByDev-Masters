@@ -1,14 +1,22 @@
 import { Module } from '@nestjs/common';
 import { UsersService } from './users.service';
 import { UsersController } from './users.controller';
+import { UserJourneyController } from './user-journey.controller';
 import { PrismaModule } from '../prisma/prisma.module';
-import { AuthModule } from '../auth/auth.module'; // Ensure auth module is available if needed, though we imported Guards from it
+
 import { AnalysisModule } from '../analysis/analysis.module';
+import { DigitalTwinModule } from '../digital-twin/digital-twin.module';
+import { PredictiveRoutineModule } from '../predictive-routine/predictive-routine.module';
 
 @Module({
-    imports: [PrismaModule, AnalysisModule],
-    controllers: [UsersController],
-    providers: [UsersService],
-    exports: [UsersService],
+  imports: [
+    PrismaModule,
+    AnalysisModule,
+    DigitalTwinModule,
+    PredictiveRoutineModule,
+  ],
+  controllers: [UsersController, UserJourneyController],
+  providers: [UsersService],
+  exports: [UsersService],
 })
-export class UsersModule { }
+export class UsersModule {}

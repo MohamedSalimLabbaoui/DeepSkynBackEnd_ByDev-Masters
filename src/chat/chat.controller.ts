@@ -11,14 +11,7 @@ import {
   HttpCode,
   HttpStatus,
 } from '@nestjs/common';
-import {
-  ApiTags,
-  ApiOperation,
-  ApiResponse,
-  ApiBearerAuth,
-  ApiParam,
-  ApiQuery,
-} from '@nestjs/swagger';
+import { ApiTags, ApiOperation, ApiResponse, ApiQuery } from '@nestjs/swagger';
 import { ChatService } from './chat.service';
 import { SendMessageDto } from './dto';
 import { KeycloakAuthGuard } from '../auth/guards/keycloak-auth.guard';
@@ -29,6 +22,35 @@ import { Roles } from '../auth/decorators/roles.decorator';
 @Controller('chat')
 export class ChatController {
   constructor(private readonly chatService: ChatService) {}
+
+  private resolveUserId(req: any): string {
+    const direct = req.user?.id || req.user?.sub;
+    if (direct) return direct;
+
+    const authHeader = req.headers?.authorization as string | undefined;
+    if (authHeader?.startsWith('Bearer ')) {
+      const token = authHeader.slice(7);
+      const parts = token.split('.');
+      if (parts.length >= 2) {
+        try {
+          const payloadJson = Buffer.from(parts[1], 'base64url').toString(
+            'utf-8',
+          );
+          const payload = JSON.parse(payloadJson) as {
+            sub?: string;
+            id?: string;
+            userId?: string;
+          };
+          const tokenUserId = payload.sub || payload.id || payload.userId;
+          if (tokenUserId) return tokenUserId;
+        } catch {
+          // ignore invalid token format and use fallback
+        }
+      }
+    }
+
+    return '89324390-127f-48c4-b382-2aef40f76add';
+  }
 
   @Post('message')
   @HttpCode(HttpStatus.OK)
@@ -41,7 +63,7 @@ export class ChatController {
   @ApiResponse({ status: 400, description: 'Message invalide' })
   // @UseGuards(KeycloakAuthGuard)
   async sendMessage(@Req() req: any, @Body() sendMessageDto: SendMessageDto) {
-    const userId = req.user?.id || '89324390-127f-48c4-b382-2aef40f76add';
+    const userId = this.resolveUserId(req);
     return this.chatService.sendMessage(userId, sendMessageDto);
   }
 
@@ -69,7 +91,7 @@ export class ChatController {
     @Query('limit') limit?: string,
     @Query('offset') offset?: string,
   ) {
-    const userId = req.user?.id || '89324390-127f-48c4-b382-2aef40f76add';
+    const userId = this.resolveUserId(req);
     return this.chatService.findAllByUser(userId, {
       limit: limit ? parseInt(limit, 10) : undefined,
       offset: offset ? parseInt(offset, 10) : undefined,
@@ -82,7 +104,7 @@ export class ChatController {
   @Get(':id')
   // @UseGuards(JwtAuthGuard)
   async getChat(@Req() req: any, @Param('id') id: string) {
-    const userId = req.user?.id || '89324390-127f-48c4-b382-2aef40f76add';
+    const userId = this.resolveUserId(req);
     return this.chatService.findOne(id, userId);
   }
 
@@ -93,7 +115,7 @@ export class ChatController {
   @HttpCode(HttpStatus.NO_CONTENT)
   // @UseGuards(JwtAuthGuard)
   async deleteChat(@Req() req: any, @Param('id') id: string) {
-    const userId = req.user?.id || '89324390-127f-48c4-b382-2aef40f76add';
+    const userId = this.resolveUserId(req);
     await this.chatService.remove(id, userId);
   }
 
@@ -104,7 +126,7 @@ export class ChatController {
   @HttpCode(HttpStatus.OK)
   // @UseGuards(JwtAuthGuard)
   async deleteAllChats(@Req() req: any) {
-    const userId = req.user?.id || '89324390-127f-48c4-b382-2aef40f76add';
+    const userId = this.resolveUserId(req);
     const count = await this.chatService.removeAll(userId);
     return { deletedCount: count };
   }

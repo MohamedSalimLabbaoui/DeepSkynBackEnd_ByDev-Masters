@@ -4,6 +4,7 @@ import {
   IsUrl,
   ArrayMaxSize,
   IsObject,
+  IsString,
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
@@ -26,4 +27,14 @@ export class CreateAnalysisDto {
   @IsOptional()
   @IsObject()
   questionnaire?: Record<string, any>;
+
+  @ApiPropertyOptional({
+    description: 'Zones du visage qui preoccupent le plus l utilisateur',
+    type: [String],
+    example: ['nez', 'joues', 'autour_bouche'],
+  })
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  preocupent?: string[];
 }

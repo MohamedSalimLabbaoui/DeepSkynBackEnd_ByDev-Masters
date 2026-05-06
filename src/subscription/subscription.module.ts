@@ -3,10 +3,12 @@ import { SubscriptionService } from './subscription.service';
 import { SubscriptionController } from './subscription.controller';
 import { PrismaModule } from '../prisma/prisma.module';
 import { NotificationModule } from '../notification/notification.module';
+import { StripeWebhookController } from './stripe-webhook.controller';
+import { CouponsModule } from '../coupons/coupons.module';
 
 @Module({
-  imports: [PrismaModule, NotificationModule],
-  controllers: [SubscriptionController],
+  imports: [PrismaModule, NotificationModule, CouponsModule],
+  controllers: [SubscriptionController, StripeWebhookController],
   providers: [SubscriptionService],
   exports: [SubscriptionService],
 })

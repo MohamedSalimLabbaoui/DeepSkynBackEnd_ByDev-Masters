@@ -1,7 +1,8 @@
-// Service backend pour générer des conseils météo via Gemini API (HTTP direct)
-import { Injectable, Logger, HttpException, HttpStatus } from '@nestjs/common';
+// Service backend pour générer des conseils météo via OpenRouter (GrokService)
+import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import axios, { AxiosError } from 'axios';
+import axios from 'axios';
+import { GrokService } from '../analysis/services/grok.service';
 
 export interface WeatherAdviceInput {
   temperature: number;
@@ -13,38 +14,93 @@ export interface WeatherAdviceInput {
   country?: string;
 }
 
-interface GeminiResponse {
-  candidates: {
-    content: {
-      parts: {
-        text: string;
-      }[];
-    };
-  }[];
-}
-
 @Injectable()
 export class WeatherService {
   private readonly logger = new Logger(WeatherService.name);
-  private readonly apiKey: string;
-  private readonly apiUrl: string;
-  private readonly maxRetries = 3;
-  private readonly retryDelay = 2000;
+  private readonly geminiApiKeys: string[];
+  private readonly geminiModels: string[];
+  private readonly geminiBaseUrl =
+    'https://generativelanguage.googleapis.com/v1beta/models';
+  private readonly maxRetries = 2;
+  private readonly retryDelay = 1500;
+  private readonly grokService: GrokService;
 
   constructor(private readonly configService: ConfigService) {
-    this.apiKey = this.configService.get<string>('GEMINI_API_KEY');
-    if (!this.apiKey) {
-      throw new Error('GEMINI_API_KEY is not defined in environment variables');
+    this.geminiApiKeys = this.loadApiKeys('GEMINI_API_KEY');
+    this.geminiModels = [
+      this.configService.get<string>('GEMINI_PRIMARY_MODEL') ||
+        'gemini-2.5-flash',
+      this.configService.get<string>('GEMINI_FALLBACK_MODEL') ||
+        'gemini-1.5-flash',
+    ].filter((value, index, arr) => !!value && arr.indexOf(value) === index);
+
+    if (this.geminiApiKeys.length === 0) {
+      this.logger.warn('Weather Gemini is not configured. Set GEMINI_API_KEY.');
     }
-    this.apiUrl =
-      'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent';
+
+    this.grokService = new GrokService(configService);
   }
 
-  /**
-   * Sleep helper for retry delays
-   */
+  private loadApiKeys(baseName: string): string[] {
+    const key = this.configService.get<string>(baseName);
+    return key && key.trim().length > 0 ? [key.trim()] : [];
+  }
+
   private sleep(ms: number): Promise<void> {
     return new Promise((resolve) => setTimeout(resolve, ms));
+  }
+
+  private isRetryableStatus(status?: number): boolean {
+    return status === 429 || status === 500 || status === 503;
+  }
+
+  private async requestGeminiAdvice(prompt: string): Promise<string> {
+    if (this.geminiApiKeys.length === 0) {
+      throw new Error('No Gemini API key configured');
+    }
+
+    const apiKey = this.geminiApiKeys[0];
+
+    for (const model of this.geminiModels) {
+      const url = `${this.geminiBaseUrl}/${model}:generateContent?key=${apiKey}`;
+
+      for (let attempt = 1; attempt <= this.maxRetries; attempt++) {
+        try {
+          const response = await axios.post(
+            url,
+            {
+              contents: [{ parts: [{ text: prompt }] }],
+              generationConfig: {
+                temperature: 0.6,
+                maxOutputTokens: 1024,
+              },
+            },
+            {
+              headers: { 'Content-Type': 'application/json' },
+              timeout: 15000,
+            },
+          );
+
+          const text =
+            response.data?.candidates?.[0]?.content?.parts?.[0]?.text;
+          if (text) {
+            return text;
+          }
+        } catch (error) {
+          const status = (error as any)?.response?.status as number | undefined;
+          this.logger.warn(
+            `Gemini weather failed (model=${model}, status=${status ?? 'n/a'}, attempt=${attempt}/${this.maxRetries})`,
+          );
+
+          if (this.isRetryableStatus(status) && attempt < this.maxRetries) {
+            await this.sleep(this.retryDelay * attempt);
+            continue;
+          }
+        }
+      }
+    }
+
+    throw new Error('All Gemini weather candidates failed');
   }
 
   /**
@@ -82,137 +138,64 @@ export class WeatherService {
   }
 
   /**
-   * Make API request with retry logic
-   */
-  private async makeRequestWithRetry<T>(
-    requestFn: () => Promise<T>,
-    retries = this.maxRetries,
-  ): Promise<T> {
-    for (let attempt = 1; attempt <= retries; attempt++) {
-      try {
-        return await requestFn();
-      } catch (error) {
-        const axiosError = error as AxiosError;
-
-        if (axiosError.response?.status === 429) {
-          if (attempt < retries) {
-            const delay = this.retryDelay * attempt;
-            this.logger.warn(
-              `Rate limited (429). Retrying in ${delay}ms... (attempt ${attempt}/${retries})`,
-            );
-            await this.sleep(delay);
-            continue;
-          }
-          throw new HttpException(
-            'API rate limit exceeded. Please try again later.',
-            HttpStatus.TOO_MANY_REQUESTS,
-          );
-        }
-
-        if (
-          axiosError.response?.status === 503 ||
-          axiosError.response?.status === 500
-        ) {
-          if (attempt < retries) {
-            const delay = this.retryDelay * attempt;
-            this.logger.warn(
-              `Server error (${axiosError.response?.status}). Retrying in ${delay}ms...`,
-            );
-            await this.sleep(delay);
-            continue;
-          }
-        }
-
-        throw error;
-      }
-    }
-    throw new Error('Max retries exceeded');
-  }
-
-  /**
-   * Générer un conseil météo personnalisé via Gemini
+   * Générer un conseil météo personnalisé via Gemini -> OpenRouter
    */
   async generateWeatherAdvice(data: WeatherAdviceInput): Promise<{
     advice: string;
     emoji: string;
     urgency: 'low' | 'medium' | 'high';
   }> {
-    try {
-      const prompt = this.buildWeatherPrompt(data);
-      const urgencyLevel = this.calculateUrgency(data);
+    const prompt = this.buildWeatherPrompt(data);
+    const urgencyLevel = this.calculateUrgency(data);
 
-      const requestBody = {
-        contents: [
-          {
-            parts: [{ text: prompt }],
-          },
-        ],
-        generationConfig: {
-          temperature: 0.7,
-          topK: 40,
-          topP: 0.95,
-          maxOutputTokens: 512,
-        },
-        safetySettings: [
-          {
-            category: 'HARM_CATEGORY_HARASSMENT',
-            threshold: 'BLOCK_NONE',
-          },
-          {
-            category: 'HARM_CATEGORY_HATE_SPEECH',
-            threshold: 'BLOCK_NONE',
-          },
-          {
-            category: 'HARM_CATEGORY_SEXUALLY_EXPLICIT',
-            threshold: 'BLOCK_NONE',
-          },
-          {
-            category: 'HARM_CATEGORY_DANGEROUS_CONTENT',
-            threshold: 'BLOCK_NONE',
-          },
-        ],
-      };
+    // Gemini first
+    if (this.geminiApiKeys.length > 0) {
+      try {
+        this.logger.log('Using Gemini for weather advice');
+        const geminiResponse = await this.requestGeminiAdvice(prompt);
+        const parsed = this.parseAdviceResponse(geminiResponse);
 
-      const response = await this.makeRequestWithRetry(() =>
-        axios.post<GeminiResponse>(
-          `${this.apiUrl}?key=${this.apiKey}`,
-          requestBody,
-          {
-            headers: {
-              'Content-Type': 'application/json',
-            },
-            timeout: 30000,
-          },
-        ),
-      );
-
-      const textResponse =
-        response.data.candidates[0]?.content?.parts[0]?.text;
-
-      if (!textResponse) {
-        throw new Error('No response from Gemini API');
+        return {
+          advice: parsed.advice,
+          emoji: parsed.emoji,
+          urgency: urgencyLevel,
+        };
+      } catch (geminiError) {
+        this.logger.warn(
+          'Gemini weather advice failed, trying OpenRouter',
+          geminiError,
+        );
       }
-
-      const parsed = this.parseAdviceResponse(textResponse);
-
-      return {
-        advice: parsed.advice,
-        emoji: parsed.emoji,
-        urgency: urgencyLevel,
-      };
-    } catch (error) {
-      this.logger.error('Gemini weather advice failed', error);
-      // Fallback advice si Gemini échoue
-      return {
-        advice: this.generateFallbackAdvice(data),
-        emoji: '🌍',
-        urgency: 'low',
-      };
     }
+
+    // OpenRouter fallback
+    try {
+      const isGrokAvailable = await this.grokService.isAvailable();
+      if (isGrokAvailable) {
+        this.logger.log('Using OpenRouter for weather advice');
+        const grokResponse = await this.grokService.generate(prompt);
+        const parsed = this.parseAdviceResponse(grokResponse);
+
+        return {
+          advice: parsed.advice,
+          emoji: parsed.emoji,
+          urgency: urgencyLevel,
+        };
+      }
+    } catch (grokError) {
+      this.logger.error('OpenRouter weather advice failed', grokError);
+    }
+
+    // Final local fallback
+    return {
+      advice: this.generateFallbackAdvice(data),
+      emoji: '🌍',
+      urgency: urgencyLevel,
+    };
   }
 
   /**
-   * Construire le prompt pour Gemini
+   * Construire le prompt pour le modèle OpenRouter
    */
   private buildWeatherPrompt(data: WeatherAdviceInput): string {
     return `Tu es un expert en soins de la peau et météorologie. Basé sur les conditions météorologiques actuelles, génère un conseil personnalisé et actionnable pour les soins de la peau.
@@ -241,7 +224,9 @@ Le conseil doit:
   /**
    * Calculer le niveau d'urgence basé sur les conditions
    */
-  private calculateUrgency(data: WeatherAdviceInput): 'low' | 'medium' | 'high' {
+  private calculateUrgency(
+    data: WeatherAdviceInput,
+  ): 'low' | 'medium' | 'high' {
     let urgencyScore = 0;
 
     // Température extrême
@@ -274,7 +259,7 @@ Le conseil doit:
   }
 
   /**
-   * Parser la réponse JSON de Gemini
+   * Parser la réponse JSON du modèle
    */
   private parseAdviceResponse(response: string): {
     advice: string;
@@ -302,7 +287,7 @@ Le conseil doit:
   }
 
   /**
-   * Conseil par défaut si Gemini échoue
+   * Conseil par défaut si OpenRouter échoue
    */
   private generateFallbackAdvice(data: WeatherAdviceInput): string {
     if (data.temperature < 0) {

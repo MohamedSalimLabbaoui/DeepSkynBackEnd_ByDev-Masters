@@ -1,4 +1,9 @@
-import { Injectable, BadRequestException, NotFoundException, ForbiddenException } from '@nestjs/common';
+import {
+  Injectable,
+  BadRequestException,
+  NotFoundException,
+  ForbiddenException,
+} from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateStoryDto, CreateStoryCommentDto } from './dto/create-story.dto';
 
@@ -10,18 +15,22 @@ export class StoriesService {
     if (!createStoryDto.mediaUrl) {
       throw new BadRequestException('mediaUrl is required');
     }
-    
+
     const expiresAt = new Date();
     expiresAt.setHours(expiresAt.getHours() + 24);
 
-    // FIX: Verify userId exists, fallback to a valid user to prevent Foreign Key constraint errors 
+    // FIX: Verify userId exists, fallback to a valid user to prevent Foreign Key constraint errors
     // when bypassing AuthGuards during development.
     let validUserId = userId;
-    const existingUser = await this.prisma.user.findUnique({ where: { id: userId } });
+    const existingUser = await this.prisma.user.findUnique({
+      where: { id: userId },
+    });
     if (!existingUser) {
       const fallbackUser = await this.prisma.user.findFirst();
       if (!fallbackUser) {
-        throw new BadRequestException('Aucun utilisateur n\'existe dans la base de données.');
+        throw new BadRequestException(
+          "Aucun utilisateur n'existe dans la base de données.",
+        );
       }
       validUserId = fallbackUser.id;
     }
@@ -43,7 +52,7 @@ export class StoriesService {
 
   async findAllActive(currentUserId?: string) {
     const now = new Date();
-    
+
     const where: any = {
       expiresAt: { gt: now },
     };
@@ -51,13 +60,13 @@ export class StoriesService {
     if (currentUserId) {
       where.OR = [
         { userId: currentUserId },
-        { 
-          user: { 
-            followers: { 
-              some: { followerId: currentUserId } 
-            } 
-          } 
-        }
+        {
+          user: {
+            followers: {
+              some: { followerId: currentUserId },
+            },
+          },
+        },
       ];
     } else {
       where.user = { isPublic: true };
@@ -68,15 +77,17 @@ export class StoriesService {
       include: {
         user: { select: { id: true, name: true, avatar: true } },
         _count: { select: { likes: true, comments: true } },
-        likes: currentUserId ? {
-          where: { userId: currentUserId },
-          select: { id: true },
-        } : false,
+        likes: currentUserId
+          ? {
+              where: { userId: currentUserId },
+              select: { id: true },
+            }
+          : false,
       },
       orderBy: { createdAt: 'desc' },
     });
 
-    const formatted = stories.map(s => ({
+    const formatted = stories.map((s) => ({
       id: s.id,
       name: s.user.name || 'Utilisateur',
       avatar: s.user.avatar,
@@ -116,7 +127,7 @@ export class StoriesService {
       orderBy: { createdAt: 'desc' },
     });
 
-    return stories.map(s => ({
+    return stories.map((s) => ({
       id: s.id,
       mediaUrl: s.mediaUrl,
       musicUrl: s.musicUrl,
@@ -134,7 +145,9 @@ export class StoriesService {
     if (!userId) {
       throw new BadRequestException('User ID is required');
     }
-    const story = await this.prisma.story.findUnique({ where: { id: storyId } });
+    const story = await this.prisma.story.findUnique({
+      where: { id: storyId },
+    });
     if (!story) throw new NotFoundException('Story not found');
 
     const existing = await this.prisma.storyLike.findUnique({
@@ -157,7 +170,9 @@ export class StoriesService {
     if (!userId) {
       throw new BadRequestException('User ID is required');
     }
-    const story = await this.prisma.story.findUnique({ where: { id: dto.storyId } });
+    const story = await this.prisma.story.findUnique({
+      where: { id: dto.storyId },
+    });
     if (!story) throw new NotFoundException('Story not found');
 
     return this.prisma.storyComment.create({
@@ -190,7 +205,8 @@ export class StoriesService {
       where: { id: commentId },
     });
     if (!comment) throw new NotFoundException('Comment not found');
-    if (comment.userId !== userId) throw new ForbiddenException('Not your comment');
+    if (comment.userId !== userId)
+      throw new ForbiddenException('Not your comment');
 
     await this.prisma.storyComment.delete({ where: { id: commentId } });
     return { deleted: true };
@@ -205,21 +221,22 @@ export class StoriesService {
     try {
       // Using Archive.org's publicly available API
       const archiveUrl = `https://archive.org/advancedsearch.php?q=${encodeURIComponent(query)}+AND+mediatype:audio&fl=identifier,title,creator&output=json&rows=${limit}`;
-      
+
       const response = await fetch(archiveUrl);
       if (!response.ok) throw new Error('Failed to fetch music');
-      
+
       const data: any = await response.json();
-      
+
       // Transform Archive.org results to include playable URLs
-      const music = data.response?.docs?.map((doc: any) => ({
-        id: doc.identifier,
-        title: doc.title || doc.identifier,
-        artist: doc.creator || 'Unknown',
-        url: `https://archive.org/download/${doc.identifier}/${doc.identifier}.mp3`,
-        source: 'Archive.org',
-      })) || [];
-      
+      const music =
+        data.response?.docs?.map((doc: any) => ({
+          id: doc.identifier,
+          title: doc.title || doc.identifier,
+          artist: doc.creator || 'Unknown',
+          url: `https://archive.org/download/${doc.identifier}/${doc.identifier}.mp3`,
+          source: 'Archive.org',
+        })) || [];
+
       return music;
     } catch (error) {
       console.error('Error fetching free music:', error);
@@ -304,9 +321,15 @@ export class StoriesService {
   /**
    * Mark a story as highlight (archive it instead of deleting after 24h)
    */
-  async saveStoryAsHighlight(storyId: string, userId: string, highlightTitle?: string) {
-    const story = await this.prisma.story.findUnique({ where: { id: storyId } });
-    
+  async saveStoryAsHighlight(
+    storyId: string,
+    userId: string,
+    highlightTitle?: string,
+  ) {
+    const story = await this.prisma.story.findUnique({
+      where: { id: storyId },
+    });
+
     if (!story) {
       throw new NotFoundException('Story not found');
     }
@@ -337,8 +360,10 @@ export class StoriesService {
    * Remove a story from highlights (back to normal 24h expiration)
    */
   async removeFromHighlight(storyId: string, userId: string) {
-    const story = await this.prisma.story.findUnique({ where: { id: storyId } });
-    
+    const story = await this.prisma.story.findUnique({
+      where: { id: storyId },
+    });
+
     if (!story) {
       throw new NotFoundException('Story not found');
     }

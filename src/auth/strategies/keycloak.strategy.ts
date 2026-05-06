@@ -48,8 +48,7 @@ export class KeycloakStrategy extends PassportStrategy(Strategy, 'keycloak') {
       const key =
         response.data.keys.find(
           (k: any) => k.use === 'sig' && k.kty === 'RSA',
-        ) ||
-        response.data.keys.find((k: any) => k.kty === 'RSA');
+        ) || response.data.keys.find((k: any) => k.kty === 'RSA');
 
       if (key) {
         return this.jwkToPem(key);
@@ -69,7 +68,7 @@ export class KeycloakStrategy extends PassportStrategy(Strategy, 'keycloak') {
       }
 
       throw new Error('No public key found');
-    } catch (error) {
+    } catch {
       throw new UnauthorizedException('Failed to get public key from Keycloak');
     }
   }
@@ -85,8 +84,8 @@ export class KeycloakStrategy extends PassportStrategy(Strategy, 'keycloak') {
     const exponent = Buffer.from(e, 'base64url');
 
     // Build RSA public key in DER format
-    const modulusLength = modulus.length;
-    const exponentLength = exponent.length;
+    // const modulusLength = modulus.length;
+    // const exponentLength = exponent.length;
 
     // ASN.1 encoding
     const sequence = (contents: Buffer[]): Buffer => {
@@ -174,11 +173,13 @@ export class KeycloakStrategy extends PassportStrategy(Strategy, 'keycloak') {
     }
 
     // Return an object that matches what KeycloakStrategy.validate returns
-    // We map the Prisma ID to 'sub' and 'userId' to maintain backward compatibility
+    // We map the Prisma ID to 'sub', 'userId', and 'id' to maintain backward compatibility
+    const userId = user?.id || payload.sub;
     return {
       ...(user || {}),
-      userId: user?.id || payload.sub,
-      sub: user?.id || payload.sub,
+      id: userId,
+      userId: userId,
+      sub: userId,
       keycloakSub: payload.sub,
       email: user?.email || payload.email,
       name: user?.name || payload.name,
